@@ -1,0 +1,227 @@
+import { z } from 'zod';
+import { CURRENCIES } from './types';
+
+// --- Primitives ---
+export const currencySchema = z.enum(CURRENCIES as [string, ...string[]]);
+const positive = z.number().finite();
+const dayOfMonth = z.number().int().min(1).max(31);
+
+// --- Auth ---
+export const telegramAuthSchema = z.object({
+  telegramInitData: z.string().min(1),
+  chatId: z.union([z.string(), z.number()]).transform(String),
+  firebaseIdToken: z.string().min(1).optional(),
+});
+export type TelegramAuthBody = z.infer<typeof telegramAuthSchema>;
+
+// --- Profile ---
+const salarySourceSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  day: dayOfMonth,
+  amount: z.number().optional(),
+});
+
+const familyMemberSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  birthday: z.string(),
+  relation: z.enum(['spouse', 'child', 'parent', 'sibling', 'other']),
+});
+
+const homeWidgetSchema = z.object({
+  id: z.enum(['balance', 'askAi', 'budget', 'forecast', 'exchangeRates', 'recent']),
+  enabled: z.boolean(),
+});
+
+// Only user-editable fields. isPremium / subscription / usage / auth metadata are
+// intentionally absent so a client can never grant itself Premium.
+export const profilePatchSchema = z
+  .object({
+    name: z.string().optional(),
+    birthday: z.string().optional(),
+    salarySources: z.array(salarySourceSchema).optional(),
+    familyMembers: z.array(familyMemberSchema).optional(),
+    financialGoals: z.array(z.string()).optional(),
+    onboardingComplete: z.boolean().optional(),
+    homeWidgets: z.array(homeWidgetSchema).optional(),
+    telegramLinkPromptDismissed: z.boolean().optional(),
+  })
+  .strip();
+
+export const homeWidgetsSchema = z.object({ homeWidgets: z.array(homeWidgetSchema) });
+
+// --- Settings ---
+export const settingsPatchSchema = z
+  .object({
+    cardOrder: z.array(z.string()).optional(),
+    plannedExpenseVisibility: z.enum(['hidden', '7d', '14d', 'this_month', 'next_month']).optional(),
+  })
+  .strip();
+
+// --- Categories ---
+export const categoryCreateSchema = z.object({
+  name: z.string().min(1),
+  icon: z.string(),
+  color: z.string(),
+  type: z.enum(['income', 'expense', 'both']),
+});
+
+export const subcategoryCreateSchema = z.object({
+  name: z.string().min(1),
+  categoryId: z.string().min(1),
+});
+
+// --- Cards ---
+export const cardCreateSchema = z.object({
+  cardType: z.enum(['credit', 'debit', 'cash']),
+  name: z.string().min(1),
+  bank: z.string(),
+  currency: currencySchema,
+  balance: positive,
+  includeInTotalBalance: z.boolean().optional(),
+  limit: positive.optional(),
+  dueDay: dayOfMonth.optional(),
+});
+export const cardUpdateSchema = cardCreateSchema.partial();
+
+// --- Budgets ---
+export const budgetSetSchema = z.object({
+  amount: positive,
+  currency: currencySchema,
+});
+
+// --- Savings goals ---
+export const savingsGoalCreateSchema = z.object({
+  name: z.string().min(1),
+  icon: z.string(),
+  targetAmount: positive,
+  currency: currencySchema,
+  deadline: z.number(),
+});
+
+// --- Subscriptions ---
+export const subscriptionCreateSchema = z.object({
+  name: z.string().min(1),
+  icon: z.string(),
+  amount: positive,
+  currency: currencySchema,
+  cycle: z.enum(['weekly', 'monthly', 'yearly']),
+  nextBillingDate: z.number(),
+  categoryId: z.string().optional(),
+  note: z.string().optional(),
+  isActive: z.boolean().default(true),
+});
+export const subscriptionUpdateSchema = subscriptionCreateSchema.partial();
+
+// --- Planned expenses ---
+export const plannedExpenseCreateSchema = z.object({
+  name: z.string().min(1),
+  amount: positive,
+  currency: currencySchema,
+  categoryId: z.string().optional(),
+  icon: z.string(),
+  recurrence: z.enum(['once', 'daily', 'monthly', 'weekly', 'weekends', 'weekdays', 'yearly', 'custom']),
+  dayOfMonth: dayOfMonth.optional(),
+  dayOfWeek: z.array(z.number().int().min(0).max(6)).optional(),
+  date: z.number().optional(),
+  customInterval: z.number().int().positive().optional(),
+  customUnit: z.enum(['day', 'week', 'month', 'year']).optional(),
+  endDate: z.number().optional(),
+  kind: z.enum(['income', 'expense']).optional(),
+});
+export const plannedExpenseUpdateSchema = plannedExpenseCreateSchema.partial();
+
+// --- Transactions (atomic) ---
+export const transactionCreateSchema = z.object({
+  amount: positive,
+  currency: currencySchema,
+  type: z.enum(['income', 'expense']),
+  categoryId: z.string().min(1),
+  subcategoryId: z.string().optional(),
+  cardId: z.string().optional(),
+  comment: z.string().optional(),
+  baseAmount: z.number().optional(),
+  fxRate: z.number().optional(),
+  fxRateSource: z.enum(['NBU', 'manual']).optional(),
+  date: z.number(),
+});
+export const transactionUpdateSchema = transactionCreateSchema.partial();
+
+export const transferSchema = z.object({
+  fromCardId: z.string().min(1),
+  toCardId: z.string().min(1),
+  amount: positive,
+  toAmount: positive.optional(),
+  // Optional FX snapshot (computed client-side from public NBU rates).
+  baseAmount: z.number().optional(),
+  fxRate: z.number().optional(),
+  fxRateSource: z.enum(['NBU', 'manual']).optional(),
+});
+
+export const returnSchema = z.object({
+  returnAmount: positive,
+  accountId: z.string().optional(),
+  date: z.number().optional(),
+});
+
+export const refillSchema = z.object({
+  creditCardId: z.string().min(1),
+  sourceCardId: z.string().min(1),
+  amount: positive,
+});
+
+// --- Debts (atomic) ---
+const commissionSchema = z.object({ type: z.enum(['percent', 'fixed']), value: z.number() });
+export const debtCreateSchema = z.object({
+  direction: z.enum(['i_owe', 'owe_me']),
+  person: z.string().min(1),
+  amount: positive,
+  currency: currencySchema,
+  commission: commissionSchema.optional(),
+  dueDate: z.number().optional(),
+  comment: z.string().optional(),
+  accountId: z.string().optional(),
+});
+export const debtUpdateSchema = z
+  .object({
+    isPaid: z.boolean().optional(),
+    person: z.string().optional(),
+    comment: z.string().optional(),
+    dueDate: z.number().optional(),
+  })
+  .strip();
+export const payDebtSchema = z.object({ amount: positive, accountId: z.string().optional() });
+
+// --- Deposits (atomic) ---
+export const depositCreateSchema = z.object({
+  bank: z.string().min(1),
+  amount: positive,
+  currency: currencySchema,
+  interestRate: z.number(),
+  startDate: z.number(),
+  endDate: z.number(),
+  capitalization: z.enum(['monthly', 'quarterly', 'at_end', 'custom']),
+  customCapitalizationDays: z.number().int().positive().optional(),
+  showInterest: z.boolean(),
+  interestToAccountId: z.string().optional(),
+  isReplenishable: z.boolean(),
+});
+export const depositCloseSchema = z.object({ accountId: z.string().min(1) });
+export const depositAccountAmountSchema = z.object({ accountId: z.string().min(1), amount: positive });
+
+// --- Subscription pay / savings contribute ---
+export const accountOnlySchema = z.object({ accountId: z.string().optional() });
+export const contributeSchema = z.object({ amount: positive, accountId: z.string().optional() });
+
+// --- AI ---
+export const forecastSchema = z.object({ language: z.string().optional() });
+export const chatSchema = z.object({
+  chatId: z.string().optional(),
+  message: z.string().min(1),
+  language: z.string().optional(),
+});
+export const renameChatSchema = z.object({ title: z.string().min(1) });
+
+// --- Path params ---
+export const idParamSchema = z.object({ id: z.string().min(1) });
