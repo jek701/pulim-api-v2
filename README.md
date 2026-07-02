@@ -24,7 +24,9 @@ Scripts: `dev` (watch), `build` (tsc → dist), `start` (run dist), `typecheck`,
 See [.env.example](.env.example). Key vars: `FIREBASE_PROJECT_ID` + one credential
 source (`FIREBASE_SERVICE_ACCOUNT_PATH` *or* `FIREBASE_CLIENT_EMAIL`/`FIREBASE_PRIVATE_KEY`),
 `TELEGRAM_BOT_TOKEN`, `ANTHROPIC_API_KEY` (AI endpoints return `503` until set),
-`CORS_ORIGINS` (comma-separated allowlist).
+`CORS_ORIGINS` (comma-separated allowlist). Leave `FIRESTORE_DATABASE_ID` empty for
+the default Firestore database `(default)`, or set it if your Firebase project uses
+a named Firestore database.
 
 ## Architecture
 

@@ -3,5 +3,7 @@ node_modules
 dist
 .env
 .env.local
+.env.migration
 *.log
 serviceAccountKey.json
+oldServiceAccountKey.json

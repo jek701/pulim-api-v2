@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import admin from 'firebase-admin';
+import { getFirestore } from 'firebase-admin/firestore';
 import { env } from './env';
 
 function buildCredential(): admin.credential.Credential {
@@ -26,7 +27,9 @@ const app = admin.initializeApp({
   projectId: env.FIREBASE_PROJECT_ID,
 });
 
-export const db = admin.firestore(app);
+export const db = env.FIRESTORE_DATABASE_ID
+  ? getFirestore(app, env.FIRESTORE_DATABASE_ID)
+  : admin.firestore(app);
 // Mirror the frontend's "strip undefined before writes" behaviour at the SDK level.
 db.settings({ ignoreUndefinedProperties: true });
 
