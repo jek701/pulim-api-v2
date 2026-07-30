@@ -17,11 +17,13 @@ import { debtsRouter } from './debts.routes';
 import { depositsRouter } from './deposits.routes';
 import { aiRouter } from './ai.routes';
 import { aiChatsRouter } from './aiChats.routes';
+import { billingInternalRouter } from './billingInternal.routes';
 
 /** Mounts every router. Public routes first, then the authenticated `/v1` tree. */
 export function mountRoutes(app: Express): void {
   app.use('/health', healthRouter);
   app.use('/auth/telegram', telegramAuthLimiter, telegramAuthRouter);
+  app.use('/internal/v1/billing/events', billingInternalRouter);
 
   const v1 = Router();
   v1.use(authenticate);

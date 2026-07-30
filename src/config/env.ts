@@ -23,11 +23,19 @@ const EnvSchema = z.object({
   TELEGRAM_BOT_TOKEN: z.string().min(1, 'TELEGRAM_BOT_TOKEN is required'),
   DEBUG_TELEGRAM_AUTH: boolish,
 
-  ANTHROPIC_API_KEY: z.string().optional(),
-  AI_MODEL_FREE: z.string().default('claude-haiku-4-5-20251001'),
-  AI_MODEL_PREMIUM: z.string().default('claude-sonnet-4-6'),
+  OPENAI_API_KEY: z.string().optional(),
+  AI_MODEL_FREE: z.string().default('gpt-5.4-mini'),
+  AI_MODEL_PREMIUM: z.string().default('gpt-5.6-terra'),
+  AI_MODEL_FORECAST: z.string().default('gpt-5.4-mini'),
 
   AI_RATE_LIMIT_PER_MIN: z.coerce.number().int().positive().default(20),
+  AI_MAX_HISTORY_MESSAGES: z.coerce.number().int().positive().max(40).default(12),
+  AI_MAX_OUTPUT_TOKENS_FREE: z.coerce.number().int().positive().max(25_000).default(1_600),
+  AI_MAX_OUTPUT_TOKENS_PREMIUM: z.coerce.number().int().positive().max(25_000).default(6_000),
+  AI_MAX_OUTPUT_TOKENS_FORECAST: z.coerce.number().int().positive().max(25_000).default(3_000),
+  AI_PREMIUM_MESSAGES_PER_PERIOD: z.coerce.number().int().positive().default(500),
+
+  PULIM_PAYMENT_INTERNAL_SECRET: z.string().min(32).optional(),
 });
 
 const parsed = EnvSchema.safeParse(process.env);

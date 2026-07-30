@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "pulim-ui",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "/Users/macbookair/WebstormProjects/pulim-ui-v2", "run", "dev", "--", "--port", "5174", "--strictPort"],
+      "port": 5174,
+      "autoPort": false
+    }
+  ]
+}

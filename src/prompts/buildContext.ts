@@ -24,11 +24,31 @@ export interface ChatContext {
   language: string;
 }
 
-/** Build a stable financial-context string (ported from `aiChat.ts`). */
+const safeText = (value: unknown, maxLength = 120): string =>
+  Array.from(String(value ?? ''))
+    .map((character) => {
+      const code = character.charCodeAt(0);
+      return code <= 31 || code === 127 ? ' ' : character;
+    })
+    .join('')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, maxLength);
+
+/** Amount normalized to UZS at transaction time, when that value is available. */
+function transactionAmountUzs(transaction: Transaction): number | null {
+  if (transaction.currency === 'UZS') return transaction.amount;
+  return typeof transaction.baseAmount === 'number' && Number.isFinite(transaction.baseAmount)
+    ? transaction.baseAmount
+    : null;
+}
+
+/** Build a compact, calculation-first snapshot; raw user text remains explicitly untrusted. */
 export function buildContextSnapshot(ctx: ChatContext): string {
   const lines: string[] = [];
   const today = dayjs();
-  lines.push(`# Financial context (snapshot)`);
+  lines.push(`<financial_data>`);
+  lines.push(`# Financial context`);
   lines.push(`Today: ${today.format('YYYY-MM-DD')}`);
   lines.push(`Base currency: UZS (Uzbek Som)`);
   lines.push('');
@@ -38,39 +58,89 @@ export function buildContextSnapshot(ctx: ChatContext): string {
     if (ctx.profile.salarySources?.length) {
       for (const s of ctx.profile.salarySources) {
         lines.push(
-          `- Salary "${s.name}": day ${s.day} of month${s.amount ? ` (~${s.amount.toLocaleString()} UZS)` : ''}`,
+          `- Salary "${safeText(s.name)}": day ${s.day} of month${s.amount ? ` (~${s.amount.toLocaleString()} UZS)` : ''}`,
         );
       }
     }
-    if (ctx.profile.financialGoals?.length) lines.push(`- Goals: ${ctx.profile.financialGoals.join(', ')}`);
+    if (ctx.profile.financialGoals?.length) {
+      lines.push(`- Goals: ${ctx.profile.financialGoals.map((goal) => safeText(goal)).join(', ')}`);
+    }
     if (ctx.profile.familyMembers?.length) {
-      lines.push(`- Family: ${ctx.profile.familyMembers.map((m) => `${m.name} (${m.relation})`).join('; ')}`);
+      lines.push(`- Family: ${ctx.profile.familyMembers.map((m) => `${safeText(m.name)} (${m.relation})`).join('; ')}`);
     }
     lines.push('');
   }
 
-  const catName = (id: string) => ctx.categories.find((c) => c.id === id)?.name ?? id;
-  lines.push(`## Categories (${ctx.categories.length})`);
-  for (const c of ctx.categories) lines.push(`- ${c.icon} ${c.name} [${c.type}] (id:${c.id})`);
-  lines.push('');
+  const catName = (id: string) => safeText(ctx.categories.find((c) => c.id === id)?.name ?? id);
 
   if (ctx.cards.length) {
     lines.push(`## Accounts`);
     for (const c of ctx.cards) {
-      lines.push(`- ${c.name} (${c.bank}, ${c.cardType}, ${c.currency}) — balance: ${c.balance.toLocaleString()} ${c.currency}`);
+      lines.push(
+        `- ${safeText(c.name)} (${safeText(c.bank)}, ${c.cardType}, ${c.currency}) — balance: ${c.balance.toLocaleString()} ${c.currency}`,
+      );
     }
     lines.push('');
   }
 
-  const txs = [...ctx.transactions].sort((a, b) => a.date - b.date);
-  lines.push(`## Transactions (last 90 days, oldest first) — ${txs.length} total`);
-  for (const t of txs) {
+  const txs = [...ctx.transactions]
+    .filter((transaction) => transaction.source !== 'transfer')
+    .sort((a, b) => a.date - b.date);
+  const normalized = txs.filter((transaction) => transactionAmountUzs(transaction) !== null);
+  const unconvertedCount = txs.length - normalized.length;
+
+  type MonthSummary = { income: number; expense: number; count: number };
+  const monthly = new Map<string, MonthSummary>();
+  const categoryExpense = new Map<string, number>();
+  const currentMonth = today.format('YYYY-MM');
+  for (const transaction of normalized) {
+    const amount = transactionAmountUzs(transaction)!;
+    const month = dayjs(transaction.date).format('YYYY-MM');
+    const summary = monthly.get(month) ?? { income: 0, expense: 0, count: 0 };
+    summary[transaction.type] += amount;
+    summary.count += 1;
+    monthly.set(month, summary);
+    if (month === currentMonth && transaction.type === 'expense') {
+      categoryExpense.set(transaction.categoryId, (categoryExpense.get(transaction.categoryId) ?? 0) + amount);
+    }
+  }
+
+  lines.push(`## Calculated activity summary`);
+  if (txs.length) {
+    lines.push(
+      `Coverage: ${dayjs(txs[0].date).format('YYYY-MM-DD')} to ${dayjs(txs[txs.length - 1].date).format('YYYY-MM-DD')}; ${txs.length} non-transfer transactions; ${unconvertedCount} without a saved UZS value.`,
+    );
+  } else {
+    lines.push(`No non-transfer transactions in the supplied period.`);
+  }
+  for (const [month, summary] of [...monthly.entries()].sort(([a], [b]) => b.localeCompare(a)).slice(0, 12)) {
+    const net = summary.income - summary.expense;
+    lines.push(
+      `- ${month}: income ${Math.round(summary.income).toLocaleString()} UZS; expenses ${Math.round(summary.expense).toLocaleString()} UZS; net ${Math.round(net).toLocaleString()} UZS; ${summary.count} transactions`,
+    );
+  }
+  const topCategories = [...categoryExpense.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8);
+  if (topCategories.length) {
+    lines.push(`Current-month expense categories:`);
+    for (const [categoryId, amount] of topCategories) {
+      lines.push(`- ${catName(categoryId)}: ${Math.round(amount).toLocaleString()} UZS`);
+    }
+  }
+  lines.push('');
+
+  const recent = txs.slice(-80).reverse();
+  lines.push(`## Recent transaction evidence (${recent.length} newest non-transfer rows)`);
+  for (const t of recent) {
     const d = dayjs(t.date).format('YYYY-MM-DD HH:mm');
     const sign = t.type === 'income' ? '+' : '-';
-    const cat = t.source === 'transfer' ? 'transfer' : (t.sourceLabel ?? catName(t.categoryId));
-    let line = `${d} ${sign}${t.amount} ${t.currency} ${cat}`;
+    const cat = safeText(t.sourceLabel ?? catName(t.categoryId));
+    const uzs = transactionAmountUzs(t);
+    let line = `${d} ${sign}${t.amount.toLocaleString()} ${t.currency} ${cat}`;
+    if (t.currency !== 'UZS' && uzs !== null) line += ` (~${Math.round(uzs).toLocaleString()} UZS at transaction time)`;
     if (t.toAmount && t.toCurrency && t.toCurrency !== t.currency) line += ` -> ${t.toAmount} ${t.toCurrency}`;
-    if (t.comment) line += ` // ${t.comment}`;
+    if (t.comment) line += ` // user note: ${safeText(t.comment, 160)}`;
     lines.push(line);
   }
   lines.push('');
@@ -80,7 +150,7 @@ export function buildContextSnapshot(ctx: ChatContext): string {
     lines.push(`## Active subscriptions (${active.length})`);
     for (const s of active) {
       const days = Math.ceil((s.nextBillingDate - Date.now()) / 86_400_000);
-      lines.push(`- ${s.name}: ${s.amount} ${s.currency}/${s.cycle}, next charge in ${days}d (${dayjs(s.nextBillingDate).format('YYYY-MM-DD')})`);
+      lines.push(`- ${safeText(s.name)}: ${s.amount} ${s.currency}/${s.cycle}, next charge in ${days}d (${dayjs(s.nextBillingDate).format('YYYY-MM-DD')})`);
     }
     lines.push('');
   }
@@ -95,7 +165,7 @@ export function buildContextSnapshot(ctx: ChatContext): string {
       for (const pe of ctx.plannedExpenses) {
         if (!plannedAppliesToDay(pe, d)) continue;
         const sign = pe.kind === 'income' ? '+' : '-';
-        lines.push(`${dayjs(d).format('YYYY-MM-DD')}: ${pe.name} ${sign}${pe.amount} ${pe.currency}`);
+        lines.push(`${dayjs(d).format('YYYY-MM-DD')}: ${safeText(pe.name)} ${sign}${pe.amount} ${pe.currency}`);
         count++;
       }
     }
@@ -109,7 +179,7 @@ export function buildContextSnapshot(ctx: ChatContext): string {
       for (const d of unpaid) {
         const dir = d.direction === 'i_owe' ? 'I owe' : 'owed to me';
         lines.push(
-          `- ${dir} ${d.person}: ${(d.amount - d.paidAmount).toLocaleString()} ${d.currency} remaining${d.dueDate ? ` (due ${dayjs(d.dueDate).format('YYYY-MM-DD')})` : ''}`,
+          `- ${dir} ${safeText(d.person)}: ${(d.amount - d.paidAmount).toLocaleString()} ${d.currency} remaining${d.dueDate ? ` (due ${dayjs(d.dueDate).format('YYYY-MM-DD')})` : ''}`,
         );
       }
       lines.push('');
@@ -120,11 +190,12 @@ export function buildContextSnapshot(ctx: ChatContext): string {
     lines.push(`## Savings goals`);
     for (const g of ctx.savingsGoals) {
       const pct = g.targetAmount > 0 ? ((g.savedAmount / g.targetAmount) * 100).toFixed(1) : '0';
-      lines.push(`- ${g.icon} ${g.name}: ${g.savedAmount.toLocaleString()} / ${g.targetAmount.toLocaleString()} ${g.currency} (${pct}%)`);
+      lines.push(`- ${g.icon} ${safeText(g.name)}: ${g.savedAmount.toLocaleString()} / ${g.targetAmount.toLocaleString()} ${g.currency} (${pct}%)`);
     }
     lines.push('');
   }
 
+  lines.push(`</financial_data>`);
   return lines.join('\n');
 }
 
@@ -140,12 +211,14 @@ function buildSubscriptionsContext(subscriptions?: Subscription[] | null): strin
   const active = subscriptions?.filter((s) => s.isActive);
   if (!active?.length) return '';
   const today = Date.now();
-  const totalMonthly = active.reduce((sum, s) => sum + toMonthly(s.amount, s.cycle), 0);
+  const totalMonthlyUzs = active
+    .filter((subscription) => subscription.currency === 'UZS')
+    .reduce((sum, subscription) => sum + toMonthly(subscription.amount, subscription.cycle), 0);
   const upcoming = active.filter((s) => {
     const days = Math.ceil((s.nextBillingDate - today) / 86400000);
     return days >= 0 && days <= 14;
   });
-  const lines = [`Active subscriptions (total ~${Math.round(totalMonthly).toLocaleString()} UZS/month):`];
+  const lines = [`Active subscriptions (UZS-denominated total ~${Math.round(totalMonthlyUzs).toLocaleString()} UZS/month):`];
   for (const s of active) {
     const days = Math.ceil((s.nextBillingDate - today) / 86400000);
     const due = days < 0 ? `overdue by ${Math.abs(days)}d` : days === 0 ? 'due today' : `due in ${days}d`;
@@ -164,7 +237,7 @@ function buildProfileContext(profile?: UserProfile | null): string {
   lines.push(`User profile:`);
   if (profile.salarySources?.length) {
     for (const s of profile.salarySources) {
-      let line = `- Income source "${s.name}": arrives on day ${s.day} of each month`;
+      let line = `- Income source "${safeText(s.name)}": arrives on day ${s.day} of each month`;
       if (s.amount) line += ` (~${s.amount.toLocaleString()} UZS)`;
       line += ` — spending right after day ${s.day} is likely planned post-salary, not overspending`;
       lines.push(line);
@@ -179,7 +252,7 @@ function buildProfileContext(profile?: UserProfile | null): string {
   }
   if (profile.familyMembers?.length) {
     const memberLines = profile.familyMembers.map((m) => {
-      let s = `${m.name} (${m.relation})`;
+      let s = `${safeText(m.name)} (${m.relation})`;
       if (m.birthday) {
         const bday = new Date(m.birthday);
         const next = new Date(today.getFullYear(), bday.getMonth(), bday.getDate());
@@ -218,7 +291,7 @@ function plannedExpensesToContext(plannedExpenses: PlannedExpense[], daysAhead =
       if (!plannedAppliesToDay(pe, d)) continue;
       const label = dayjs(d).format('MMM D');
       const sign = pe.kind === 'income' ? '+' : '-';
-      lines.push(`  ${label}: ${pe.name} ${sign}${pe.amount.toLocaleString()} ${pe.currency}`);
+      lines.push(`  ${label}: ${safeText(pe.name)} ${sign}${pe.amount.toLocaleString()} ${pe.currency}`);
     }
   }
   if (lines.length === 0) return '';
@@ -249,12 +322,14 @@ export function buildForecastPrompt(input: ForecastInput): string {
   let totalSpent = 0;
   let totalIncome = 0;
   for (const t of currentMonthTransactions) {
-    if (t.currency !== 'UZS') continue;
+    if (t.source === 'transfer') continue;
+    const amount = transactionAmountUzs(t);
+    if (amount === null) continue;
     if (t.type === 'expense') {
-      spentByCategory[t.categoryId] = (spentByCategory[t.categoryId] ?? 0) + t.amount;
-      totalSpent += t.amount;
+      spentByCategory[t.categoryId] = (spentByCategory[t.categoryId] ?? 0) + amount;
+      totalSpent += amount;
     } else {
-      totalIncome += t.amount;
+      totalIncome += amount;
     }
   }
   const dailyRate = daysElapsed > 0 ? totalSpent / daysElapsed : 0;
@@ -269,14 +344,18 @@ export function buildForecastPrompt(input: ForecastInput): string {
     const label = dayjs(d).format('MMMM YYYY');
     const mTx = historicalTransactions.filter((t) => {
       const td = new Date(t.date);
-      return td.getMonth() === m && td.getFullYear() === y && t.currency === 'UZS';
+      return td.getMonth() === m && td.getFullYear() === y && t.source !== 'transfer' && transactionAmountUzs(t) !== null;
     });
     if (mTx.length === 0) continue;
-    const income = mTx.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0);
-    const expense = mTx.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+    const income = mTx
+      .filter((t) => t.type === 'income')
+      .reduce((sum, transaction) => sum + transactionAmountUzs(transaction)!, 0);
+    const expense = mTx
+      .filter((t) => t.type === 'expense')
+      .reduce((sum, transaction) => sum + transactionAmountUzs(transaction)!, 0);
     const byCategory: Record<string, number> = {};
     for (const t of mTx.filter((t) => t.type === 'expense')) {
-      byCategory[t.categoryId] = (byCategory[t.categoryId] ?? 0) + t.amount;
+      byCategory[t.categoryId] = (byCategory[t.categoryId] ?? 0) + transactionAmountUzs(t)!;
     }
     prevMonths.push({ label, income, expense, byCategory, txCount: mTx.length });
   }
@@ -334,7 +413,7 @@ export function buildForecastPrompt(input: ForecastInput): string {
   const subsCtx = buildSubscriptionsContext(input.subscriptions);
   const plannedCtx = input.plannedExpenses?.length ? plannedExpensesToContext(input.plannedExpenses) : '';
 
-  return `You are a personal finance assistant. Use historical spending patterns and current-month data to produce a data-driven month-end forecast. Be specific. Reference actual numbers. Use numbered points (1. 2. 3.). No markdown, no bullet symbols.
+  return `Produce a careful, data-driven month-end forecast using only the supplied facts. Reference actual numbers. Do not use Markdown because the response will be returned as structured JSON.
 
 ${profileCtx ? profileCtx + '\n\n' : ''}${historicalCtx}${subsCtx ? subsCtx + '\n\n' : ''}${plannedCtx ? plannedCtx + '\n' : ''}Current month — Day ${daysElapsed}/${daysInMonth} (${daysLeft} days left):
 Income received: ${totalIncome.toLocaleString()} UZS${incomeBudget ? ` / target ${incomeBudget.toLocaleString()} UZS` : ''}
@@ -346,9 +425,9 @@ ${categoryLines || '  No budget categories set'}
 
 Send in selected by the user language: ${input.language}
 
-Give 3 focused, data-driven predictions:
-1. Realistic month-end spend estimate — if historical data suggests the linear forecast is misleading (e.g. spending typically peaks later), say so with numbers.
-2. Specific categories at risk and why (reference the historical average vs current pace).
-3. One concrete action to take this week, tailored to the user's financial goals and timing.
-Under 140 words total.`;
+Return a short summary, exactly 3 focused predictions, one concrete action for this week, and a confidence level:
+1. Realistic month-end spend estimate — if history suggests the linear forecast is misleading, explain why with numbers.
+2. Specific categories at risk, comparing historical average with current pace.
+3. A relevant timing or cash-flow risk from subscriptions, planned items, income timing, or missing data.
+Keep the combined text fields under 170 words. Use the requested language: ${input.language}.`;
 }

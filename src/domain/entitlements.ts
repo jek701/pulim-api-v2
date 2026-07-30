@@ -7,11 +7,6 @@ export const FREE_LIMITS = {
   aiMessagesPerMonth: 10,
   aiChats: 1,
   subscriptions: 2,
-  aiModel: 'claude-haiku-4-5-20251001',
-} as const;
-
-export const PREMIUM_LIMITS = {
-  aiModel: 'claude-sonnet-4-6',
 } as const;
 
 export const MONTH_MS = 30 * 86_400_000;
@@ -62,8 +57,4 @@ export function canUse(
     case 'ai_chat':
       return (opts.aiRemaining ?? 0) > 0;
   }
-}
-
-export function selectModel(isPremium: boolean): string {
-  return isPremium ? PREMIUM_LIMITS.aiModel : FREE_LIMITS.aiModel;
 }

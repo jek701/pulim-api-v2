@@ -215,13 +215,19 @@ export const accountOnlySchema = z.object({ accountId: z.string().optional() });
 export const contributeSchema = z.object({ amount: positive, accountId: z.string().optional() });
 
 // --- AI ---
-export const forecastSchema = z.object({ language: z.string().optional() });
+const aiLanguageSchema = z.enum(['en', 'ru', 'uz']).default('en');
+export const forecastSchema = z.object({ language: aiLanguageSchema.optional() }).strict();
 export const chatSchema = z.object({
-  chatId: z.string().optional(),
-  message: z.string().min(1),
-  language: z.string().optional(),
-});
-export const renameChatSchema = z.object({ title: z.string().min(1) });
+  chatId: z.string().min(1).max(128).optional(),
+  message: z.string().trim().min(1).max(4000),
+  language: aiLanguageSchema.optional(),
+}).strict();
+export const renameChatSchema = z.object({ title: z.string().trim().min(1).max(80) }).strict();
+export const aiFeedbackSchema = z.object({
+  chatId: z.string().min(1).max(128),
+  messageIndex: z.number().int().nonnegative(),
+  rating: z.enum(['up', 'down']),
+}).strict();
 
 // --- Path params ---
 export const idParamSchema = z.object({ id: z.string().min(1) });

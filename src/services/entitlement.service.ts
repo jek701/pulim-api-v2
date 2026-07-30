@@ -4,7 +4,10 @@ import { FREE_LIMITS } from '../domain/entitlements';
 
 export async function getIsPremium(uid: string): Promise<boolean> {
   const profile = await getProfile(uid);
-  return profile?.isPremium === true;
+  const premiumUntil = profile?.subscription?.premiumUntil;
+  return profile?.isPremium === true
+    && typeof premiumUntil === 'number'
+    && premiumUntil > Date.now();
 }
 
 export type CountedResource = 'cards' | 'subscriptions' | 'aiChats';

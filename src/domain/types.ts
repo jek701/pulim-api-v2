@@ -53,11 +53,23 @@ export interface SubscriptionState {
   premiumUntil?: number;
   isTrial?: boolean;
   trialGrantedAt?: number;
+  source?: 'trial' | 'atmos' | 'none';
+  billingVersion?: number;
+  lastOrderId?: string;
 }
 
 export interface UsageState {
   aiMessagesThisPeriod: number;
+  aiPremiumMessagesThisPeriod?: number;
   periodStart: number;
+}
+
+export interface AiForecast {
+  summary: string;
+  predictions: string[];
+  action: string;
+  confidence: 'low' | 'medium' | 'high';
+  generatedAt: number;
 }
 
 export interface UserProfile {

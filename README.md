@@ -2,12 +2,12 @@
 
 REST API for the Pulim budget tracker. Owns all data operations and business logic
 that the React frontend previously did directly against Firestore, with server-side
-integrity (atomic money operations), entitlement enforcement, and a hidden Anthropic key.
+integrity (atomic money operations), entitlement enforcement, and a server-side OpenAI key.
 
 - **Runtime:** Node.js + TypeScript + Express 5
 - **Datastore:** Firestore via `firebase-admin` (same project & collections as the app)
 - **Auth:** Firebase Auth — the API verifies Firebase **ID tokens**; Telegram login mints a custom token
-- **AI:** Anthropic (`@anthropic-ai/sdk`), server-side only, SSE streaming
+- **AI:** OpenAI Responses API (`openai`), server-side only, SSE streaming
 
 ## Setup
 
@@ -23,7 +23,7 @@ Scripts: `dev` (watch), `build` (tsc → dist), `start` (run dist), `typecheck`,
 
 See [.env.example](.env.example). Key vars: `FIREBASE_PROJECT_ID` + one credential
 source (`FIREBASE_SERVICE_ACCOUNT_PATH` *or* `FIREBASE_CLIENT_EMAIL`/`FIREBASE_PRIVATE_KEY`),
-`TELEGRAM_BOT_TOKEN`, `ANTHROPIC_API_KEY` (AI endpoints return `503` until set),
+`TELEGRAM_BOT_TOKEN`, `OPENAI_API_KEY` (AI endpoints return `503` until set),
 `CORS_ORIGINS` (comma-separated allowlist). Leave `FIRESTORE_DATABASE_ID` empty for
 the default Firestore database `(default)`, or set it if your Firebase project uses
 a named Firestore database.
@@ -74,7 +74,7 @@ All below require `Authorization: Bearer <firebaseIdToken>` and are under `/v1`:
 | debts | `GET`, `POST` (premium), `PATCH/DELETE /:id`, `POST /:id/pay` |
 | deposits | `GET`, `POST` (premium), `DELETE /:id`, `POST /:id/{collect-interest,close,replenish,withdraw}` |
 | ai-chats | `GET`, `PATCH /:id` (rename), `DELETE /:id` |
-| ai | `POST /ai/forecast`, `POST /ai/chat` (SSE) |
+| ai | `POST /ai/forecast`, `POST /ai/chat` (SSE), `POST /ai/feedback` |
 
 ### Atomicity
 
@@ -93,14 +93,19 @@ savings, planned expenses) are gated server-side at mutation time.
 ### AI
 
 `/ai/chat` streams Server-Sent Events (`meta`, `delta`, `done`, `error`). The financial
-context is assembled server-side from the user's own data (never trusted from the
-client); model is `claude-sonnet-4-6` (premium) or `claude-haiku-4-5-20251001` (free);
-usage is metered inside the same transaction that gates it.
+context is assembled and aggregated server-side from the user's own data (never trusted
+from the client); model defaults to `gpt-5.6-terra` (premium) or `gpt-5.4-mini` (free).
+Responses are not stored by OpenAI (`store: false`); usage is metered transactionally
+and token/cost metadata is written to `aiUsage` without prompt or response content.
+Output budgets are configurable with `AI_MAX_OUTPUT_TOKENS_FREE`,
+`AI_MAX_OUTPUT_TOKENS_PREMIUM`, and `AI_MAX_OUTPUT_TOKENS_FORECAST`; these limits include
+hidden reasoning tokens. Incomplete responses record their reason, preserve useful
+partial text, and are refunded from the user's quota.
 
 ## Frontend integration notes
 
 - Point `VITE_TELEGRAM_AUTH_API_URL` at `<host>/auth/telegram`.
-- Remove `VITE_ANTHROPIC_API_KEY` / `dangerouslyAllowBrowser`; call `/v1/ai/*` instead.
+- Never expose `OPENAI_API_KEY` in Vite; call `/v1/ai/*` through the API.
 - Send `Authorization: Bearer ${await user.getIdToken()}` on every `/v1` request.
 - Replace the multi-call money sequences (transfer/return/deposit/debt/subscription/
   savings) with the single corresponding endpoint.
