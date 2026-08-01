@@ -19,6 +19,14 @@ export const updateTransaction = asyncHandler(async (req, res) => {
   res.json(await txService.updateTransaction(req.uid, String(req.params.id), req.body));
 });
 
+export const updateTransfer = asyncHandler(async (req, res) => {
+  res.json(await txService.updateTransfer(req.uid, String(req.params.id), req.body));
+});
+
+export const updateReturn = asyncHandler(async (req, res) => {
+  res.json(await txService.updateReturn(req.uid, String(req.params.id), req.body));
+});
+
 export const deleteTransaction = asyncHandler(async (req, res) => {
   await txService.deleteTransaction(req.uid, String(req.params.id));
   res.status(204).end();

@@ -70,7 +70,7 @@ All below require `Authorization: Bearer <firebaseIdToken>` and are under `/v1`:
 | savings-goals | `GET`, `POST` (premium), `DELETE /:id`, `POST /:id/contribute` |
 | subscriptions | `GET`, `POST` (limit 2 free), `PATCH/DELETE /:id`, `POST /:id/pay` |
 | planned-expenses | `GET`, `POST` (premium), `PATCH/DELETE /:id` |
-| transactions | `GET`, `POST`, `PATCH/DELETE /:id`, `POST /transfer`, `POST /:id/return` |
+| transactions | `GET`, `POST`, `PATCH/DELETE /:id`, `POST /transfer`, `PATCH /:id/transfer`, `POST /:id/return`, `PATCH /:id/return` |
 | debts | `GET`, `POST` (premium), `PATCH/DELETE /:id`, `POST /:id/pay` |
 | deposits | `GET`, `POST` (premium), `DELETE /:id`, `POST /:id/{collect-interest,close,replenish,withdraw}` |
 | ai-chats | `GET`, `PATCH /:id` (rename), `DELETE /:id` |
@@ -108,7 +108,10 @@ partial text, and are refunded from the user's quota.
 - Never expose `OPENAI_API_KEY` in Vite; call `/v1/ai/*` through the API.
 - Send `Authorization: Bearer ${await user.getIdToken()}` on every `/v1` request.
 - Replace the multi-call money sequences (transfer/return/deposit/debt/subscription/
-  savings) with the single corresponding endpoint.
+savings) with the single corresponding endpoint.
+- Edit transfers and returns only through their dedicated endpoints. Generic
+  `PATCH /transactions/:id` intentionally rejects source-backed operations so it
+  cannot update one balance leg without the other or desynchronise `returnedAmount`.
 - Call `POST /v1/profile/bootstrap` once after login instead of client-side trial /
   default-category / auth-metadata writes.
 - Once writes flow through the API, tighten `firestore.rules` to deny direct client writes.

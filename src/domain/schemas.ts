@@ -159,12 +159,23 @@ export const transferSchema = z.object({
   fxRateSource: z.enum(['NBU', 'manual']).optional(),
 });
 
+/** Full editable shape for an existing transfer. Financial fields are required so
+ * the service can rebuild both legs from one authoritative payload. */
+export const transferUpdateSchema = transferSchema.extend({
+  date: z.number(),
+  comment: z.string().trim().max(500).optional(),
+});
+
 export const returnSchema = z.object({
   returnAmount: positive,
   accountId: z.string().optional(),
   date: z.number().optional(),
   /** Free-text note, e.g. who refunded the money. */
   comment: z.string().trim().max(500).optional(),
+});
+
+export const returnUpdateSchema = returnSchema.extend({
+  date: z.number(),
 });
 
 export const refillSchema = z.object({

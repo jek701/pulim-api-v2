@@ -36,7 +36,33 @@ export async function updateTransaction(uid: string, id: string, patch: Row): Pr
   return db.runTransaction(async (tx) => {
     const original = await readOwned(tx, txnsCol().doc(id), uid, 'Transaction not found.');
     const old = original.data;
+    if (old.source) {
+      throw AppError.badRequest(
+        'This operation must be edited through its dedicated endpoint.',
+        { source: old.source },
+      );
+    }
     const merged = { ...old, ...patch };
+    const categoryChanged = typeof patch.categoryId === 'string' && patch.categoryId !== old.categoryId;
+    if (categoryChanged && !patch.subcategoryId) delete merged.subcategoryId;
+    if ((old.returnedAmount ?? 0) > 0) {
+      if (merged.type !== 'expense') {
+        throw AppError.badRequest('A refunded expense cannot be converted to income.');
+      }
+      if (merged.amount < old.returnedAmount) {
+        throw AppError.badRequest('Amount cannot be lower than the amount already returned.', {
+          returnedAmount: old.returnedAmount,
+        });
+      }
+      if (merged.currency !== old.currency) {
+        throw AppError.badRequest('Currency cannot be changed after a return has been recorded.');
+      }
+    }
+    const linkedRefunds = (old.returnedAmount ?? 0) > 0
+      ? await tx.get(
+          txnsCol().where('userId', '==', uid).where('linkedTransactionId', '==', id),
+        )
+      : null;
     const oldCardId: string | undefined = old.cardId;
     const newCardId: string | undefined = merged.cardId;
 
@@ -68,8 +94,212 @@ export async function updateTransaction(uid: string, id: string, patch: Row): Pr
       }
     }
 
-    tx.set(original.ref, patch, { merge: true });
+    const writePatch = { ...patch };
+    if (categoryChanged && !patch.subcategoryId) {
+      writePatch.subcategoryId = FieldValue.delete();
+    }
+    tx.set(original.ref, writePatch, { merge: true });
+    if (categoryChanged && linkedRefunds) {
+      for (const linked of linkedRefunds.docs) {
+        tx.set(linked.ref, {
+          categoryId: merged.categoryId,
+          subcategoryId: merged.subcategoryId ?? FieldValue.delete(),
+        }, { merge: true });
+      }
+    }
     return { id, ...merged };
+  });
+}
+
+type TransferUpdateInput = {
+  fromCardId: string;
+  toCardId: string;
+  amount: number;
+  toAmount?: number;
+  baseAmount?: number;
+  fxRate?: number;
+  fxRateSource?: 'NBU' | 'manual';
+  date: number;
+  comment?: string;
+};
+
+/** Edit both transfer legs as one atomic operation. */
+export async function updateTransfer(
+  uid: string,
+  id: string,
+  input: TransferUpdateInput,
+): Promise<Row> {
+  if (input.fromCardId === input.toCardId) {
+    throw AppError.badRequest('Cannot transfer to the same card.');
+  }
+
+  return db.runTransaction(async (tx) => {
+    const original = await readOwned(tx, txnsCol().doc(id), uid, 'Transfer not found.');
+    const old = original.data;
+    if (old.source !== 'transfer' || !old.cardId || !old.toCardId) {
+      throw AppError.badRequest('Transaction is not a transfer.');
+    }
+
+    // Firestore requires every read to happen before the first write.
+    const ids = new Set<string>([
+      old.cardId,
+      old.toCardId,
+      input.fromCardId,
+      input.toCardId,
+    ]);
+    const cards = new Map<string, OwnedDoc>();
+    for (const cardId of ids) {
+      cards.set(cardId, await readOwned(tx, cardsCol().doc(cardId), uid, 'Card not found.'));
+    }
+
+    const from = cards.get(input.fromCardId)!;
+    const to = cards.get(input.toCardId)!;
+    const differentCurrencies = from.data.currency !== to.data.currency;
+    const toAmount = differentCurrencies ? input.toAmount : input.amount;
+    if (!toAmount || toAmount <= 0) {
+      throw AppError.badRequest('toAmount is required (and > 0) for cross-currency transfers.');
+    }
+
+    const changes = new Map<string, number>();
+    const change = (cardId: string, delta: number) => {
+      changes.set(cardId, (changes.get(cardId) ?? 0) + delta);
+    };
+    const oldFrom = cards.get(old.cardId)!;
+    const oldTo = cards.get(old.toCardId)!;
+    change(old.cardId, -balanceDelta(oldFrom.data.cardType, 'expense', old.amount));
+    change(old.toCardId, -balanceDelta(oldTo.data.cardType, 'income', old.toAmount ?? old.amount));
+    change(input.fromCardId, balanceDelta(from.data.cardType, 'expense', input.amount));
+    change(input.toCardId, balanceDelta(to.data.cardType, 'income', toAmount));
+
+    const doc = {
+      type: 'expense',
+      amount: input.amount,
+      currency: from.data.currency,
+      categoryId: '',
+      cardId: input.fromCardId,
+      toCardId: input.toCardId,
+      toAmount,
+      toCurrency: to.data.currency,
+      source: 'transfer',
+      sourceLabel: `Transfer: ${from.data.name} -> ${to.data.name}`,
+      ...(input.comment ? { comment: input.comment } : {}),
+      baseAmount: input.baseAmount,
+      fxRate: input.fxRate,
+      fxRateSource: input.fxRateSource,
+      date: input.date,
+      userId: uid,
+      createdAt: old.createdAt,
+    };
+
+    for (const [cardId, delta] of changes) {
+      if (delta !== 0) tx.update(cards.get(cardId)!.ref, { balance: FieldValue.increment(delta) });
+    }
+    // Replace the document so stale category/subcategory or normal-transaction
+    // fields cannot survive an earlier broken edit.
+    tx.set(original.ref, doc);
+    return { id, ...doc };
+  });
+}
+
+type ReturnUpdateInput = {
+  returnAmount: number;
+  accountId?: string;
+  date: number;
+  comment?: string;
+};
+
+const returnFxFields = (original: Row, amount: number): Row => {
+  if (typeof original.fxRate === 'number' && original.fxRate > 0) {
+    return {
+      baseAmount: Math.round(amount * original.fxRate),
+      fxRate: original.fxRate,
+      fxRateSource: original.fxRateSource,
+    };
+  }
+  if (typeof original.baseAmount === 'number' && original.amount > 0) {
+    return { baseAmount: Math.round((original.baseAmount / original.amount) * amount) };
+  }
+  return {};
+};
+
+/** Edit a refund while keeping the original purchase and receiving account in sync. */
+export async function updateReturn(
+  uid: string,
+  id: string,
+  input: ReturnUpdateInput,
+): Promise<Row> {
+  return db.runTransaction(async (tx) => {
+    const refund = await readOwned(tx, txnsCol().doc(id), uid, 'Return not found.');
+    const old = refund.data;
+    if (old.source !== 'return' || !old.linkedTransactionId) {
+      throw AppError.badRequest('Transaction is not a return.');
+    }
+
+    const original = await readOwned(
+      tx,
+      txnsCol().doc(old.linkedTransactionId),
+      uid,
+      'Original transaction not found.',
+    );
+    const purchase = original.data;
+    const oldAccount = old.cardId
+      ? await tryReadOwned(tx, cardsCol().doc(old.cardId), uid)
+      : null;
+    const newAccount = input.accountId
+      ? input.accountId === old.cardId
+        ? oldAccount
+        : await readOwned(tx, cardsCol().doc(input.accountId), uid, 'Card not found.')
+      : null;
+
+    if (newAccount && newAccount.data.currency !== purchase.currency) {
+      throw AppError.badRequest('Return account currency must match the original transaction currency.');
+    }
+
+    const otherReturned = Math.max(0, (purchase.returnedAmount ?? 0) - old.amount);
+    const maxReturn = purchase.amount - otherReturned;
+    if (input.returnAmount > maxReturn) {
+      throw AppError.badRequest('Return amount exceeds the remaining returnable amount.', {
+        remaining: maxReturn,
+      });
+    }
+
+    if (oldAccount && newAccount && old.cardId === input.accountId) {
+      const net =
+        -balanceDelta(oldAccount.data.cardType, 'income', old.amount) +
+        balanceDelta(newAccount.data.cardType, 'income', input.returnAmount);
+      if (net !== 0) tx.update(oldAccount.ref, { balance: FieldValue.increment(net) });
+    } else {
+      if (oldAccount) {
+        tx.update(oldAccount.ref, {
+          balance: FieldValue.increment(-balanceDelta(oldAccount.data.cardType, 'income', old.amount)),
+        });
+      }
+      if (newAccount) {
+        tx.update(newAccount.ref, {
+          balance: FieldValue.increment(balanceDelta(newAccount.data.cardType, 'income', input.returnAmount)),
+        });
+      }
+    }
+
+    const doc = {
+      type: 'income',
+      amount: input.returnAmount,
+      currency: purchase.currency,
+      categoryId: purchase.categoryId ?? '',
+      ...(purchase.subcategoryId ? { subcategoryId: purchase.subcategoryId } : {}),
+      ...(input.accountId ? { cardId: input.accountId } : {}),
+      source: 'return',
+      sourceLabel: 'Return',
+      linkedTransactionId: old.linkedTransactionId,
+      ...(input.comment ? { comment: input.comment } : {}),
+      ...returnFxFields(purchase, input.returnAmount),
+      date: input.date,
+      userId: uid,
+      createdAt: old.createdAt,
+    };
+    tx.update(original.ref, { returnedAmount: otherReturned + input.returnAmount });
+    tx.set(refund.ref, doc);
+    return { id, ...doc };
   });
 }
 
@@ -240,6 +470,9 @@ export async function returnTransaction(
   return db.runTransaction(async (tx) => {
     const original = await readOwned(tx, txnsCol().doc(originalId), uid, 'Original transaction not found.');
     const o = original.data;
+    if (o.type !== 'expense' || (o.source && o.source !== 'subscription')) {
+      throw AppError.badRequest('Only an expense can be returned.');
+    }
     const remaining = (o.amount as number) - (o.returnedAmount ?? 0);
     if (input.returnAmount > remaining) {
       throw AppError.badRequest('Return amount exceeds the remaining returnable amount.', { remaining });
@@ -248,6 +481,9 @@ export async function returnTransaction(
     const account = input.accountId
       ? await readOwned(tx, cardsCol().doc(input.accountId), uid, 'Card not found.')
       : null;
+    if (account && account.data.currency !== o.currency) {
+      throw AppError.badRequest('Return account currency must match the original transaction currency.');
+    }
 
     const ref = newTxnRef();
     const doc = {
@@ -255,11 +491,13 @@ export async function returnTransaction(
       amount: input.returnAmount,
       currency: o.currency,
       categoryId: o.categoryId,
+      ...(o.subcategoryId ? { subcategoryId: o.subcategoryId } : {}),
       cardId: input.accountId,
       source: 'return',
       sourceLabel: 'Return',
       linkedTransactionId: originalId,
       ...(input.comment ? { comment: input.comment } : {}),
+      ...returnFxFields(o, input.returnAmount),
       date: input.date ?? Date.now(),
       userId: uid,
       createdAt: Date.now(),
