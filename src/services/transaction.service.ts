@@ -7,6 +7,7 @@ import {
   newTxnRef,
   readOwned,
   tryReadOwned,
+  type OwnedDoc,
 } from '../repositories/firestore.helpers';
 
 type Row = Record<string, any>;
@@ -72,32 +73,86 @@ export async function updateTransaction(uid: string, id: string, patch: Row): Pr
   });
 }
 
-/** Delete a transaction, reversing its balance impact (handles transfers' two legs). */
+/**
+ * Delete a transaction, reversing its balance impact (handles transfers' two legs)
+ * and keeping refund links consistent:
+ *
+ *  - deleting an expense that has refunds also deletes those refunds, otherwise they
+ *    survive as orphans pointing at a missing original — phantom income plus an
+ *    inflated card balance;
+ *  - deleting a refund gives its `returnedAmount` back to the original, otherwise the
+ *    original keeps claiming it was partially refunded forever.
+ */
 export async function deleteTransaction(uid: string, id: string): Promise<void> {
   await db.runTransaction(async (tx) => {
     const { ref, data } = await readOwned(tx, txnsCol().doc(id), uid, 'Transaction not found.');
 
+    // ---- reads first (Firestore transactions forbid reads after writes) ----
+
+    // Equality-only filters, so single-field indexes are enough — no composite index.
+    const linkedSnap = await tx.get(
+      txnsCol().where('userId', '==', uid).where('linkedTransactionId', '==', id),
+    );
+    const linked = linkedSnap.docs.map((d) => ({ ref: d.ref, data: d.data() }));
+
+    // Cards are deduped by id: two refunds to the same card must not each read it.
+    const cardIds = new Set<string>();
+    if (data.cardId) cardIds.add(data.cardId);
+    if (data.source === 'transfer' && data.toCardId) cardIds.add(data.toCardId);
+    for (const l of linked) if (l.data.cardId) cardIds.add(l.data.cardId);
+
+    const cards = new Map<string, OwnedDoc | null>();
+    for (const cardId of cardIds) {
+      cards.set(cardId, await tryReadOwned(tx, cardsCol().doc(cardId), uid));
+    }
+
+    const originalRef =
+      data.source === 'return' && data.linkedTransactionId
+        ? txnsCol().doc(data.linkedTransactionId)
+        : null;
+    const original = originalRef ? await tryReadOwned(tx, originalRef, uid) : null;
+
+    // ---- then writes ----
+
+    // Net the balance changes per card so one card gets a single increment.
+    const balanceChanges = new Map<string, number>();
+    const applyDelta = (cardId: string | undefined, delta: number) => {
+      if (!cardId || delta === 0) return;
+      balanceChanges.set(cardId, (balanceChanges.get(cardId) ?? 0) + delta);
+    };
+
     if (data.source === 'transfer' && data.toCardId) {
-      const fromCard = data.cardId ? await tryReadOwned(tx, cardsCol().doc(data.cardId), uid) : null;
-      const toCard = await tryReadOwned(tx, cardsCol().doc(data.toCardId), uid);
+      const fromCard = data.cardId ? cards.get(data.cardId) : null;
+      const toCard = cards.get(data.toCardId);
       const toAmt = data.toAmount ?? data.amount;
       if (fromCard) {
-        tx.update(fromCard.ref, {
-          balance: FieldValue.increment(-balanceDelta(fromCard.data.cardType, 'expense', data.amount)),
-        });
+        applyDelta(data.cardId, -balanceDelta(fromCard.data.cardType, 'expense', data.amount));
       }
       if (toCard) {
-        tx.update(toCard.ref, {
-          balance: FieldValue.increment(-balanceDelta(toCard.data.cardType, 'income', toAmt)),
-        });
+        applyDelta(data.toCardId, -balanceDelta(toCard.data.cardType, 'income', toAmt));
       }
     } else if (data.cardId) {
-      const card = await tryReadOwned(tx, cardsCol().doc(data.cardId), uid);
+      const card = cards.get(data.cardId);
       if (card) {
-        tx.update(card.ref, {
-          balance: FieldValue.increment(-balanceDelta(card.data.cardType, data.type, data.amount)),
-        });
+        applyDelta(data.cardId, -balanceDelta(card.data.cardType, data.type, data.amount));
       }
+    }
+
+    for (const l of linked) {
+      const card = l.data.cardId ? cards.get(l.data.cardId) : null;
+      if (card) {
+        applyDelta(l.data.cardId, -balanceDelta(card.data.cardType, l.data.type, l.data.amount));
+      }
+      tx.delete(l.ref);
+    }
+
+    if (original) {
+      tx.update(original.ref, { returnedAmount: FieldValue.increment(-data.amount) });
+    }
+
+    for (const [cardId, delta] of balanceChanges) {
+      const card = cards.get(cardId);
+      if (card) tx.update(card.ref, { balance: FieldValue.increment(delta) });
     }
 
     tx.delete(ref);
