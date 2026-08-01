@@ -163,6 +163,8 @@ export const returnSchema = z.object({
   returnAmount: positive,
   accountId: z.string().optional(),
   date: z.number().optional(),
+  /** Free-text note, e.g. who refunded the money. */
+  comment: z.string().trim().max(500).optional(),
 });
 
 export const refillSchema = z.object({

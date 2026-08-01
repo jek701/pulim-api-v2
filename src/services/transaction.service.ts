@@ -235,7 +235,7 @@ export async function transfer(
 export async function returnTransaction(
   uid: string,
   originalId: string,
-  input: { returnAmount: number; accountId?: string; date?: number },
+  input: { returnAmount: number; accountId?: string; date?: number; comment?: string },
 ): Promise<Row> {
   return db.runTransaction(async (tx) => {
     const original = await readOwned(tx, txnsCol().doc(originalId), uid, 'Original transaction not found.');
@@ -259,6 +259,7 @@ export async function returnTransaction(
       source: 'return',
       sourceLabel: 'Return',
       linkedTransactionId: originalId,
+      ...(input.comment ? { comment: input.comment } : {}),
       date: input.date ?? Date.now(),
       userId: uid,
       createdAt: Date.now(),
