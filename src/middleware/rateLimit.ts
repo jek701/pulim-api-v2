@@ -24,3 +24,12 @@ export const telegramAuthLimiter = rateLimit({
   legacyHeaders: false,
   handler: json429('Too many auth attempts. Please try again shortly.'),
 });
+
+/** Broad IP guard; Telegram-specific per-user limits are enforced after identity resolution. */
+export const telegramWebhookLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 600,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  handler: json429('Too many webhook requests.'),
+});

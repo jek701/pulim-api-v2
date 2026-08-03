@@ -102,6 +102,33 @@ Output budgets are configurable with `AI_MAX_OUTPUT_TOKENS_FREE`,
 hidden reasoning tokens. Incomplete responses record their reason, preserve useful
 partial text, and are refunded from the user's quota.
 
+### Telegram Premium quick entry
+
+`POST /telegram/webhook` accepts private Bot API updates after validating
+`X-Telegram-Bot-Api-Secret-Token`. Text parsing is Premium-only and uses a separate
+100/day, 10/minute quota. Ordinary transactions are written with
+`origin: "telegram"`; `source` is never set.
+
+Ambiguous operations remain in `telegramDrafts` and therefore never affect balances
+or statistics. Foreign-currency operations wait durably in `waiting_fx` when the NBU
+API is unavailable; the background worker obtains the rate and atomically writes the
+transaction and card balance later. Firestore TTL should be enabled for the
+`expiresAt` field in `telegramUpdates`, `telegramOperations`, `telegramDrafts`,
+`telegramMessages`, and `telegramSessions`.
+
+Set the public endpoint in the API environment:
+
+```env
+TELEGRAM_WEBHOOK_URL=https://api.m-pulim.uz/telegram/webhook
+```
+
+When `TELEGRAM_QUICK_ENTRY_ENABLED=true`, the API registers this URL and the
+configured secret with Telegram automatically after the HTTP server starts. Repeated
+startup registration is safe and does not discard pending updates.
+
+Telegram Stars are intentionally not enabled; Premium checkout continues through
+ATMOS only.
+
 ## Frontend integration notes
 
 - Point `VITE_TELEGRAM_AUTH_API_URL` at `<host>/auth/telegram`.

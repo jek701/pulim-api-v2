@@ -46,6 +46,8 @@ export const profilePatchSchema = z
     onboardingComplete: z.boolean().optional(),
     homeWidgets: z.array(homeWidgetSchema).optional(),
     telegramLinkPromptDismissed: z.boolean().optional(),
+    language: z.enum(['en', 'ru', 'uz']).optional(),
+    telegramQuickEntryEnabled: z.boolean().optional(),
   })
   .strip();
 

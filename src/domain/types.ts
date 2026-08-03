@@ -90,6 +90,8 @@ export interface UserProfile {
   phoneNumberMasked?: string;
   authMethodsUpdatedAt?: number;
   homeWidgets?: HomeWidgetSetting[];
+  language?: 'en' | 'ru' | 'uz';
+  telegramQuickEntryEnabled?: boolean;
   isPremium?: boolean;
   subscription?: SubscriptionState;
   usage?: UsageState;
@@ -172,6 +174,7 @@ export interface Transaction {
   cardId?: string;
   comment?: string;
   source?: TransactionSource;
+  origin?: 'telegram';
   sourceLabel?: string;
   toCardId?: string;
   toAmount?: number;

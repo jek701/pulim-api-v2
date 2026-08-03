@@ -13,7 +13,12 @@ export const requestLogger = pinoHttp({
   },
   // Never log credentials.
   redact: {
-    paths: ['req.headers.authorization', 'req.headers.cookie', 'req.body.firebaseIdToken'],
+    paths: [
+      'req.headers.authorization',
+      'req.headers.cookie',
+      'req.headers.x-telegram-bot-api-secret-token',
+      'req.body.firebaseIdToken',
+    ],
     remove: true,
   },
 });

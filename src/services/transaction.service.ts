@@ -1,4 +1,5 @@
-import { db, FieldValue } from '../config/firebase';
+import { db, FieldValue, Timestamp } from '../config/firebase';
+import { createHash } from 'node:crypto';
 import { AppError } from '../utils/AppError';
 import { balanceDelta } from '../domain/balance';
 import {
@@ -11,6 +12,96 @@ import {
 } from '../repositories/firestore.helpers';
 
 type Row = Record<string, any>;
+
+function telegramTransactionRef(operationKey: string) {
+  const digest = createHash('sha256').update(operationKey).digest('hex').slice(0, 40);
+  return txnsCol().doc(`telegram_${digest}`);
+}
+
+/**
+ * Idempotent Telegram money write. The operation marker, optional draft transition,
+ * transaction document, and card balance are committed together.
+ */
+export async function createTelegramTransactionOnce(
+  uid: string,
+  input: Row,
+  operationKey: string,
+  draftId?: string,
+): Promise<{ transaction: Row; created: boolean }> {
+  if (!input.categoryId) throw AppError.badRequest('A category is required.');
+  if (input.currency !== 'UZS' && (!input.baseAmount || !input.fxRate || input.fxRateSource !== 'NBU')) {
+    throw AppError.badRequest('An NBU exchange-rate snapshot is required for foreign currency.');
+  }
+
+  const markerRef = db.collection('telegramOperations').doc(
+    createHash('sha256').update(`${uid}:${operationKey}`).digest('hex'),
+  );
+  const transactionRef = telegramTransactionRef(`${uid}:${operationKey}`);
+  const draftRef = draftId ? db.collection('telegramDrafts').doc(draftId) : null;
+
+  return db.runTransaction(async (tx) => {
+    const marker = await tx.get(markerRef);
+    if (marker.exists) {
+      const existing = await tx.get(transactionRef);
+      if (!existing.exists) throw new Error('Telegram operation marker has no transaction.');
+      return { transaction: { id: existing.id, ...existing.data() }, created: false };
+    }
+
+    const draft = draftRef ? await readOwned(tx, draftRef, uid, 'Telegram draft not found.') : null;
+    if (draft && !['pending', 'waiting_fx'].includes(String(draft.data.status))) {
+      if (draft.data.transactionId) {
+        const existing = await tx.get(txnsCol().doc(String(draft.data.transactionId)));
+        if (existing.exists) return { transaction: { id: existing.id, ...existing.data() }, created: false };
+      }
+      throw AppError.badRequest('Telegram draft is no longer pending.');
+    }
+
+    await readOwned(
+      tx,
+      db.collection('categories').doc(String(input.categoryId)),
+      uid,
+      'Category not found.',
+    );
+    if (input.subcategoryId) {
+      const subcategory = await readOwned(
+        tx,
+        db.collection('subcategories').doc(String(input.subcategoryId)),
+        uid,
+        'Subcategory not found.',
+      );
+      if (subcategory.data.categoryId !== input.categoryId) {
+        throw AppError.badRequest('Subcategory does not belong to the selected category.');
+      }
+    }
+
+    const card = input.cardId
+      ? await readOwned(tx, cardsCol().doc(input.cardId), uid, 'Card not found.')
+      : null;
+    const now = Date.now();
+    const doc = { ...input, origin: 'telegram', userId: uid, createdAt: now };
+
+    tx.create(transactionRef, doc);
+    if (card) {
+      const delta = balanceDelta(card.data.cardType, input.type, input.amount);
+      tx.update(card.ref, { balance: FieldValue.increment(delta) });
+    }
+    if (draftRef) {
+      tx.set(draftRef, {
+        status: 'confirmed',
+        transactionId: transactionRef.id,
+        updatedAt: now,
+      }, { merge: true });
+    }
+    tx.create(markerRef, {
+      userId: uid,
+      operationKey,
+      transactionId: transactionRef.id,
+      createdAt: now,
+      expiresAt: Timestamp.fromMillis(now + 30 * 86_400_000),
+    });
+    return { transaction: { id: transactionRef.id, ...doc }, created: true };
+  });
+}
 
 /** Create a transaction and, if it references a card, adjust that card's balance atomically. */
 export async function createTransaction(uid: string, input: Row): Promise<Row> {
