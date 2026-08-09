@@ -98,6 +98,7 @@ export async function authenticateTelegram(input: TelegramAuthInput) {
           salarySources: [],
           familyMembers: [],
           financialGoals: [],
+          language: 'uz',
           isTelegramUser: true,
           photoURL: tgUser.photo_url || null,
           createdAt: Date.now(),

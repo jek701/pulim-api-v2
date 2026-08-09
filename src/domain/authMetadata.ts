@@ -46,18 +46,23 @@ export function deriveAuthMetadata(claims: DecodedToken): AuthMetadata {
   const signInProvider = firebase?.sign_in_provider ?? null;
   const identities = firebase?.identities ?? {};
   const isTelegram = claims.provider === 'telegram';
+  // Custom-token sessions (Telegram, phone-over-Eskiz) carry no `identities`, so the
+  // verified number travels in our own `phone` claim.
+  const phoneNumber = (claims.phone_number ?? claims.phone) as string | undefined;
 
   const methods = new Set<AuthMethod>();
   if (isTelegram) methods.add('telegram');
   if ('email' in identities || claims.email) methods.add('email');
-  if ('phone' in identities || claims.phone_number) methods.add('phone');
+  if ('phone' in identities || phoneNumber) methods.add('phone');
   if ('google.com' in identities) methods.add('google');
   if ('apple.com' in identities) methods.add('apple');
 
   const linkedAuthMethods = Array.from(methods);
   const current: AuthMethod | null = isTelegram
     ? 'telegram'
-    : (mapProviderIdToAuthMethod(signInProvider) ?? (claims.email ? 'email' : null));
+    : (mapProviderIdToAuthMethod(signInProvider)
+      ?? (claims.provider === 'phone' ? 'phone' : null)
+      ?? (claims.email ? 'email' : null));
 
   const primaryAuthMethod =
     linkedAuthMethods.find((m) => MODERN_AUTH_METHODS.includes(m)) ??
@@ -76,7 +81,7 @@ export function deriveAuthMetadata(claims: DecodedToken): AuthMetadata {
     authMethodsUpdatedAt: Date.now(),
   };
 
-  const masked = maskPhoneNumber(claims.phone_number as string | undefined);
+  const masked = maskPhoneNumber(phoneNumber);
   if (masked) meta.phoneNumberMasked = masked;
 
   return meta;

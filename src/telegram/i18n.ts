@@ -2,7 +2,7 @@ import type { SupportedLanguage } from './types';
 
 const strings = {
   ru: {
-    welcome: 'Записывайте расходы и доходы обычным сообщением.\n\nНапример:\n<code>завтрак 45к</code>\n<code>вчера такси 20к, обед 35к</code>\n<code>кофе 3$</code>',
+    welcome: '✨ <b>Добро пожаловать в Pulim!</b>\n\nЯ помогу вести личные финансы прямо в этом чате: запишу расходы и доходы, переводы между вашими картами, долги и их погашение. Понимаю обычную речь — не нужны специальные команды.\n\n<b>Что можно написать:</b>\n<code>завтрак 45к с карты Humo</code>\n<code>перевёл 500к с Humo на Uzcard</code>\n<code>Алишер должен мне 200$ до 15 мая, комиссия 2%</code>\n<code>вернул Алишеру 50$</code>\n\nЯ бережно проверю детали и после сохранения покажу сумму, категорию, дату и карту. Если чего-то не хватит, сразу скажу, что нужно уточнить.\n\n📱 Открывайте Pulim в приложении, чтобы посмотреть историю и при необходимости изменить запись.',
     premium_required: 'Запись транзакций сообщением доступна в Premium. В приложении записывать можно бесплатно.',
     not_linked: 'Не вижу вашего аккаунта Pulim. Откройте приложение один раз — оно свяжет этот чат с вашим профилем.',
     disabled: 'Быстрая запись через Telegram выключена в настройках приложения.',
@@ -18,12 +18,15 @@ const strings = {
     invalid_amount: 'Не понял сумму, попробуйте ещё раз.',
     invalid_date: 'Не понял дату, попробуйте ещё раз.',
     updated: '✅ Обновлено',
-    draft_updated: '❓ Черновик обновлён',
+    draft_updated: '✅ Детали обновлены — проверьте их перед сохранением',
     edit: '✏️ Изменить',
     operation: 'Операция',
+    saved: '✅ Сохранено',
+    language_prompt: '🌐 Выберите язык ответов Pulim в Telegram:',
+    language_changed: '✅ Язык Telegram изменён на русский.',
   },
   uz: {
-    welcome: 'Xarajat va daromadlarni oddiy xabar bilan yozing.\n\nMasalan:\n<code>nonushta 45 ming</code>\n<code>kecha taksi 20 ming, tushlik 35 ming</code>\n<code>coffee 3$</code>',
+    welcome: '✨ <b>Pulim’ga xush kelibsiz!</b>\n\nMen shu chatning o‘zida shaxsiy moliyangizni yuritishga yordam beraman: xarajat va daromadlar, kartalar orasidagi o‘tkazmalar, qarzlar va ularni qaytarish. Maxsus buyruqlar shart emas — oddiy tilda yozing.\n\n<b>Masalan:</b>\n<code>nonushta 45 ming Humo kartasidan</code>\n<code>Humo’dan Uzcard’ga 500 ming o‘tkazdim</code>\n<code>Alisher menga 200$ qarz, 15 maygacha, komissiya 2%</code>\n<code>Alisherga 50$ qaytardim</code>\n\nMen tafsilotlarni tekshiraman va saqlangandan keyin summa, toifa, sana hamda kartani ko‘rsataman. Biror ma’lumot yetishmasa, darhol aytaman.\n\n📱 Tarixni ko‘rish yoki yozuvni o‘zgartirish uchun Pulim ilovasini oching.',
     premium_required: 'Xabar orqali operatsiya yozish Premium’da mavjud. Ilovada bepul yozish mumkin.',
     not_linked: 'Pulim hisobingizni ko‘rmayapman. Ilovani bir marta oching — chat profilingizga ulanadi.',
     disabled: 'Telegram orqali tezkor yozish sozlamalarda o‘chirilgan.',
@@ -39,12 +42,15 @@ const strings = {
     invalid_amount: 'Summani tushunmadim, qayta urinib ko‘ring.',
     invalid_date: 'Sanani tushunmadim, qayta urinib ko‘ring.',
     updated: '✅ Yangilandi',
-    draft_updated: '❓ Qoralama yangilandi',
+    draft_updated: '✅ Tafsilotlar yangilandi — saqlashdan oldin tekshiring',
     edit: '✏️ Tahrirlash',
     operation: 'Operatsiya',
+    saved: '✅ Saqlandi',
+    language_prompt: '🌐 Telegramdagi Pulim javoblari tilini tanlang:',
+    language_changed: '✅ Telegram tili o‘zbek tiliga o‘zgartirildi.',
   },
   en: {
-    welcome: 'Record expenses and income with a normal message.\n\nExamples:\n<code>breakfast 45k</code>\n<code>yesterday taxi 20k, lunch 35k</code>\n<code>coffee $3</code>',
+    welcome: '✨ <b>Welcome to Pulim!</b>\n\nI help you manage personal finances right here in the chat: expenses and income, transfers between your cards, debts, and repayments. Just write naturally — no special commands are needed.\n\n<b>Try saying:</b>\n<code>breakfast 45k from my Humo card</code>\n<code>transfer 500k from Humo to Uzcard</code>\n<code>Alisher owes me $200 by May 15, with a 2% fee</code>\n<code>I repaid Alisher $50</code>\n\nI’ll check the details and show the amount, category, date, and card after saving. If anything is missing, I’ll explain exactly what needs attention.\n\n📱 Open Pulim to review your history or edit a saved entry.',
     premium_required: 'Recording transactions by message is available with Premium. You can still record them free in the app.',
     not_linked: 'I cannot find your Pulim account. Open the app once to link this chat to your profile.',
     disabled: 'Telegram quick entry is disabled in the app settings.',
@@ -60,9 +66,12 @@ const strings = {
     invalid_amount: 'I could not understand the amount. Please try again.',
     invalid_date: 'I could not understand the date. Please try again.',
     updated: '✅ Updated',
-    draft_updated: '❓ Draft updated',
+    draft_updated: '✅ Details updated — please check them before saving',
     edit: '✏️ Edit',
     operation: 'Transaction',
+    saved: '✅ Saved',
+    language_prompt: '🌐 Choose the language for Pulim replies in Telegram:',
+    language_changed: '✅ Telegram language changed to English.',
   },
 } as const;
 
@@ -70,5 +79,5 @@ export type MessageKey = keyof typeof strings.ru;
 export const t = (language: SupportedLanguage, key: MessageKey): string => strings[language][key];
 
 export function normalizeLanguage(value: unknown): SupportedLanguage {
-  return value === 'uz' || value === 'en' || value === 'ru' ? value : 'ru';
+  return value === 'uz' || value === 'en' || value === 'ru' ? value : 'uz';
 }

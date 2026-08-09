@@ -22,7 +22,6 @@ export async function resolveUserContext(
   return {
     uid,
     profile,
-    language: normalizeLanguage(profile.language ?? record?.data.languageCode),
+    language: normalizeLanguage(profile.language),
   };
 }
-

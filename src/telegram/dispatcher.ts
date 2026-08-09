@@ -62,7 +62,7 @@ export async function dispatchUpdate(update: TelegramUpdate): Promise<string | n
   }
   if (message.voice || message.photo || message.document || message.audio) {
     const context = await resolveUserContext(telegramId, chatId);
-    await sendMessage(chatId, t(context?.language ?? 'ru', 'unsupported'));
+    await sendMessage(chatId, t(context?.language ?? 'uz', 'unsupported'));
     return context?.uid ?? null;
   }
   logger.debug({ updateId: update.update_id }, 'telegram.update.ignored');

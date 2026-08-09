@@ -47,15 +47,23 @@ src/
 ```
 
 Auth: every `/v1/*` route runs `authenticate` (verifies the Bearer ID token →
-`req.uid`, `req.claims`). `POST /auth/telegram` and `GET /health` are public.
-Ownership is enforced in repositories (`userId === req.uid`).
+`req.uid`, `req.claims`). `POST /auth/telegram`, `POST /auth/phone/*` and
+`GET /health` are public. Ownership is enforced in repositories
+(`userId === req.uid`).
 
 Errors use a consistent envelope: `{ "error": { "code", "message", "details?" } }`.
 
 ## Endpoints
 
 Public: `GET /health`, `POST /auth/telegram` (Mini App sign-in / link; body
-`{ telegramInitData, chatId, firebaseIdToken? }`).
+`{ telegramInitData, chatId, firebaseIdToken? }`), plus phone sign-in:
+
+| Route | Body | Returns |
+|---|---|---|
+| `POST /auth/phone/send-code` | `{ phone, purpose?: 'signin'\|'link', language?: 'uz'\|'ru'\|'en', firebaseIdToken? }` | `{ expiresIn, resendAfter, requestId }` |
+| `POST /auth/phone/verify` | `{ phone, code, purpose?, firebaseIdToken? }` | `{ uid, isNewUser, customToken }` (`signin`) / `{ linked: true }` (`link`) |
+
+See [Phone sign-in over Eskiz](#phone-sign-in-over-eskiz) below.
 
 All below require `Authorization: Bearer <firebaseIdToken>` and are under `/v1`:
 
@@ -129,9 +137,43 @@ startup registration is safe and does not discard pending updates.
 Telegram Stars are intentionally not enabled; Premium checkout continues through
 ATMOS only.
 
+### Phone sign-in over Eskiz
+
+Replaces Firebase phone auth (and with it reCAPTCHA): the API owns the whole code
+lifecycle and Firebase Auth is only the session/uid store.
+
+1. `send-code` issues a 6-digit code, stores **only** its HMAC in
+   `phoneVerifications/{digits}` and sends the SMS through
+   `POST notify.eskiz.uz/api/message/sms/send` (`services/eskiz.service.ts`, bearer
+   token cached in memory, refreshed on 401).
+2. `verify` compares hashes in constant time, burns the code in a transaction (no
+   replay, no double session), then either mints a custom token for the uid that
+   owns the number — `auth.getUserByPhoneNumber`, so pre-existing phone users keep
+   their uid and data — or creates the Firebase user for a new number.
+   `purpose: 'link'` instead attaches the number to the uid proven by
+   `firebaseIdToken` and returns no token.
+
+Because reCAPTCHA is gone, the limits are ours: per-IP `phoneAuthLimiter`
+(20/min), per-number resend cooldown (`PHONE_CODE_RESEND_COOLDOWN_SECONDS`),
+sends per hour (`PHONE_CODE_MAX_SENDS_PER_HOUR`) and wrong-code attempts
+(`PHONE_CODE_MAX_ATTEMPTS`). Enable Firestore TTL on `expiresAt` in
+`phoneVerifications`.
+
+Only `+998` numbers are accepted (`/message/sms/send` is domestic; international
+would need `send-global`). The SMS text must match a template approved in the
+Eskiz cabinet — `MESSAGE_TEMPLATES` in `services/phoneAuth.service.ts` holds the
+uz/ru/en variants, picked from the `language` the client sends. Custom-token
+sessions carry no `phone_number` claim, so the verified number travels in our own
+`phone` claim (`domain/authMetadata.ts` reads it).
+
+For local work without SMS, set `PHONE_AUTH_DEBUG_ECHO_CODE=true` — the code comes
+back in the response and nothing is sent (startup refuses this in production).
+
 ## Frontend integration notes
 
 - Point `VITE_TELEGRAM_AUTH_API_URL` at `<host>/auth/telegram`.
+- Phone sign-in needs no Firebase provider on the client: `POST /auth/phone/verify`
+  returns a custom token for `signInWithCustomToken`.
 - Never expose `OPENAI_API_KEY` in Vite; call `/v1/ai/*` through the API.
 - Send `Authorization: Bearer ${await user.getIdToken()}` on every `/v1` request.
 - Replace the multi-call money sequences (transfer/return/deposit/debt/subscription/

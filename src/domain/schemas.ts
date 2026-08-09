@@ -14,6 +14,26 @@ export const telegramAuthSchema = z.object({
 });
 export type TelegramAuthBody = z.infer<typeof telegramAuthSchema>;
 
+/** Phone sign-in over the Eskiz SMS gateway. */
+const phoneNumberSchema = z.string().min(9).max(20);
+const phonePurposeSchema = z.enum(['signin', 'link']).default('signin');
+
+export const phoneSendCodeSchema = z.object({
+  phone: phoneNumberSchema,
+  purpose: phonePurposeSchema,
+  language: z.enum(['uz', 'ru', 'en']).optional(),
+  firebaseIdToken: z.string().min(1).optional(),
+});
+export type PhoneSendCodeBody = z.infer<typeof phoneSendCodeSchema>;
+
+export const phoneVerifyCodeSchema = z.object({
+  phone: phoneNumberSchema,
+  code: z.string().regex(/^\d{6}$/, 'The code is 6 digits.'),
+  purpose: phonePurposeSchema,
+  firebaseIdToken: z.string().min(1).optional(),
+});
+export type PhoneVerifyCodeBody = z.infer<typeof phoneVerifyCodeSchema>;
+
 // --- Profile ---
 const salarySourceSchema = z.object({
   id: z.string(),

@@ -41,6 +41,24 @@ export const openAppKeyboard = (language: SupportedLanguage) => ({
   }]],
 });
 
+export const languageKeyboard = () => ({
+  inline_keyboard: [[
+    { text: '🇺🇿 O‘zbekcha', callback_data: 'v1:lang:0:uz' },
+    { text: '🇷🇺 Русский', callback_data: 'v1:lang:0:ru' },
+    { text: '🇬🇧 English', callback_data: 'v1:lang:0:en' },
+  ]],
+});
+
+export const welcomeKeyboard = (language: SupportedLanguage) => ({
+  inline_keyboard: [
+    [{
+      text: language === 'uz' ? '📱 Pulim’ni ochish' : language === 'en' ? '📱 Open Pulim' : '📱 Открыть Pulim',
+      web_app: { url: env.WEB_APP_URL },
+    }],
+    [{ text: language === 'uz' ? '🌐 Tilni o‘zgartirish' : language === 'en' ? '🌐 Change language' : '🌐 Изменить язык', callback_data: 'v1:langmenu:0' }],
+  ],
+});
+
 export const premiumKeyboard = (language: SupportedLanguage) => ({
   inline_keyboard: [[
     {

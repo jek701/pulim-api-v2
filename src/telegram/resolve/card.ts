@@ -3,6 +3,24 @@ import type { ParsedItem } from '../types';
 
 const normalize = (value: string) => value.toLocaleLowerCase().replace(/\s+/g, ' ').trim();
 
+export function resolveCardHint(
+  hint: string,
+  cards: Card[],
+  role: 'source' | 'destination' = 'source',
+): {
+  cardId?: string;
+  reason: 'NO_SOURCE_CARD' | 'NO_DESTINATION_CARD' | 'AMBIGUOUS_SOURCE_CARD' | 'AMBIGUOUS_DESTINATION_CARD' | null;
+} {
+  const missing = role === 'source' ? 'NO_SOURCE_CARD' : 'NO_DESTINATION_CARD';
+  const ambiguous = role === 'source' ? 'AMBIGUOUS_SOURCE_CARD' : 'AMBIGUOUS_DESTINATION_CARD';
+  const normalizedHint = normalize(hint);
+  if (!normalizedHint) return { reason: missing };
+  const matches = cards.filter((card) => normalize(`${card.name} ${card.bank}`).includes(normalizedHint));
+  if (matches.length === 1) return { cardId: matches[0]!.id, reason: null };
+  if (matches.length > 1) return { cardId: matches[0]!.id, reason: ambiguous };
+  return { reason: missing };
+}
+
 export function resolveCard(
   item: Pick<ParsedItem, 'cardHint'>,
   cards: Card[],

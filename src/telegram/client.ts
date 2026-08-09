@@ -103,6 +103,7 @@ export function setMyCommands(): Promise<boolean> {
     commands: [
       { command: 'start', description: 'Start Pulim quick entry' },
       { command: 'help', description: 'Show examples' },
+      { command: 'language', description: 'Change reply language' },
       { command: 'cancel', description: 'Cancel editing' },
     ],
   });

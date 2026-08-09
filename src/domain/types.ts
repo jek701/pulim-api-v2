@@ -180,6 +180,7 @@ export interface Transaction {
   toAmount?: number;
   toCurrency?: Currency;
   linkedTransactionId?: string;
+  debtId?: string;
   returnedAmount?: number;
   baseAmount?: number;
   fxRate?: number;
@@ -247,6 +248,7 @@ export interface Debt {
   commission?: Commission;
   dueDate?: number;
   comment?: string;
+  accountId?: string;
   isPaid: boolean;
   userId: string;
   createdAt: number;

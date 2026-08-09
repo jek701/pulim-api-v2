@@ -2,6 +2,7 @@ import { db, Timestamp } from '../config/firebase';
 import { env } from '../config/env';
 import { createHash } from 'node:crypto';
 import type { DraftReason } from './types';
+import type { ParsedOperationKind } from './types';
 
 export interface DraftInput {
   userId: string;
@@ -10,6 +11,7 @@ export interface DraftInput {
   sourceText: string;
   index: number;
   operationKey: string;
+  operationType?: ParsedOperationKind;
   draft: Record<string, unknown>;
   amountAlternative: number | null;
   suggestion: { categoryName: string; categoryIcon: string } | null;

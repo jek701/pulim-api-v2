@@ -43,7 +43,7 @@ export async function recoverTelegramUpdates(): Promise<void> {
         if (parsed.success && parsed.data.message?.from) {
           const chatId = String(parsed.data.message.chat.id);
           const context = await resolveUserContext(String(parsed.data.message.from.id), chatId).catch(() => null);
-          await sendMessage(chatId, t(context?.language ?? 'ru', 'error')).catch(() => undefined);
+          await sendMessage(chatId, t(context?.language ?? 'uz', 'error')).catch(() => undefined);
         }
         continue;
       }

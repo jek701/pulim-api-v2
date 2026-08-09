@@ -1,8 +1,9 @@
 import { Router, type Express } from 'express';
 import { authenticate } from '../middleware/authenticate';
-import { aiLimiter, telegramAuthLimiter, telegramWebhookLimiter } from '../middleware/rateLimit';
+import { aiLimiter, phoneAuthLimiter, telegramAuthLimiter, telegramWebhookLimiter } from '../middleware/rateLimit';
 import { healthRouter } from './health.routes';
 import { telegramAuthRouter } from './telegramAuth.routes';
+import { phoneAuthRouter } from './phoneAuth.routes';
 import { profileRouter } from './profile.routes';
 import { settingsRouter } from './settings.routes';
 import { categoriesRouter } from './categories.routes';
@@ -24,6 +25,7 @@ import { telegramWebhookRouter } from './telegramWebhook.routes';
 export function mountRoutes(app: Express): void {
   app.use('/health', healthRouter);
   app.use('/auth/telegram', telegramAuthLimiter, telegramAuthRouter);
+  app.use('/auth/phone', phoneAuthLimiter, phoneAuthRouter);
   app.use('/internal/v1/billing/events', billingInternalRouter);
   app.use('/telegram/webhook', telegramWebhookLimiter, telegramWebhookRouter);
 

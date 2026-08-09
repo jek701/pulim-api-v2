@@ -6,7 +6,7 @@ import { resolveUserContext } from '../context';
 import { t } from '../i18n';
 import { escapeHtml, openAppKeyboard, premiumKeyboard } from '../render';
 import { consumeParse, refundParse } from '../usage.repository';
-import { processQuickEntry, TelegramChatError } from '../quickEntry.service';
+import { formatDraftOperation, loadCatalog, processQuickEntry, TelegramChatError } from '../quickEntry.service';
 import { clearSession, getSession } from '../sessions.repository';
 import { resolveAmount } from '../resolve/amount';
 import { parseUserDate } from '../resolve/date';
@@ -69,6 +69,15 @@ export async function handleTextMessage(input: {
         transaction.baseAmount = Math.round(amount.amount * Number(transaction.fxRate));
       }
       reasons = reasons.filter((reason) => !['AMBIGUOUS_SMALL_AMOUNT', 'AMOUNT_MISMATCH', 'LOW_AMOUNT_CONFIDENCE'].includes(reason));
+    } else if (session.field === 'toAmount') {
+      const amount = resolveAmount(input.text, Number(input.text), transaction.toCurrency as Currency);
+      if (!Number.isFinite(amount.amount) || amount.amount <= 0 || amount.ambiguous) {
+        await sendMessage(input.chatId, t(context.language, 'invalid_amount'));
+        return context.uid;
+      }
+      transaction.toAmount = amount.amount;
+      transaction.fxRateSource = 'manual';
+      reasons = reasons.filter((reason) => !['NO_TO_AMOUNT', 'FX_UNAVAILABLE', 'AMBIGUOUS_SMALL_AMOUNT', 'AMOUNT_MISMATCH'].includes(reason));
     } else if (session.field === 'comment') {
       transaction.comment = input.text.trim().slice(0, 200);
     } else {
@@ -88,10 +97,12 @@ export async function handleTextMessage(input: {
     });
     await clearSession(input.chatId);
     await deleteMessage(input.chatId, Number(session.promptMessageId)).catch(() => undefined);
+    const catalog = await loadCatalog(context.uid, context.language);
+    const operationType = draft.operationType ?? transaction.kind ?? 'transaction';
     await editMessageText(input.chatId, Number(session.contextMessageId),
       waitingFx
         ? t(context.language, 'fx_waiting')
-        : `${t(context.language, 'draft_updated')}\n\n${escapeHtml(transaction.comment ?? draft.sourceText)} — ${escapeHtml(transaction.amount)} ${escapeHtml(transaction.currency)}`,
+        : formatDraftOperation(operationType, transaction, catalog, context.language, reasons),
       { reply_markup: { inline_keyboard: waitingFx ? [] : [[{ text: t(context.language, 'edit'), callback_data: 'v1:edit:0' }]] } },
     );
     return context.uid;

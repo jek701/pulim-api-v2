@@ -13,9 +13,15 @@ import {
 
 type Row = Record<string, any>;
 
-function telegramTransactionRef(operationKey: string) {
+export function telegramOperationMarkerRef(uid: string, operationKey: string) {
+  return db.collection('telegramOperations').doc(
+    createHash('sha256').update(`${uid}:${operationKey}`).digest('hex'),
+  );
+}
+
+export function telegramTransactionRef(operationKey: string, prefix = 'telegram_') {
   const digest = createHash('sha256').update(operationKey).digest('hex').slice(0, 40);
-  return txnsCol().doc(`telegram_${digest}`);
+  return txnsCol().doc(`${prefix}${digest}`);
 }
 
 /**
@@ -33,9 +39,7 @@ export async function createTelegramTransactionOnce(
     throw AppError.badRequest('An NBU exchange-rate snapshot is required for foreign currency.');
   }
 
-  const markerRef = db.collection('telegramOperations').doc(
-    createHash('sha256').update(`${uid}:${operationKey}`).digest('hex'),
-  );
+  const markerRef = telegramOperationMarkerRef(uid, operationKey);
   const transactionRef = telegramTransactionRef(`${uid}:${operationKey}`);
   const draftRef = draftId ? db.collection('telegramDrafts').doc(draftId) : null;
 
@@ -549,6 +553,82 @@ export async function transfer(
     });
     tx.update(to.ref, { balance: FieldValue.increment(balanceDelta(to.data.cardType, 'income', toAmt)) });
     return { id: ref.id, ...doc };
+  });
+}
+
+/** Idempotent Telegram card-to-card transfer. Both balances and the transfer row
+ * are committed together so retries cannot duplicate money movement. */
+export async function createTelegramTransferOnce(
+  uid: string,
+  input: {
+    fromCardId: string;
+    toCardId: string;
+    amount: number;
+    toAmount?: number;
+    baseAmount?: number;
+    fxRate?: number;
+    fxRateSource?: 'NBU' | 'manual';
+    date: number;
+    comment?: string;
+  },
+  operationKey: string,
+): Promise<{ transaction: Row; created: boolean }> {
+  if (input.fromCardId === input.toCardId) {
+    throw AppError.badRequest('Source and destination cards must differ.');
+  }
+  const markerRef = telegramOperationMarkerRef(uid, `transfer:${operationKey}`);
+  const transactionRef = telegramTransactionRef(`transfer:${uid}:${operationKey}`, 'telegram_transfer_');
+
+  return db.runTransaction(async (tx) => {
+    const marker = await tx.get(markerRef);
+    if (marker.exists) {
+      const existing = await tx.get(transactionRef);
+      if (!existing.exists) throw new Error('Telegram transfer marker has no transaction.');
+      return { transaction: { id: existing.id, ...existing.data() }, created: false };
+    }
+
+    const from = await readOwned(tx, cardsCol().doc(input.fromCardId), uid, 'Source card not found.');
+    const to = await readOwned(tx, cardsCol().doc(input.toCardId), uid, 'Destination card not found.');
+    const differentCurrencies = from.data.currency !== to.data.currency;
+    const toAmount = differentCurrencies ? input.toAmount : (input.toAmount ?? input.amount);
+    if (!toAmount || toAmount <= 0) {
+      throw AppError.badRequest('A destination amount is required for a cross-currency transfer.');
+    }
+
+    const now = Date.now();
+    const doc = {
+      type: 'expense',
+      amount: input.amount,
+      currency: from.data.currency,
+      categoryId: '',
+      cardId: input.fromCardId,
+      toCardId: input.toCardId,
+      toAmount,
+      toCurrency: to.data.currency,
+      source: 'transfer',
+      sourceLabel: `Transfer: ${from.data.name} -> ${to.data.name}`,
+      ...(input.comment ? { comment: input.comment } : {}),
+      ...(input.baseAmount ? { baseAmount: input.baseAmount } : {}),
+      ...(input.fxRate ? { fxRate: input.fxRate } : {}),
+      ...(input.fxRateSource ? { fxRateSource: input.fxRateSource } : {}),
+      date: input.date,
+      origin: 'telegram',
+      userId: uid,
+      createdAt: now,
+    };
+
+    tx.create(transactionRef, doc);
+    tx.update(from.ref, { balance: FieldValue.increment(balanceDelta(from.data.cardType, 'expense', input.amount)) });
+    tx.update(to.ref, { balance: FieldValue.increment(balanceDelta(to.data.cardType, 'income', toAmount)) });
+    tx.create(markerRef, {
+      userId: uid,
+      operationKey,
+      kind: 'transfer',
+      transactionId: transactionRef.id,
+      createdAt: now,
+      expiresAt: Timestamp.fromMillis(now + 30 * 86_400_000),
+    });
+    return { transaction: { id: transactionRef.id, ...doc }, created: true };
   });
 }
 

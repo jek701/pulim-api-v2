@@ -46,3 +46,11 @@ export function parseUserDate(value: string, now: number, timezoneName = 'Asia/T
   }
   return { date: Number.NaN, ambiguous: false, reason: null };
 }
+
+/** Parse a debt deadline. Unlike a transaction date, a future date is expected. */
+export function resolveDueDate(dateISO: string, now: number, timezoneName = 'Asia/Tashkent'): number | null {
+  if (!dateISO.trim()) return null;
+  const parsed = dayjs(dateISO, 'YYYY-MM-DD', true).tz(timezoneName, true);
+  if (!parsed.isValid()) return null;
+  return parsed.hour(12).minute(0).second(0).millisecond(0).valueOf();
+}

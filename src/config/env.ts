@@ -56,7 +56,33 @@ const EnvSchema = z.object({
   AI_PREMIUM_MESSAGES_PER_PERIOD: z.coerce.number().int().positive().default(500),
 
   PULIM_PAYMENT_INTERNAL_SECRET: z.string().min(32).optional(),
+
+  // ── Eskiz SMS gateway (phone sign-in) ──────────────────────────────────────
+  ESKIZ_BASE_URL: z.string().default('https://notify.eskiz.uz'),
+  ESKIZ_EMAIL: z.string().default(''),
+  ESKIZ_PASSWORD: z.string().default(''),
+  /** Sender id. `4546` is Eskiz's shared test sender; replace with your nickname once approved. */
+  ESKIZ_FROM: z.string().default('4546'),
+  /** Optional delivery-status webhook passed to Eskiz as `callback_url`. */
+  ESKIZ_CALLBACK_URL: z.string().default(''),
+  ESKIZ_TIMEOUT_MS: z.coerce.number().int().positive().max(60_000).default(15_000),
+
+  /** Optional HMAC key for stored code hashes; defaults to a project-id-derived key. */
+  PHONE_CODE_PEPPER: z.string().default(''),
+  PHONE_CODE_TTL_SECONDS: z.coerce.number().int().min(60).max(3_600).default(300),
+  PHONE_CODE_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(20).default(5),
+  PHONE_CODE_RESEND_COOLDOWN_SECONDS: z.coerce.number().int().min(10).max(600).default(60),
+  PHONE_CODE_MAX_SENDS_PER_HOUR: z.coerce.number().int().min(1).max(50).default(5),
+  /** Dev-only escape hatch: returns the code in the API response instead of requiring a real SMS. */
+  PHONE_AUTH_DEBUG_ECHO_CODE: boolish,
 }).superRefine((value, context) => {
+  if (value.PHONE_AUTH_DEBUG_ECHO_CODE && value.NODE_ENV === 'production') {
+    context.addIssue({
+      code: 'custom',
+      path: ['PHONE_AUTH_DEBUG_ECHO_CODE'],
+      message: 'Must be false in production — it would leak SMS codes over the API.',
+    });
+  }
   if (!value.TELEGRAM_QUICK_ENTRY_ENABLED) return;
   try {
     const webhookUrl = new URL(value.TELEGRAM_WEBHOOK_URL);
@@ -110,3 +136,6 @@ export const corsOrigins = env.CORS_ORIGINS.split(',')
   .filter(Boolean);
 
 export const isProd = env.NODE_ENV === 'production';
+
+/** Eskiz can only be called once the cabinet credentials are present. */
+export const eskizConfigured = Boolean(env.ESKIZ_EMAIL && env.ESKIZ_PASSWORD);
