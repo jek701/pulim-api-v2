@@ -10,6 +10,7 @@ const dayOfMonth = z.number().int().min(1).max(31);
 export const telegramAuthSchema = z.object({
   telegramInitData: z.string().min(1),
   chatId: z.union([z.string(), z.number()]).transform(String),
+  language: z.enum(['uz', 'ru', 'en']).optional(),
   firebaseIdToken: z.string().min(1).optional(),
 });
 export type TelegramAuthBody = z.infer<typeof telegramAuthSchema>;

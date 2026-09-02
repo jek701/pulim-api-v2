@@ -19,7 +19,7 @@ import { createDraft, updateDraft } from './drafts.repository';
 import { t } from './i18n';
 import type { BudgetLoadingMessage } from './loadingDraft.service';
 import { parseMessage, TelegramParseError } from './parser.service';
-import { escapeHtml, markdownToTelegramHtml } from './render';
+import { escapeHtml, markdownToTelegramHtml, premiumKeyboard } from './render';
 import { saveMessage } from './messages.repository';
 import { resolveAmount } from './resolve/amount';
 import { resolveCard, resolveCardHint } from './resolve/card';
@@ -345,6 +345,7 @@ async function sendPendingDraft(input: {
   suggestion: { categoryName: string; categoryIcon: string } | null;
   catalog: { categories: Category[]; cards: Card[]; subcategories: Subcategory[] };
   language: SupportedLanguage;
+  isPremium: boolean;
 }): Promise<void> {
   const draft = await createDraft({
     userId: input.uid,
@@ -381,7 +382,9 @@ async function sendPendingDraft(input: {
       const category = input.catalog.categories.find((entry) => entry.id === id)!;
       keyboard.push([{ text: `${category.icon} ${categoryDisplayName(category, input.language)}`, callback_data: `v1:cat:0:${optionIndex}` }]);
     });
-    if (input.suggestion?.categoryName) keyboard.push([{ text: `➕ ${input.suggestion.categoryName}`, callback_data: 'v1:newcat:0' }]);
+    if (input.isPremium && input.suggestion?.categoryName) {
+      keyboard.push([{ text: `➕ ${input.suggestion.categoryName}`, callback_data: 'v1:newcat:0' }]);
+    }
     if (categoryIds.length > 6) keyboard.push([{ text: localized(input.language, '⬇️ Ещё категории', '⬇️ Yana toifalar', '⬇️ More categories'), callback_data: 'v1:txcatp:0:1' }]);
   }
   const needsSource = input.operationType === 'transfer'
@@ -432,6 +435,7 @@ async function answerNonTransaction(
   language: SupportedLanguage,
   updateId: number,
   inputMessageId: number,
+  isPremium: boolean,
   loadingMessage?: BudgetLoadingMessage,
 ) {
   if (looksLikeGreeting(text)) {
@@ -442,14 +446,14 @@ async function answerNonTransaction(
     });
     return;
   }
-  await consumeAiMessage(uid, true);
+  await consumeAiMessage(uid, isPremium);
   const draftId = Math.abs(updateId % 2_147_483_647) || 1;
   try {
     const snapshot = await assembleSnapshot(uid, language);
     let lastDraftAt = 0;
     let loadingStopped = false;
     const answer = await answerStatelessChat({
-      uid, model: selectChatModel(true), snapshot, language, userMessage: text,
+      uid, model: selectChatModel(isPremium), snapshot, language, userMessage: text,
       signal: AbortSignal.timeout(env.TELEGRAM_PARSE_TIMEOUT_MS),
       onDelta: async (_delta, fullText) => {
         if (!loadingStopped) {
@@ -475,7 +479,7 @@ async function answerNonTransaction(
     });
   } catch (error) {
     await loadingMessage?.stop();
-    await refundAiMessage(uid, true);
+    await refundAiMessage(uid, isPremium);
     throw new TelegramChatError(error);
   }
 }
@@ -487,6 +491,7 @@ export async function processQuickEntry(input: {
   updateId: number;
   text: string;
   language: SupportedLanguage;
+  isPremium: boolean;
   loadingMessage?: BudgetLoadingMessage;
 }): Promise<void> {
   const catalog = await loadCatalog(input.uid, input.language);
@@ -499,6 +504,7 @@ export async function processQuickEntry(input: {
       input.language,
       input.updateId,
       input.messageId,
+      input.isPremium,
       input.loadingMessage,
     );
     return;
@@ -511,12 +517,18 @@ export async function processQuickEntry(input: {
 
   const saved: SavedTelegramOperation[] = [];
   const invalidAmounts: string[] = [];
+  let blockedPremiumDebt = false;
   for (const [index, item] of parsed.items.slice(0, env.TELEGRAM_MAX_ITEMS_PER_MESSAGE).entries()) {
     const operationKey = `${input.updateId}:${index + 1}`;
     const kind = item.kind;
     const amount = resolveAmount(item.amountLiteral, item.amount, item.currency);
     const fullRepayment = /(?:полностью|весь|всю|hammasini|to['’`]?liq|full)/iu.test(item.rawText);
     const operationDate = resolveDate(item.dateISO, Date.now(), env.TELEGRAM_DEFAULT_TIMEZONE);
+
+    if (!input.isPremium && kind === 'debt') {
+      blockedPremiumDebt = true;
+      continue;
+    }
 
     if (kind === 'transaction') {
       if (!Number.isFinite(amount.amount) || amount.amount <= 0 || amount.amount > 1e15) {
@@ -574,7 +586,7 @@ export async function processQuickEntry(input: {
             operationKey, sourceText: item.rawText, operationType: kind, draft: transaction, reasons,
             amountAlternative: amount.alternative ?? (amount.reason === 'AMOUNT_MISMATCH' ? item.amount : null),
             suggestion: category.categoryId ? null : { categoryName: item.suggestedCategoryName.slice(0, 40), categoryIcon: item.suggestedCategoryIcon.slice(0, 8) },
-            catalog, language: input.language,
+            catalog, language: input.language, isPremium: input.isPremium,
           });
         }
       }
@@ -634,6 +646,7 @@ export async function processQuickEntry(input: {
         uid: input.uid, chatId: input.chatId, messageId: input.messageId, index: index + 1,
         operationKey, sourceText: item.rawText, operationType: kind, draft: transfer, reasons,
         amountAlternative: null, suggestion: null, catalog, language: input.language,
+        isPremium: input.isPremium,
       });
       continue;
     }
@@ -673,6 +686,7 @@ export async function processQuickEntry(input: {
           uid: input.uid, chatId: input.chatId, messageId: input.messageId, index: index + 1,
           operationKey, sourceText: item.rawText, operationType: kind, draft: debt, reasons,
           amountAlternative: amount.alternative, suggestion: null, catalog, language: input.language,
+          isPremium: input.isPremium,
         });
       }
       continue;
@@ -720,6 +734,7 @@ export async function processQuickEntry(input: {
         uid: input.uid, chatId: input.chatId, messageId: input.messageId, index: index + 1,
         operationKey, sourceText: item.rawText, operationType: kind, draft: payment, reasons,
         amountAlternative: null, suggestion: null, catalog, language: input.language,
+        isPremium: input.isPremium,
       });
     }
   }
@@ -758,6 +773,11 @@ export async function processQuickEntry(input: {
         ? `Summani tushunmadim: ${fragments}.`
         : input.language === 'en' ? `I could not understand the amount: ${fragments}.` : `Не понял сумму: ${fragments}.`,
     );
+  }
+  if (blockedPremiumDebt) {
+    await sendMessage(input.chatId, t(input.language, 'premium_debt_required'), {
+      reply_markup: premiumKeyboard(input.language),
+    });
   }
   logger.info({ uid: input.uid, updateId: input.updateId, saved: saved.length }, 'telegram.parse.completed');
 }

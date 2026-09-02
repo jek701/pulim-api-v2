@@ -9,7 +9,7 @@ import type { InlineKeyboardButton } from '../client';
 import { resolveUserContext } from '../context';
 import { getOwnedDraft, updateDraft } from '../drafts.repository';
 import { getMessage, saveMessage } from '../messages.repository';
-import { escapeHtml, languageKeyboard } from '../render';
+import { escapeHtml, languageKeyboard, loginKeyboard, premiumKeyboard, welcomeKeyboard } from '../render';
 import { t } from '../i18n';
 import type { DraftReason, ParsedOperationKind, SupportedLanguage } from '../types';
 import { saveSession } from '../sessions.repository';
@@ -331,6 +331,26 @@ export async function handleCallbackQuery(input: {
     }
     const [, action, itemRaw, optionRaw] = parsed;
     const context = await resolveUserContext(input.telegramId, input.chatId);
+    if (action === 'startlang') {
+      if (optionRaw !== 'uz' && optionRaw !== 'ru' && optionRaw !== 'en') {
+        answer = 'Недоступно';
+        return context?.uid ?? null;
+      }
+      responseLanguage = optionRaw;
+      if (context) {
+        await mergeProfile(context.uid, { language: optionRaw });
+        await editMessageText(input.chatId, input.messageId, t(optionRaw, 'welcome'), {
+          reply_markup: welcomeKeyboard(optionRaw),
+        });
+        answer = '';
+        return context.uid;
+      }
+      await editMessageText(input.chatId, input.messageId, t(optionRaw, 'welcome_unlinked'), {
+        reply_markup: loginKeyboard(optionRaw),
+      });
+      answer = '';
+      return null;
+    }
     if (!context) {
       answer = 'Недоступно';
       return null;
@@ -361,10 +381,7 @@ export async function handleCallbackQuery(input: {
       answer = 'Недоступно';
       return null;
     }
-    if (!(await getIsPremium(context.uid))) {
-      answer = 'Требуется Premium';
-      return context.uid;
-    }
+    const isPremium = await getIsPremium(context.uid);
     const itemIndex = Number(itemRaw);
     const item = message.items[itemIndex];
     if (item?.transactionId) {
@@ -586,6 +603,12 @@ export async function handleCallbackQuery(input: {
       delete transaction.subcategoryId;
       reasons = without(reasons, ['NO_CATEGORY_MATCH', 'LOW_CATEGORY_CONFIDENCE']);
     } else if (action === 'newcat') {
+      if (!isPremium) {
+        const text = t(context.language, 'premium_category_required');
+        await sendMessage(input.chatId, text, { reply_markup: premiumKeyboard(context.language) });
+        answer = text;
+        return context.uid;
+      }
       const suggestion = draft.suggestion as { categoryName?: string; categoryIcon?: string } | null;
       if (!suggestion?.categoryName) {
         answer = 'Нет предложенной категории';
@@ -641,6 +664,12 @@ export async function handleCallbackQuery(input: {
         reasons = without(reasons, ['INSUFFICIENT_FUNDS', 'NO_CARD_IN_CURRENCY', 'AMBIGUOUS_CARD_HINT', 'NO_CARDS']);
       }
     } else if (action === 'conf') {
+      if (!isPremium && draftKind(draft) === 'debt') {
+        const text = t(context.language, 'premium_debt_required');
+        await sendMessage(input.chatId, text, { reply_markup: premiumKeyboard(context.language) });
+        answer = text;
+        return context.uid;
+      }
       answer = await confirm(context.uid, input.chatId, input.messageId, draft, context.language);
       return context.uid;
     } else {
@@ -663,6 +692,12 @@ export async function handleCallbackQuery(input: {
     }
     const updated = { ...draft, draft: transaction, reasons };
     if (reasons.length === 0) {
+      if (!isPremium && draftKind(updated) === 'debt') {
+        const text = t(context.language, 'premium_debt_required');
+        await sendMessage(input.chatId, text, { reply_markup: premiumKeyboard(context.language) });
+        answer = text;
+        return context.uid;
+      }
       answer = await confirm(context.uid, input.chatId, input.messageId, updated, context.language);
     } else {
       const keyboard = await remainingKeyboard(reasons, updated, message, context.language);

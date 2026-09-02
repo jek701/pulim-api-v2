@@ -3,6 +3,7 @@ import { validate } from '../middleware/validate';
 import { profilePatchSchema, homeWidgetsSchema } from '../domain/schemas';
 import {
   postBootstrap,
+  postStartTrial,
   getProfileHandler,
   patchProfile,
   patchHomeWidgets,
@@ -12,6 +13,7 @@ import {
 const router = Router();
 
 router.post('/bootstrap', postBootstrap);
+router.post('/trial/start', postStartTrial);
 router.get('/', getProfileHandler);
 router.patch('/', validate(profilePatchSchema), patchProfile);
 router.patch('/home-widgets', validate(homeWidgetsSchema), patchHomeWidgets);

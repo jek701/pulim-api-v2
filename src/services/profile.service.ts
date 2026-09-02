@@ -3,30 +3,39 @@ import type { DecodedToken } from '../config/firebase';
 import { DEFAULT_CATEGORIES, defaultCategoryId } from '../domain/defaultCategories';
 import { deriveAuthMetadata } from '../domain/authMetadata';
 import { profileRef, getProfile } from '../repositories/profile.repository';
-
-const TRIAL_MS = 30 * 86_400_000;
+import { getTrialBlockCode, TRIAL_MS } from '../domain/trial';
+import { AppError } from '../utils/AppError';
 
 /**
- * First-touch trial: any user whose `isPremium` is still undefined gets a 30-day
- * Premium trial. Idempotent — never re-grants once the flag is set.
+ * Starts the user's one-time trial. The transaction makes concurrent requests
+ * safe: after Firestore retries, only the first request can grant access.
  */
-export async function ensureTrial(uid: string): Promise<void> {
+export async function startTrial(uid: string) {
   const ref = profileRef(uid);
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
+    if (!snap.exists) throw AppError.notFound('Profile not found.');
     const data = snap.data();
-    if (data && data.isPremium !== undefined) return;
     const now = Date.now();
-    tx.set(
-      ref,
-      {
-        isPremium: true,
-        subscription: { tier: 'premium', isTrial: true, trialGrantedAt: now, premiumUntil: now + TRIAL_MS },
-        updatedAt: now,
-      },
-      { merge: true },
-    );
+    const blocked = getTrialBlockCode(data, now);
+    if (blocked) {
+      throw new AppError(409, blocked, blocked === 'PREMIUM_ALREADY_ACTIVE'
+        ? 'Premium is already active.'
+        : blocked === 'TRIAL_ALREADY_USED'
+          ? 'The Premium trial has already been used.'
+          : 'This account is not eligible for a Premium trial.');
+    }
+    tx.update(ref, {
+      isPremium: true,
+      'subscription.tier': 'premium',
+      'subscription.isTrial': true,
+      'subscription.trialGrantedAt': now,
+      'subscription.premiumUntil': now + TRIAL_MS,
+      'subscription.source': 'trial',
+      updatedAt: now,
+    });
   });
+  return getProfile(uid);
 }
 
 /** Seed default categories for a user whose categories collection is empty. */
@@ -50,11 +59,10 @@ export async function syncAuthMetadata(uid: string, claims: DecodedToken): Promi
 }
 
 /**
- * Idempotent post-login bootstrap: grant trial, seed categories, sync auth
- * metadata. Safe to call on every login. Returns the resulting profile.
+ * Idempotent post-login bootstrap: seed categories and sync auth metadata.
+ * Trial activation is an explicit user action. Safe to call on every login.
  */
 export async function bootstrap(uid: string, claims: DecodedToken) {
-  await ensureTrial(uid);
   await seedDefaultCategories(uid);
   await syncAuthMetadata(uid, claims);
   return getProfile(uid);

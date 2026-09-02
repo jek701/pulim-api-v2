@@ -3,7 +3,7 @@ import { env } from '../config/env';
 import { verifyTelegramInitData } from './telegramVerify.service';
 import { findTelegramUser, saveTelegramUser } from '../repositories/telegramUser.repository';
 import { profileRef, profileExists } from '../repositories/profile.repository';
-import { ensureTrial, seedDefaultCategories } from './profile.service';
+import { seedDefaultCategories } from './profile.service';
 import { AppError } from '../utils/AppError';
 
 interface TelegramUser {
@@ -18,6 +18,7 @@ interface TelegramUser {
 export interface TelegramAuthInput {
   telegramInitData: string;
   chatId: string;
+  language?: 'uz' | 'ru' | 'en';
   firebaseIdToken?: string;
 }
 
@@ -51,7 +52,7 @@ async function ensureFirebaseAuthUser(uid: string, tgUser: TelegramUser, telegra
 /**
  * Telegram Mini App sign-in / link.
  *  - No `firebaseIdToken`: resolve an existing telegramUsers mapping, or create a
- *    brand-new `tg_<telegramId>` account (+ trial + default categories). Returns a
+ *    brand-new `tg_<telegramId>` account (+ default categories). Returns a
  *    Firebase custom token the client signs in with.
  *  - With `firebaseIdToken` (logged-in email user linking Telegram): verify the
  *    token and link the chat to THAT uid. Does not touch the user's custom claims
@@ -98,7 +99,7 @@ export async function authenticateTelegram(input: TelegramAuthInput) {
           salarySources: [],
           familyMembers: [],
           financialGoals: [],
-          language: 'uz',
+          language: input.language ?? 'uz',
           isTelegramUser: true,
           photoURL: tgUser.photo_url || null,
           createdAt: Date.now(),
@@ -106,7 +107,6 @@ export async function authenticateTelegram(input: TelegramAuthInput) {
         },
         { merge: true },
       );
-      await ensureTrial(uid);
       await seedDefaultCategories(uid);
     }
   }
@@ -116,6 +116,7 @@ export async function authenticateTelegram(input: TelegramAuthInput) {
   await profileRef(uid).set(
     {
       telegramChatIds: FieldValue.arrayUnion(Number(telegramId)),
+      ...(input.language ? { language: input.language } : {}),
       ...(linkedExistingAccount ? {} : { isTelegramUser: true }),
       updatedAt: Date.now(),
     },

@@ -93,10 +93,13 @@ together — a failure leaves nothing partially written.
 
 ### Entitlements
 
-`profile.isPremium` is authoritative. New users get a 30-day Premium trial on first
-bootstrap. Free limits: 1 debit card, 2 subscriptions, 1 AI chat, 10 AI messages /
-30-day window; premium-only features (custom categories, budgets, debts, deposits,
-savings, planned expenses) are gated server-side at mutation time.
+`profile.isPremium` is authoritative. Bootstrap never activates Premium. An eligible
+user explicitly starts the one-time 7-day trial through
+`POST /v1/profile/trial/start`; the server decides eligibility atomically. Existing
+rollout trials keep their original expiry and can never be re-granted. Free limits:
+1 debit card, 2 subscriptions, 1 AI chat, 10 AI messages / 30-day window;
+premium-only features (custom categories, budgets, new debts, deposits, savings,
+planned expenses) are gated server-side at mutation time.
 
 ### AI
 
@@ -110,11 +113,19 @@ Output budgets are configurable with `AI_MAX_OUTPUT_TOKENS_FREE`,
 hidden reasoning tokens. Incomplete responses record their reason, preserve useful
 partial text, and are refunded from the user's quota.
 
-### Telegram Premium quick entry
+### Telegram bot and quick entry
 
 `POST /telegram/webhook` accepts private Bot API updates after validating
-`X-Telegram-Bot-Api-Secret-Token`. Text parsing is Premium-only and uses a separate
-100/day, 10/minute quota. Ordinary transactions are written with
+`X-Telegram-Bot-Api-Secret-Token`. For an unlinked user, `/start` first asks for a
+language; after the choice it shows the localized product welcome and offers a
+one-step Telegram sign-in plus a separate existing-account linking path. The chosen
+language is carried through authentication and stored in the profile. Free users
+can record expenses, income, transfers, and repayments, and can use the shared free
+AI allowance. Creating a new debt or custom category remains Premium-only.
+
+Bot parsing has a separate 10/minute quota and configurable daily quotas: 20 for free
+users and 100 for Premium by default (`TELEGRAM_PARSE_DAILY_LIMIT_FREE` and
+`TELEGRAM_PARSE_DAILY_LIMIT_PREMIUM`). Ordinary transactions are written with
 `origin: "telegram"`; `source` is never set.
 
 Ambiguous operations remain in `telegramDrafts` and therefore never affect balances
@@ -181,6 +192,6 @@ savings) with the single corresponding endpoint.
 - Edit transfers and returns only through their dedicated endpoints. Generic
   `PATCH /transactions/:id` intentionally rejects source-backed operations so it
   cannot update one balance leg without the other or desynchronise `returnedAmount`.
-- Call `POST /v1/profile/bootstrap` once after login instead of client-side trial /
-  default-category / auth-metadata writes.
+- Call `POST /v1/profile/bootstrap` once after login for default categories and auth
+  metadata. Trial activation is a separate explicit `POST /v1/profile/trial/start`.
 - Once writes flow through the API, tighten `firestore.rules` to deny direct client writes.

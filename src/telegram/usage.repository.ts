@@ -8,8 +8,15 @@ function dayKey(now: number): string {
   }).format(new Date(now));
 }
 
-export async function consumeParse(uid: string, operationKey: string): Promise<'minute' | 'day' | null> {
+export async function consumeParse(
+  uid: string,
+  operationKey: string,
+  isPremium: boolean,
+): Promise<'minute' | 'day' | null> {
   const ref = db.collection('telegramUsage').doc(uid);
+  const dailyLimit = isPremium
+    ? env.TELEGRAM_PARSE_DAILY_LIMIT_PREMIUM
+    : env.TELEGRAM_PARSE_DAILY_LIMIT_FREE;
   return db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     const current = snap.data() ?? {};
@@ -23,14 +30,14 @@ export async function consumeParse(uid: string, operationKey: string): Promise<'
     const sameMinute = now - minuteWindowStart < 60_000;
     const minuteCount = sameMinute ? Number(current.minuteCount ?? 0) : 0;
     if (minuteCount >= env.TELEGRAM_PARSE_PER_MINUTE_LIMIT) return 'minute';
-    if (parsedToday >= env.TELEGRAM_PARSE_DAILY_LIMIT) return 'day';
+    if (parsedToday >= dailyLimit) return 'day';
     tx.set(ref, {
       userId: uid,
       day,
       parsedToday: parsedToday + 1,
       minuteWindowStart: sameMinute ? minuteWindowStart : now,
       minuteCount: minuteCount + 1,
-      processedKeys: [...processedKeys, operationKey].slice(-env.TELEGRAM_PARSE_DAILY_LIMIT),
+      processedKeys: [...processedKeys, operationKey].slice(-dailyLimit),
       updatedAt: now,
     }, { merge: true });
     return null;

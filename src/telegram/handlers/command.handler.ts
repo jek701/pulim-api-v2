@@ -1,18 +1,27 @@
-import { getIsPremium } from '../../services/entitlement.service';
 import { sendMessage } from '../client';
 import { resolveUserContext } from '../context';
-import { t } from '../i18n';
-import { languageKeyboard, openAppKeyboard, premiumKeyboard, welcomeKeyboard } from '../render';
+import { languageFromTelegram, t } from '../i18n';
+import { initialLanguageKeyboard, languageKeyboard, loginKeyboard, welcomeKeyboard } from '../render';
 import { clearSession } from '../sessions.repository';
 
 export async function handleCommand(input: {
   command: string;
   chatId: string;
   telegramId: string;
+  languageCode?: string;
 }): Promise<string | null> {
   const context = await resolveUserContext(input.telegramId, input.chatId);
   if (!context) {
-    await sendMessage(input.chatId, t('uz', 'not_linked'), { reply_markup: openAppKeyboard('uz') });
+    const language = languageFromTelegram(input.languageCode);
+    if (input.command === '/start' || input.command === '/help') {
+      await sendMessage(input.chatId, t(language, 'language_prompt_initial'), {
+        reply_markup: initialLanguageKeyboard(),
+      });
+    } else {
+      await sendMessage(input.chatId, t(language, 'not_linked'), {
+        reply_markup: loginKeyboard(language),
+      });
+    }
     return null;
   }
   if (input.command === '/cancel') {
@@ -29,12 +38,6 @@ export async function handleCommand(input: {
   if (input.command === '/language' || input.command === '/lang' || input.command === '/til') {
     await sendMessage(input.chatId, t(context.language, 'language_prompt'), {
       reply_markup: languageKeyboard(),
-    });
-    return context.uid;
-  }
-  if (!(await getIsPremium(context.uid))) {
-    await sendMessage(input.chatId, t(context.language, 'premium_required'), {
-      reply_markup: premiumKeyboard(context.language),
     });
     return context.uid;
   }

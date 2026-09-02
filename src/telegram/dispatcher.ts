@@ -7,7 +7,10 @@ import { handleTextMessage } from './handlers/message.handler';
 import { t } from './i18n';
 import { resolveUserContext } from './context';
 
-const userSchema = z.object({ id: z.union([z.number(), z.string()]) }).passthrough();
+const userSchema = z.object({
+  id: z.union([z.number(), z.string()]),
+  language_code: z.string().optional(),
+}).passthrough();
 const chatSchema = z.object({ id: z.union([z.number(), z.string()]), type: z.string() }).passthrough();
 const messageSchema = z.object({
   message_id: z.number(),
@@ -49,7 +52,7 @@ export async function dispatchUpdate(update: TelegramUpdate): Promise<string | n
   const telegramId = String(message.from.id);
   if (message.text?.startsWith('/')) {
     const command = message.text.split(/\s/, 1)[0]!.split('@', 1)[0]!.toLowerCase();
-    return handleCommand({ command, chatId, telegramId });
+    return handleCommand({ command, chatId, telegramId, languageCode: message.from.language_code });
   }
   if (message.text) {
     return handleTextMessage({
@@ -57,6 +60,7 @@ export async function dispatchUpdate(update: TelegramUpdate): Promise<string | n
       messageId: message.message_id,
       chatId,
       telegramId,
+      languageCode: message.from.language_code,
       text: message.text,
     });
   }

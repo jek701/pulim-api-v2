@@ -7,6 +7,10 @@ export const postBootstrap = asyncHandler(async (req, res) => {
   res.status(200).json(await profileService.bootstrap(req.uid, req.claims));
 });
 
+export const postStartTrial = asyncHandler(async (req, res) => {
+  res.status(200).json(await profileService.startTrial(req.uid));
+});
+
 export const getProfileHandler = asyncHandler(async (req, res) => {
   const profile = await getProfile(req.uid);
   if (!profile) throw AppError.notFound('Profile not found.');

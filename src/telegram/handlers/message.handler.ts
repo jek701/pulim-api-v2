@@ -3,8 +3,8 @@ import { getIsPremium } from '../../services/entitlement.service';
 import { logger } from '../../utils/logger';
 import { deleteMessage, editMessageText, sendMessage } from '../client';
 import { resolveUserContext } from '../context';
-import { t } from '../i18n';
-import { escapeHtml, openAppKeyboard, premiumKeyboard } from '../render';
+import { languageFromTelegram, t } from '../i18n';
+import { escapeHtml, loginKeyboard, openAppKeyboard } from '../render';
 import { consumeParse, refundParse } from '../usage.repository';
 import { formatDraftOperation, loadCatalog, processQuickEntry, TelegramChatError } from '../quickEntry.service';
 import { clearSession, getSession } from '../sessions.repository';
@@ -28,11 +28,13 @@ export async function handleTextMessage(input: {
   messageId: number;
   chatId: string;
   telegramId: string;
+  languageCode?: string;
   text: string;
 }): Promise<string | null> {
   const context = await resolveUserContext(input.telegramId, input.chatId);
   if (!context) {
-    await sendMessage(input.chatId, t('ru', 'not_linked'), { reply_markup: openAppKeyboard('ru') });
+    const language = languageFromTelegram(input.languageCode);
+    await sendMessage(input.chatId, t(language, 'not_linked'), { reply_markup: loginKeyboard(language) });
     return null;
   }
   if (context.profile.telegramQuickEntryEnabled === false) {
@@ -41,13 +43,7 @@ export async function handleTextMessage(input: {
     });
     return context.uid;
   }
-  if (!(await getIsPremium(context.uid))) {
-    logger.info({ uid: context.uid }, 'telegram.premium.blocked');
-    await sendMessage(input.chatId, t(context.language, 'premium_required'), {
-      reply_markup: premiumKeyboard(context.language),
-    });
-    return context.uid;
-  }
+  const isPremium = await getIsPremium(context.uid);
   const session = await getSession(input.chatId);
   if (session && session.userId === context.uid && session.draftId) {
     const draft = await getOwnedDraft(String(session.draftId), context.uid);
@@ -182,7 +178,7 @@ export async function handleTextMessage(input: {
   const parseOperationKey = String(input.updateId);
   let limit: 'minute' | 'day' | null;
   try {
-    limit = await consumeParse(context.uid, parseOperationKey);
+    limit = await consumeParse(context.uid, parseOperationKey, isPremium);
   } catch (error) {
     await loadingMessage?.stop();
     if (loadingMessage) await deleteMessage(input.chatId, loadingMessage.messageId).catch(() => undefined);
@@ -193,7 +189,13 @@ export async function handleTextMessage(input: {
     return context.uid;
   }
   try {
-    await processQuickEntry({ ...input, uid: context.uid, language: context.language, loadingMessage });
+    await processQuickEntry({
+      ...input,
+      uid: context.uid,
+      language: context.language,
+      isPremium,
+      loadingMessage,
+    });
   } catch (error) {
     if (error instanceof TelegramParseError) {
       await refundParse(context.uid, parseOperationKey);
@@ -207,7 +209,7 @@ export async function handleTextMessage(input: {
       return context.uid;
     }
     if (error instanceof AppError && ['AI_FAIR_USE_LIMIT_REACHED', 'AI_LIMIT_REACHED'].includes(error.code)) {
-      await replaceLoading(t(context.language, 'rate_day'));
+      await replaceLoading(t(context.language, 'ai_limit'));
       return context.uid;
     }
     await loadingMessage?.stop();
