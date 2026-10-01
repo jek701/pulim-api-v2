@@ -3,9 +3,12 @@ import { resolveUserContext } from '../context';
 import { languageFromTelegram, t } from '../i18n';
 import { initialLanguageKeyboard, languageKeyboard, loginKeyboard, welcomeKeyboard } from '../render';
 import { clearSession } from '../sessions.repository';
+import { setNotificationsEnabled } from '../../notifications/settings';
+import { saveMessage } from '../messages.repository';
 
 export async function handleCommand(input: {
   command: string;
+  argument?: string;
   chatId: string;
   telegramId: string;
   languageCode?: string;
@@ -27,6 +30,41 @@ export async function handleCommand(input: {
   if (input.command === '/cancel') {
     await clearSession(input.chatId);
     await sendMessage(input.chatId, t(context.language, 'cancelled'));
+    return context.uid;
+  }
+  if (input.command === '/stop') {
+    await setNotificationsEnabled(context.uid, false);
+    const message = await sendMessage(input.chatId, context.language === 'uz'
+      ? '🔕 Pulim eslatmalari o‘chirildi. Ularni ilova sozlamalarida qayta yoqishingiz mumkin.'
+      : context.language === 'en'
+        ? '🔕 Pulim reminders are off. You can enable them again in the app settings.'
+        : '🔕 Напоминания Pulim отключены. Включить их снова можно в настройках приложения.', {
+      reply_markup: { inline_keyboard: [[{
+        text: context.language === 'uz'
+          ? '🔔 Qayta yoqish'
+          : context.language === 'en'
+            ? '🔔 Enable again'
+            : '🔔 Включить обратно',
+        callback_data: 'v1:notifyon:0',
+      }]] },
+    });
+    await saveMessage({
+      userId: context.uid,
+      chatId: input.chatId,
+      messageId: message.message_id,
+      kind: 'notification',
+      items: [],
+      options: null,
+    }).catch(() => undefined);
+    return context.uid;
+  }
+  if (input.command === '/start' && input.argument?.toLowerCase() === 'notify') {
+    await setNotificationsEnabled(context.uid, true);
+    await sendMessage(input.chatId, context.language === 'uz'
+      ? '🔔 Pulim eslatmalari yoqildi. Faqat muhim narsa bo‘lsa yozaman.'
+      : context.language === 'en'
+        ? '🔔 Pulim reminders are on. I will only message when there is something useful to say.'
+        : '🔔 Напоминания Pulim включены. Напишу только когда будет что-то полезное.');
     return context.uid;
   }
   if (input.command === '/start' || input.command === '/help') {

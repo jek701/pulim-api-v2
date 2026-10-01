@@ -44,6 +44,32 @@ const EnvSchema = z.object({
   WEB_APP_URL: z.string().default(''),
   PREMIUM_CHECKOUT_URL: z.string().default(''),
 
+  // Notifications are dark-launched: deploy infrastructure and backfill first,
+  // then enable the worker explicitly in the environment.
+  NOTIFICATIONS_ENABLED: boolish,
+  NOTIFY_EMBEDDED: boolish,
+  NOTIFY_TIMEZONE: z.string().default('Asia/Tashkent'),
+  NOTIFY_DIGEST_HOUR: z.coerce.number().int().min(0).max(23).default(10),
+  NOTIFY_PLANNER_INTERVAL_MS: z.coerce.number().int().min(5_000).default(900_000),
+  NOTIFY_DELIVERY_INTERVAL_MS: z.coerce.number().int().min(1_000).default(5_000),
+  NOTIFY_PLANNER_BATCH: z.coerce.number().int().positive().max(500).default(200),
+  NOTIFY_DELIVERY_BATCH: z.coerce.number().int().positive().max(100).default(50),
+  NOTIFY_QUIET_START_HOUR: z.coerce.number().int().min(0).max(23).default(22),
+  NOTIFY_QUIET_END_HOUR: z.coerce.number().int().min(0).max(23).default(8),
+  NOTIFY_SAFETY_MAX_PER_USER_PER_DAY: z.coerce.number().int().positive().default(6),
+  NOTIFY_STALE_AFTER_MS: z.coerce.number().int().positive().default(21_600_000),
+  NOTIFY_MAX_ATTEMPTS: z.coerce.number().int().positive().default(8),
+  NOTIFY_SEND_RATE_PER_SEC: z.coerce.number().int().positive().max(29).default(25),
+  NOTIFY_LEASE_MS: z.coerce.number().int().min(10_000).default(120_000),
+  NOTIFY_BUDGET_DEBOUNCE_MS: z.coerce.number().int().min(1_000).default(300_000),
+  NOTIFY_TRIAL_AVAILABLE_DAYS: z.coerce.number().int().nonnegative().default(3),
+  NOTIFY_TRIAL_AVAILABLE_REPEAT_DAYS: z.coerce.number().int().positive().default(21),
+  NOTIFY_NO_CARDS_DAYS: z.coerce.number().int().nonnegative().default(2),
+  NOTIFY_AI_ENABLED: boolish,
+  NOTIFY_AI_MODEL: z.string().default('gpt-5.4-mini'),
+  NOTIFY_AI_MAX_OUTPUT_TOKENS: z.coerce.number().int().positive().max(10_000).default(1_200),
+  NOTIFY_AI_TIMEOUT_MS: z.coerce.number().int().positive().max(60_000).default(20_000),
+
   OPENAI_API_KEY: z.string().optional(),
   AI_MODEL_FREE: z.string().default('gpt-5.4-mini'),
   AI_MODEL_PREMIUM: z.string().default('gpt-5.6-terra'),
@@ -84,6 +110,43 @@ const EnvSchema = z.object({
       message: 'Must be false in production — it would leak SMS codes over the API.',
     });
   }
+  if (value.NOTIFY_QUIET_START_HOUR <= value.NOTIFY_QUIET_END_HOUR) {
+    context.addIssue({
+      code: 'custom',
+      path: ['NOTIFY_QUIET_START_HOUR'],
+      message: 'Must be after NOTIFY_QUIET_END_HOUR for the configured overnight quiet window.',
+    });
+  }
+  if (value.NOTIFY_DIGEST_HOUR < value.NOTIFY_QUIET_END_HOUR
+    || value.NOTIFY_DIGEST_HOUR >= value.NOTIFY_QUIET_START_HOUR) {
+    context.addIssue({
+      code: 'custom',
+      path: ['NOTIFY_DIGEST_HOUR'],
+      message: 'Must be outside notification quiet hours.',
+    });
+  }
+  try {
+    new Intl.DateTimeFormat('en', { timeZone: value.NOTIFY_TIMEZONE }).format();
+  } catch {
+    context.addIssue({ code: 'custom', path: ['NOTIFY_TIMEZONE'], message: 'Must be a valid IANA timezone.' });
+  }
+  if (value.NOTIFICATIONS_ENABLED) {
+    if (!/^[A-Za-z0-9_]{5,32}$/.test(value.TELEGRAM_BOT_USERNAME)) {
+      context.addIssue({ code: 'custom', path: ['TELEGRAM_BOT_USERNAME'], message: 'A valid username without @ is required when notifications are enabled.' });
+    }
+    try {
+      new URL(value.WEB_APP_URL);
+    } catch {
+      context.addIssue({ code: 'custom', path: ['WEB_APP_URL'], message: 'A valid URL is required when notifications are enabled.' });
+    }
+  }
+  if (value.PREMIUM_CHECKOUT_URL) {
+    try {
+      new URL(value.PREMIUM_CHECKOUT_URL);
+    } catch {
+      context.addIssue({ code: 'custom', path: ['PREMIUM_CHECKOUT_URL'], message: 'Must be a valid URL.' });
+    }
+  }
   if (!value.TELEGRAM_QUICK_ENTRY_ENABLED) return;
   try {
     const webhookUrl = new URL(value.TELEGRAM_WEBHOOK_URL);
@@ -105,13 +168,6 @@ const EnvSchema = z.object({
     new URL(value.WEB_APP_URL);
   } catch {
     context.addIssue({ code: 'custom', path: ['WEB_APP_URL'], message: 'A valid URL is required when Telegram quick entry is enabled.' });
-  }
-  if (value.PREMIUM_CHECKOUT_URL) {
-    try {
-      new URL(value.PREMIUM_CHECKOUT_URL);
-    } catch {
-      context.addIssue({ code: 'custom', path: ['PREMIUM_CHECKOUT_URL'], message: 'Must be a valid URL.' });
-    }
   }
   try {
     new Intl.DateTimeFormat('en', { timeZone: value.TELEGRAM_DEFAULT_TIMEZONE }).format();

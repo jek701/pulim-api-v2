@@ -59,7 +59,7 @@ export interface AiTokenUsage {
   totalTokens: number;
 }
 
-type UsageFeature = 'chat' | 'forecast' | 'telegram_parse';
+type UsageFeature = 'chat' | 'forecast' | 'telegram_parse' | 'weekly_report' | 'monthly_report';
 
 const MODEL_PRICING_PER_MILLION: Record<
   string,

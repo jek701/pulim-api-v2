@@ -5,6 +5,7 @@ import { logger } from './utils/logger';
 import { setMyCommands, setWebhook } from './telegram/client';
 import { startFxQueue } from './telegram/fxQueue.service';
 import { recoverTelegramUpdates } from './routes/telegramWebhook.routes';
+import { startNotificationLoops } from './notifications/loops';
 
 const app = createApp();
 
@@ -21,13 +22,20 @@ const fxQueueTimer = startFxQueue();
 const telegramRecoveryTimer = setInterval(() => void recoverTelegramUpdates(), 30_000);
 telegramRecoveryTimer.unref();
 void recoverTelegramUpdates();
+const notificationLoops = env.NOTIFICATIONS_ENABLED && env.NOTIFY_EMBEDDED
+  ? startNotificationLoops({ unref: true })
+  : null;
+let stopping = false;
 
-function shutdown(signal: string) {
+async function shutdown(signal: string) {
+  if (stopping) return;
+  stopping = true;
   logger.info(`${signal} received — shutting down`);
   clearInterval(fxQueueTimer);
   clearInterval(telegramRecoveryTimer);
+  await notificationLoops?.stop();
   server.close(() => process.exit(0));
 }
 
-process.on('SIGINT', () => shutdown('SIGINT'));
-process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => void shutdown('SIGINT'));
+process.on('SIGTERM', () => void shutdown('SIGTERM'));

@@ -69,8 +69,11 @@ export const profilePatchSchema = z
     telegramLinkPromptDismissed: z.boolean().optional(),
     language: z.enum(['en', 'ru', 'uz']).optional(),
     telegramQuickEntryEnabled: z.boolean().optional(),
+    notificationsPromptDismissed: z.boolean().optional(),
   })
   .strip();
+
+export const notificationSettingsPatchSchema = z.object({ enabled: z.boolean() }).strip();
 
 export const homeWidgetsSchema = z.object({ homeWidgets: z.array(homeWidgetSchema) });
 

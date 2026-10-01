@@ -10,7 +10,22 @@ export interface InlineKeyboardButton {
 interface TelegramResponse<T> {
   ok: boolean;
   result?: T;
+  error_code?: number;
   description?: string;
+  parameters?: { retry_after?: number };
+}
+
+export class TelegramApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly errorCode: number | null,
+    readonly description: string,
+    readonly retryAfter: number | null,
+  ) {
+    super(message);
+    this.name = 'TelegramApiError';
+  }
 }
 
 export interface TelegramMessage {
@@ -32,7 +47,14 @@ async function callTelegram<T>(
   });
   const payload = await response.json() as TelegramResponse<T>;
   if (!response.ok || !payload.ok || payload.result === undefined) {
-    throw new Error(`Telegram ${method} failed: ${payload.description ?? response.status}`);
+    const description = payload.description ?? `HTTP ${response.status}`;
+    throw new TelegramApiError(
+      `Telegram ${method} failed: ${description}`,
+      response.status,
+      payload.error_code ?? null,
+      description,
+      payload.parameters?.retry_after ?? null,
+    );
   }
   return payload.result;
 }
@@ -105,6 +127,7 @@ export function setMyCommands(): Promise<boolean> {
       { command: 'help', description: 'Show examples' },
       { command: 'language', description: 'Change reply language' },
       { command: 'cancel', description: 'Cancel editing' },
+      { command: 'stop', description: 'Disable Pulim reminders' },
     ],
   });
 }

@@ -17,7 +17,9 @@ cp .env.example .env   # then fill in the values
 npm run dev            # tsx watch on http://localhost:3000
 ```
 
-Scripts: `dev` (watch), `build` (tsc → dist), `start` (run dist), `typecheck`, `lint`, `format`.
+Scripts: `dev` (watch), `build` (tsc → dist), `start` (run API), `worker`
+(run the notification worker), `dev:worker`, `backfill:notifications`, `typecheck`,
+`lint`, `format`.
 
 ### Environment
 
@@ -44,6 +46,7 @@ src/
   repositories/ base (generic userId-scoped CRUD) + firestore helpers
   domain/      types, schemas (zod), entitlements, balance/deposit/debt/billing math, recurrence
   prompts/     chat system prompt + financial-context builder
+  notifications/ durable queue, planner, delivery, collectors, rendering, schedule
 ```
 
 Auth: every `/v1/*` route runs `authenticate` (verifies the Bearer ID token →
@@ -69,7 +72,7 @@ All below require `Authorization: Bearer <firebaseIdToken>` and are under `/v1`:
 
 | Resource | Routes |
 |---|---|
-| profile | `POST /profile/bootstrap`, `GET/PATCH /profile`, `PATCH /profile/home-widgets`, `POST /profile/telegram-link-dismissed` |
+| profile | `POST /profile/bootstrap`, `GET/PATCH /profile`, `PATCH /profile/home-widgets`, `PATCH /profile/notifications`, `POST /profile/telegram-link-dismissed` |
 | settings | `GET/PATCH /settings` |
 | categories | `GET /categories`, `POST` (premium), `DELETE /:id` |
 | subcategories | `GET`, `POST`, `DELETE /:id` |
@@ -147,6 +150,51 @@ startup registration is safe and does not discard pending updates.
 
 Telegram Stars are intentionally not enabled; Premium checkout continues through
 ATMOS only.
+
+### Proactive Telegram notifications
+
+Notifications use a durable Firestore queue and a separate single-instance worker.
+At 10:00 `Asia/Tashkent`, the planner builds at most one daily message per user from
+lifecycle events, subscriptions, debts, credit cards, deposits, goals, and the weekly
+or monthly report. Empty digests are not queued. Budget thresholds and trial-start
+messages are event-driven; quiet hours are 22:00–08:00. `/stop`, the inline disable
+button, and `PATCH /v1/profile/notifications` all stop delivery and cancel pending jobs.
+
+The user-facing setting accepts only:
+
+```http
+PATCH /v1/profile/notifications
+Content-Type: application/json
+
+{ "enabled": true }
+```
+
+All Telegram reachability, schedule, and rate-safety fields remain server-owned.
+Delivery handles Telegram `403`/`429`, exponential retry, stale jobs, per-job leases,
+one-message-per-chat throttling, and a hard per-user daily reservation. Production
+must run exactly one `pulim-worker`; job claims prevent duplicate delivery if an old
+process overlaps during a restart, but the global 25 messages/second limiter is local
+to that worker process.
+
+#### First deployment / test Firebase
+
+Keep `NOTIFICATIONS_ENABLED=false` during the first deployment.
+
+1. Deploy the indexes in `firestore.indexes.json` to the selected Firebase project
+   (the included `firebase.json` points to it) and wait until all indexes are ready.
+2. In Firestore, enable TTL on `expiresAt` for `notifications` and
+   `notificationTasks`. Existing Telegram TTL policies stay enabled.
+3. Run `npm run backfill:notifications -- --reschedule` with credentials for that
+   project. The script is idempotent and preserves disabled users.
+4. Start the API and worker through `pm2 start ecosystem.config.cjs`.
+5. Set `NOTIFICATIONS_ENABLED=true` in the environment shortly before the 10:00
+   slot and restart both processes with their updated environment.
+
+Use a separate Firebase project and the test bot for integration acceptance before
+production. Verify one daily dedupe key, simultaneous lease claims, quiet-hour
+deferral, `429 retry_after`, blocked/unreachable transitions, callback ownership,
+and idempotent subscription/debt payments. Do not enable production delivery until
+the queue and lease indexes report ready.
 
 ### Phone sign-in over Eskiz
 

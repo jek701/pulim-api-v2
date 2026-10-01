@@ -3,6 +3,7 @@ import { getProfile } from '../repositories/profile.repository';
 import { findTelegramUser } from '../repositories/telegramUser.repository';
 import { normalizeLanguage } from './i18n';
 import type { SupportedLanguage } from './types';
+import { markTelegramReachable } from '../notifications/settings';
 
 export interface TelegramUserContext {
   uid: string;
@@ -19,6 +20,7 @@ export async function resolveUserContext(
   if (typeof uid !== 'string' || !uid) return null;
   const profile = await getProfile(uid);
   if (!profile) return null;
+  await markTelegramReachable(uid, chatId);
   return {
     uid,
     profile,

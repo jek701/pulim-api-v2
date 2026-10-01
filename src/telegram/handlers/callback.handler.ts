@@ -19,6 +19,8 @@ import { mergeProfile } from '../../repositories/profile.repository';
 import {
   formatDate, formatDraftOperation, formatSavedDebt, formatSavedDebtPayment, formatSavedTransaction, formatSavedTransfer, reasonText,
 } from '../quickEntry.service';
+import { handleNotificationAction, isNotificationAction } from './actions.handler';
+import { logger } from '../../utils/logger';
 
 const localized = (language: SupportedLanguage, ru: string, uz: string, en: string) =>
   language === 'uz' ? uz : language === 'en' ? en : ru;
@@ -380,6 +382,19 @@ export async function handleCallbackQuery(input: {
     if (!message || message.userId !== context.uid) {
       answer = 'Недоступно';
       return null;
+    }
+    if (isNotificationAction(action)) {
+      answer = await handleNotificationAction({
+        action,
+        itemIndex: Number(itemRaw),
+        optionIndex: optionRaw === undefined ? undefined : Number(optionRaw),
+        chatId: input.chatId,
+        messageId: input.messageId,
+        context,
+        message,
+      });
+      logger.info({ uid: context.uid, action, result: answer || 'updated' }, 'notify.action');
+      return context.uid;
     }
     const isPremium = await getIsPremium(context.uid);
     const itemIndex = Number(itemRaw);

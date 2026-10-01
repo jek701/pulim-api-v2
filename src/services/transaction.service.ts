@@ -10,8 +10,14 @@ import {
   tryReadOwned,
   type OwnedDoc,
 } from '../repositories/firestore.helpers';
+import { scheduleBudgetCheck } from '../notifications/queue.repository';
+import { logger } from '../utils/logger';
 
 type Row = Record<string, any>;
+
+function queueBudgetCheck(uid: string): void {
+  void scheduleBudgetCheck(uid).catch((error) => logger.warn({ err: error, uid }, 'notify.budget_schedule.failed'));
+}
 
 export function telegramOperationMarkerRef(uid: string, operationKey: string) {
   return db.collection('telegramOperations').doc(
@@ -43,7 +49,7 @@ export async function createTelegramTransactionOnce(
   const transactionRef = telegramTransactionRef(`${uid}:${operationKey}`);
   const draftRef = draftId ? db.collection('telegramDrafts').doc(draftId) : null;
 
-  return db.runTransaction(async (tx) => {
+  const result = await db.runTransaction(async (tx) => {
     const marker = await tx.get(markerRef);
     if (marker.exists) {
       const existing = await tx.get(transactionRef);
@@ -105,11 +111,13 @@ export async function createTelegramTransactionOnce(
     });
     return { transaction: { id: transactionRef.id, ...doc }, created: true };
   });
+  queueBudgetCheck(uid);
+  return result;
 }
 
 /** Create a transaction and, if it references a card, adjust that card's balance atomically. */
 export async function createTransaction(uid: string, input: Row): Promise<Row> {
-  return db.runTransaction(async (tx) => {
+  const result = await db.runTransaction(async (tx) => {
     const card = input.cardId
       ? await readOwned(tx, cardsCol().doc(input.cardId), uid, 'Card not found.')
       : null;
@@ -124,11 +132,13 @@ export async function createTransaction(uid: string, input: Row): Promise<Row> {
     }
     return { id: ref.id, ...doc };
   });
+  queueBudgetCheck(uid);
+  return result;
 }
 
 /** Edit a transaction: atomically revert the old balance impact and apply the new one. */
 export async function updateTransaction(uid: string, id: string, patch: Row): Promise<Row> {
-  return db.runTransaction(async (tx) => {
+  const result = await db.runTransaction(async (tx) => {
     const original = await readOwned(tx, txnsCol().doc(id), uid, 'Transaction not found.');
     const old = original.data;
     if (old.source) {
@@ -204,6 +214,8 @@ export async function updateTransaction(uid: string, id: string, patch: Row): Pr
     }
     return { id, ...merged };
   });
+  queueBudgetCheck(uid);
+  return result;
 }
 
 type TransferUpdateInput = {
@@ -323,7 +335,7 @@ export async function updateReturn(
   id: string,
   input: ReturnUpdateInput,
 ): Promise<Row> {
-  return db.runTransaction(async (tx) => {
+  const result = await db.runTransaction(async (tx) => {
     const refund = await readOwned(tx, txnsCol().doc(id), uid, 'Return not found.');
     const old = refund.data;
     if (old.source !== 'return' || !old.linkedTransactionId) {
@@ -396,6 +408,8 @@ export async function updateReturn(
     tx.set(refund.ref, doc);
     return { id, ...doc };
   });
+  queueBudgetCheck(uid);
+  return result;
 }
 
 /**
@@ -482,6 +496,7 @@ export async function deleteTransaction(uid: string, id: string): Promise<void> 
 
     tx.delete(ref);
   });
+  queueBudgetCheck(uid);
 }
 
 /**
@@ -638,7 +653,7 @@ export async function returnTransaction(
   originalId: string,
   input: { returnAmount: number; accountId?: string; date?: number; comment?: string },
 ): Promise<Row> {
-  return db.runTransaction(async (tx) => {
+  const result = await db.runTransaction(async (tx) => {
     const original = await readOwned(tx, txnsCol().doc(originalId), uid, 'Original transaction not found.');
     const o = original.data;
     if (o.type !== 'expense' || (o.source && o.source !== 'subscription')) {
@@ -682,4 +697,6 @@ export async function returnTransaction(
     }
     return { id: ref.id, ...doc };
   });
+  queueBudgetCheck(uid);
+  return result;
 }

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { env } from '../../src/config/env';
-import { sendMessageDraft, setWebhook } from '../../src/telegram/client';
+import { sendMessage, sendMessageDraft, setWebhook, TelegramApiError } from '../../src/telegram/client';
 
 describe('setWebhook', () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -45,5 +45,22 @@ describe('sendMessageDraft', () => {
       text: '<b>Partial</b>',
       parse_mode: 'HTML',
     });
+  });
+});
+
+describe('TelegramApiError', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('preserves status, Telegram error code, description, and retry_after', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 429,
+      json: () => Promise.resolve({
+        ok: false, error_code: 429, description: 'Too Many Requests', parameters: { retry_after: 7 },
+      }),
+    }));
+    const error = await sendMessage('42', 'hello').catch((reason) => reason);
+    expect(error).toBeInstanceOf(TelegramApiError);
+    expect(error).toMatchObject({ status: 429, errorCode: 429, retryAfter: 7, description: 'Too Many Requests' });
   });
 });

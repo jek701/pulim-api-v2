@@ -51,8 +51,15 @@ export async function dispatchUpdate(update: TelegramUpdate): Promise<string | n
   const chatId = String(message.chat.id);
   const telegramId = String(message.from.id);
   if (message.text?.startsWith('/')) {
-    const command = message.text.split(/\s/, 1)[0]!.split('@', 1)[0]!.toLowerCase();
-    return handleCommand({ command, chatId, telegramId, languageCode: message.from.language_code });
+    const [rawCommand = '', ...parts] = message.text.trim().split(/\s+/);
+    const command = rawCommand.split('@', 1)[0]!.toLowerCase();
+    return handleCommand({
+      command,
+      argument: parts.join(' ').trim(),
+      chatId,
+      telegramId,
+      languageCode: message.from.language_code,
+    });
   }
   if (message.text) {
     return handleTextMessage({

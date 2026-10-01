@@ -7,11 +7,14 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
+    "worker": "node dist/worker.js",
+    "dev:worker": "tsx watch src/worker.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
     "format": "prettier --write .",
-    "migrate:firestore": "tsx scripts/migrate-firestore.ts"
+    "migrate:firestore": "tsx scripts/migrate-firestore.ts",
+    "backfill:notifications": "tsx scripts/backfill-notification-settings.ts"
   },
   "keywords": [
     "budget",

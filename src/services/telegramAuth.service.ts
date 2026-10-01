@@ -5,6 +5,7 @@ import { findTelegramUser, saveTelegramUser } from '../repositories/telegramUser
 import { profileRef, profileExists } from '../repositories/profile.repository';
 import { seedDefaultCategories } from './profile.service';
 import { AppError } from '../utils/AppError';
+import { ensureNotificationDefaults, markTelegramReachable } from '../notifications/settings';
 
 interface TelegramUser {
   id: number | string;
@@ -122,6 +123,8 @@ export async function authenticateTelegram(input: TelegramAuthInput) {
     },
     { merge: true },
   );
+  await ensureNotificationDefaults(uid);
+  await markTelegramReachable(uid, input.chatId);
 
   let customToken: string | undefined;
   if (!linkedExistingAccount) {

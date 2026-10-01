@@ -72,6 +72,25 @@ export interface AiForecast {
   generatedAt: number;
 }
 
+export type TelegramNotificationStatus = 'unknown' | 'reachable' | 'unreachable' | 'blocked';
+
+export interface NotificationSettings {
+  enabled: boolean;
+  telegram: {
+    chatId: string | null;
+    status: TelegramNotificationStatus;
+    lastError: string | null;
+    checkedAt: number;
+  };
+  nextDailyAt: number;
+  introSentAt: number | null;
+  sentDay: string;
+  sentCount: number;
+  reservedDay?: string;
+  reservedCount?: number;
+  lastSentAt: number | null;
+}
+
 export interface UserProfile {
   name?: string;
   salarySources: SalarySource[];
@@ -95,6 +114,9 @@ export interface UserProfile {
   isPremium?: boolean;
   subscription?: SubscriptionState;
   usage?: UsageState;
+  createdAt?: number;
+  notifications?: NotificationSettings;
+  notificationsPromptDismissed?: boolean;
   updatedAt: number;
 }
 

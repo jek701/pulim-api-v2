@@ -5,6 +5,8 @@ import { deriveAuthMetadata } from '../domain/authMetadata';
 import { profileRef, getProfile } from '../repositories/profile.repository';
 import { getTrialBlockCode, TRIAL_MS } from '../domain/trial';
 import { AppError } from '../utils/AppError';
+import { ensureNotificationDefaults } from '../notifications/settings';
+import { queueTrialStarted } from '../notifications/queue.repository';
 
 /**
  * Starts the user's one-time trial. The transaction makes concurrent requests
@@ -35,6 +37,7 @@ export async function startTrial(uid: string) {
       updatedAt: now,
     });
   });
+  void queueTrialStarted(uid).catch(() => undefined);
   return getProfile(uid);
 }
 
@@ -65,5 +68,6 @@ export async function syncAuthMetadata(uid: string, claims: DecodedToken): Promi
 export async function bootstrap(uid: string, claims: DecodedToken) {
   await seedDefaultCategories(uid);
   await syncAuthMetadata(uid, claims);
+  await ensureNotificationDefaults(uid);
   return getProfile(uid);
 }
