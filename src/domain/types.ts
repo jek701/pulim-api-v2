@@ -230,6 +230,7 @@ export interface Card {
   includeInTotalBalance?: boolean;
   limit?: number;
   dueDay?: number;
+  color?: string;
   userId: string;
   createdAt: number;
 }

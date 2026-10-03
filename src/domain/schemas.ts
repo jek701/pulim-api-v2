@@ -108,6 +108,8 @@ export const cardCreateSchema = z.object({
   includeInTotalBalance: z.boolean().optional(),
   limit: positive.optional(),
   dueDay: dayOfMonth.optional(),
+  /** Palette key for the card's gradient in the UI (e.g. 'violet'); unset = auto by bank. */
+  color: z.string().regex(/^[a-z]{2,16}$/).optional(),
 });
 export const cardUpdateSchema = cardCreateSchema.partial();
 
