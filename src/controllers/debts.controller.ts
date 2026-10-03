@@ -1,5 +1,6 @@
 import { asyncHandler } from '../utils/asyncHandler';
 import { userScopedRepo } from '../repositories/base.repository';
+import { FieldValue } from '../config/firebase';
 import * as debtService from '../services/debt.service';
 
 const repo = userScopedRepo('debts');
@@ -13,7 +14,11 @@ export const createDebt = asyncHandler(async (req, res) => {
 });
 
 export const updateDebt = asyncHandler(async (req, res) => {
-  res.json(await repo.update(req.uid, String(req.params.id), req.body));
+  // A null field (e.g. a cleared due date) is removed rather than stored as null.
+  const patch = Object.fromEntries(
+    Object.entries(req.body as Record<string, unknown>).map(([k, v]) => [k, v === null ? FieldValue.delete() : v]),
+  );
+  res.json(await repo.update(req.uid, String(req.params.id), patch));
 });
 
 export const deleteDebt = asyncHandler(async (req, res) => {

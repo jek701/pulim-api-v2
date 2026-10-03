@@ -252,6 +252,7 @@ export interface SavingsGoal {
   savedAmount: number;
   currency: Currency;
   deadline: number;
+  color?: string;
   userId: string;
   createdAt: number;
 }

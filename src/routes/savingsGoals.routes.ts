@@ -4,7 +4,7 @@ import { crudControllers } from '../controllers/crud';
 import { validate } from '../middleware/validate';
 import { requirePremium } from '../middleware/requirePremium';
 import { asyncHandler } from '../utils/asyncHandler';
-import { savingsGoalCreateSchema, contributeSchema } from '../domain/schemas';
+import { savingsGoalCreateSchema, savingsGoalUpdateSchema, contributeSchema } from '../domain/schemas';
 import { contribute } from '../services/savings.service';
 
 const router = Router();
@@ -22,6 +22,7 @@ router.post(
     res.json(await contribute(req.uid, String(req.params.id), req.body.amount, req.body.accountId));
   }),
 );
+router.patch('/:id', validate(savingsGoalUpdateSchema), goals.update);
 router.delete('/:id', goals.remove);
 
 export const savingsGoalsRouter = router;

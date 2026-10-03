@@ -120,13 +120,22 @@ export const budgetSetSchema = z.object({
 });
 
 // --- Savings goals ---
+const colorKey = z.string().regex(/^[a-z]{2,16}$/);
+
 export const savingsGoalCreateSchema = z.object({
   name: z.string().min(1),
   icon: z.string(),
   targetAmount: positive,
   currency: currencySchema,
   deadline: z.number(),
+  /** Palette key for the goal's gradient in the UI; unset = auto by name. */
+  color: colorKey.optional(),
 });
+/** savedAmount and currency are deliberately absent: they only move via contributions. */
+export const savingsGoalUpdateSchema = savingsGoalCreateSchema
+  .pick({ name: true, icon: true, deadline: true, color: true })
+  .extend({ targetAmount: z.number().finite().positive() })
+  .partial();
 
 // --- Subscriptions ---
 export const subscriptionCreateSchema = z.object({
@@ -229,7 +238,8 @@ export const debtUpdateSchema = z
     isPaid: z.boolean().optional(),
     person: z.string().optional(),
     comment: z.string().optional(),
-    dueDate: z.number().optional(),
+    /** null removes the due date. */
+    dueDate: z.number().nullable().optional(),
   })
   .strip();
 export const payDebtSchema = z.object({ amount: positive, accountId: z.string().optional() });
