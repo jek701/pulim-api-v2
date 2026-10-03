@@ -7,3 +7,4 @@ dist
 *.log
 serviceAccountKey.json
 oldServiceAccountKey.json
+.DS_Store
