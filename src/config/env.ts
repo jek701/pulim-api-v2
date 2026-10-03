@@ -82,6 +82,9 @@ const EnvSchema = z.object({
   AI_MAX_OUTPUT_TOKENS_FORECAST: z.coerce.number().int().positive().max(25_000).default(3_000),
   AI_PREMIUM_MESSAGES_PER_PERIOD: z.coerce.number().int().positive().default(500),
 
+  /** Comma-separated Firebase uids allowed to file dev notes (owner-only feedback tool). */
+  DEV_NOTES_UIDS: z.string().default(''),
+
   PULIM_PAYMENT_INTERNAL_SECRET: z.string().min(32).optional(),
 
   // ── Eskiz SMS gateway (phone sign-in) ──────────────────────────────────────
@@ -191,6 +194,10 @@ export const env = parsed.data;
 export const corsOrigins = env.CORS_ORIGINS.split(',')
   .map((s) => s.trim())
   .filter(Boolean);
+
+export const devNotesUids = new Set(
+  env.DEV_NOTES_UIDS.split(',').map((s) => s.trim()).filter(Boolean),
+);
 
 export const isProd = env.NODE_ENV === 'production';
 

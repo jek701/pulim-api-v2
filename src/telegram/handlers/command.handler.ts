@@ -5,10 +5,14 @@ import { initialLanguageKeyboard, languageKeyboard, loginKeyboard, welcomeKeyboa
 import { clearSession } from '../sessions.repository';
 import { setNotificationsEnabled } from '../../notifications/settings';
 import { saveMessage } from '../messages.repository';
+import { devNotesUids } from '../../config/env';
+import { createDevNote } from '../../devNotes/devNotes.repository';
 
 export async function handleCommand(input: {
   command: string;
   argument?: string;
+  /** Text after the command with line breaks intact (`argument` collapses whitespace). */
+  rawArgument?: string;
   chatId: string;
   telegramId: string;
   languageCode?: string;
@@ -26,6 +30,17 @@ export async function handleCommand(input: {
       });
     }
     return null;
+  }
+  // Owner-only: everyone else falls through to the default welcome below.
+  if (input.command === '/idea' && devNotesUids.has(context.uid)) {
+    const comment = (input.rawArgument ?? '').slice(0, 4_000);
+    if (!comment) {
+      await sendMessage(input.chatId, '💡 Напиши идею после команды: /idea текст');
+      return context.uid;
+    }
+    const note = await createDevNote({ uid: context.uid, source: 'telegram', comment });
+    await sendMessage(input.chatId, `💡 Идея сохранена (#${note.id.slice(0, 6)}). Возьму в работу при следующей обработке.`);
+    return context.uid;
   }
   if (input.command === '/cancel') {
     await clearSession(input.chatId);

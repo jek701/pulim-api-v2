@@ -228,6 +228,15 @@ sessions carry no `phone_number` claim, so the verified number travels in our ow
 For local work without SMS, set `PHONE_AUTH_DEBUG_ECHO_CODE=true` — the code comes
 back in the response and nothing is sent (startup refuses this in production).
 
+## Dev notes (owner-only feedback queue)
+
+The owner files improvement notes from the app (lightbulb button: tap an element, a screenshot is attached) or from the bot with `/idea <text>`. Claude picks them up, ships the change and replies on the note.
+
+- Access: `DEV_NOTES_UIDS` (comma-separated uids). Everyone else gets `{ enabled: false }` from `GET /v1/dev-notes/access` and 404 from the other routes, and `/idea` falls through to the normal welcome.
+- Routes (`/v1/dev-notes`): `GET /access`, `GET /`, `POST /`, `GET /:id/screenshot`, `POST /:id/replies` (reopens the note), `DELETE /:id`.
+- Storage: `devNotes` plus `devNoteScreenshots` (kept separate so listing stays light).
+- Processing CLI, run on the server: `node dist/cli/devNotes.js pending|show|screenshot|claim|release|resolve|find-uid`. See the header of `src/cli/devNotes.ts`.
+
 ## Frontend integration notes
 
 - Point `VITE_TELEGRAM_AUTH_API_URL` at `<host>/auth/telegram`.

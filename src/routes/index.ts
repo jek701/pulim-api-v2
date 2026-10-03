@@ -21,6 +21,7 @@ import { aiChatsRouter } from './aiChats.routes';
 import { billingInternalRouter } from './billingInternal.routes';
 import { telegramWebhookRouter } from './telegramWebhook.routes';
 import { notificationSettingsRouter } from './notificationSettings.routes';
+import { devNotesRouter } from './devNotes.routes';
 
 /** Mounts every router. Public routes first, then the authenticated `/v1` tree. */
 export function mountRoutes(app: Express): void {
@@ -48,6 +49,7 @@ export function mountRoutes(app: Express): void {
   v1.use('/deposits', depositsRouter);
   v1.use('/ai-chats', aiChatsRouter);
   v1.use('/ai', aiLimiter, aiRouter);
+  v1.use('/dev-notes', devNotesRouter);
 
   app.use('/v1', v1);
 }
