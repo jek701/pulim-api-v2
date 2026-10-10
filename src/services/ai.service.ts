@@ -59,7 +59,7 @@ export interface AiTokenUsage {
   totalTokens: number;
 }
 
-type UsageFeature = 'chat' | 'forecast' | 'telegram_parse' | 'weekly_report' | 'monthly_report';
+type UsageFeature = 'chat' | 'forecast' | 'telegram_parse' | 'telegram_voice' | 'weekly_report' | 'monthly_report';
 
 const MODEL_PRICING_PER_MILLION: Record<
   string,
@@ -71,6 +71,8 @@ const MODEL_PRICING_PER_MILLION: Record<
   'gpt-5.6-luna': { input: 1, cachedInput: 0.1, cacheWrite: 1.25, output: 6 },
   'gpt-5.6-sol': { input: 5, cachedInput: 0.5, cacheWrite: 6.25, output: 30 },
   'gpt-5.6': { input: 5, cachedInput: 0.5, cacheWrite: 6.25, output: 30 },
+  // Audio input tokens dominate transcription cost; text prompt tokens are priced the same here.
+  'gpt-4o-mini-transcribe': { input: 3, cachedInput: 3, cacheWrite: 3, output: 5 },
 };
 
 export function normalizeUsage(usage?: ResponseUsage | null): AiTokenUsage | null {

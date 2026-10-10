@@ -64,3 +64,27 @@ describe('TelegramApiError', () => {
     expect(error).toMatchObject({ status: 429, errorCode: 429, retryAfter: 7, description: 'Too Many Requests' });
   });
 });
+
+describe('downloadFile', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('never puts the bot token into the error message', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 404 }));
+    const { downloadFile } = await import('../../src/telegram/client');
+
+    const error = await downloadFile('voice/file_1.oga', 1024).catch((reason: unknown) => reason as Error);
+
+    expect(error).toBeInstanceOf(TelegramApiError);
+    expect(error.message).not.toContain(env.TELEGRAM_BOT_TOKEN);
+  });
+
+  it('rejects files above the size limit', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      arrayBuffer: () => Promise.resolve(new ArrayBuffer(2048)),
+    }));
+    const { downloadFile } = await import('../../src/telegram/client');
+
+    await expect(downloadFile('voice/file_1.oga', 1024)).rejects.toThrow('larger than');
+  });
+});

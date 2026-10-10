@@ -116,6 +116,30 @@ export function sendMessageDraft(
   }, signal);
 }
 
+export interface TelegramFile {
+  file_id: string;
+  file_size?: number;
+  file_path?: string;
+}
+
+export function getFile(fileId: string): Promise<TelegramFile> {
+  return callTelegram('getFile', { file_id: fileId });
+}
+
+/** Downloads a file returned by getFile. The URL embeds the bot token, so it never appears in errors. */
+export async function downloadFile(filePath: string, maxBytes: number): Promise<Buffer> {
+  const response = await fetch(`https://api.telegram.org/file/bot${env.TELEGRAM_BOT_TOKEN}/${filePath}`, {
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!response.ok) {
+    const description = `HTTP ${response.status}`;
+    throw new TelegramApiError(`Telegram file download failed: ${description}`, response.status, null, description, null);
+  }
+  const buffer = Buffer.from(await response.arrayBuffer());
+  if (buffer.length > maxBytes) throw new Error(`Telegram file is larger than ${maxBytes} bytes.`);
+  return buffer;
+}
+
 export function deleteMessage(chatId: string, messageId: number): Promise<boolean> {
   return callTelegram('deleteMessage', { chat_id: chatId, message_id: messageId });
 }

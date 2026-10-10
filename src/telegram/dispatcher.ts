@@ -3,6 +3,7 @@ import { logger } from '../utils/logger';
 import { sendMessage } from './client';
 import { handleCallbackQuery } from './handlers/callback.handler';
 import { handleCommand } from './handlers/command.handler';
+import { handleVoiceMessage } from './handlers/media.handler';
 import { handleTextMessage } from './handlers/message.handler';
 import { t } from './i18n';
 import { resolveUserContext } from './context';
@@ -22,6 +23,8 @@ const messageSchema = z.object({
   document: z.unknown().optional(),
   audio: z.unknown().optional(),
 }).passthrough();
+
+const voiceSchema = z.object({ file_id: z.string(), duration: z.number() }).passthrough();
 
 export const telegramUpdateSchema = z.object({
   update_id: z.number().int().nonnegative(),
@@ -71,6 +74,18 @@ export async function dispatchUpdate(update: TelegramUpdate): Promise<string | n
       telegramId,
       languageCode: message.from.language_code,
       text: message.text,
+    });
+  }
+  const voice = voiceSchema.safeParse(message.voice);
+  if (voice.success) {
+    return handleVoiceMessage({
+      updateId: update.update_id,
+      messageId: message.message_id,
+      chatId,
+      telegramId,
+      languageCode: message.from.language_code,
+      fileId: voice.data.file_id,
+      duration: voice.data.duration,
     });
   }
   if (message.voice || message.photo || message.document || message.audio) {
