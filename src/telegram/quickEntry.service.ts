@@ -19,13 +19,14 @@ import { createDraft, updateDraft } from './drafts.repository';
 import { t } from './i18n';
 import type { BudgetLoadingMessage } from './loadingDraft.service';
 import { parseMessage, TelegramParseError } from './parser.service';
+import { extractReceipt } from './media.service';
 import { escapeHtml, markdownToTelegramHtml, premiumKeyboard } from './render';
 import { saveMessage } from './messages.repository';
 import { resolveAmount } from './resolve/amount';
 import { resolveCard, resolveCardHint } from './resolve/card';
 import { resolveCategory } from './resolve/category';
 import { resolveDate, resolveDueDate } from './resolve/date';
-import type { DraftReason, ParsedOperationKind, SupportedLanguage } from './types';
+import type { DraftReason, ParsedItem, ParsedOperationKind, SupportedLanguage } from './types';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -307,14 +308,19 @@ export function formatDraftOperation(
       '',
     );
   }
+  // Drop the "✅ … saved" title (and any card notice above it): nothing is saved yet.
+  const body = (text: string) => {
+    const rows = text.split('\n');
+    return rows.slice(rows.findIndex((row) => row.startsWith('✅')) + 2);
+  };
   if (kind === 'transaction') {
-    lines.push(...formatSavedTransaction(draft, catalog, language).split('\n').slice(2));
+    lines.push(...body(formatSavedTransaction(draft, catalog, language)));
   } else if (kind === 'transfer') {
-    lines.push(...formatSavedTransfer(draft, catalog, language).split('\n').slice(2));
+    lines.push(...body(formatSavedTransfer(draft, catalog, language)));
   } else if (kind === 'debt') {
-    lines.push(...formatSavedDebt(draft, catalog, language).split('\n').slice(2));
+    lines.push(...body(formatSavedDebt(draft, catalog, language)));
   } else {
-    lines.push(...formatSavedDebtPayment(draft, catalog, language).split('\n').slice(2));
+    lines.push(...body(formatSavedDebtPayment(draft, catalog, language)));
   }
   if (reasons.length) {
     lines.push('', `⚠️ ${localized(language, 'Что нужно уточнить', 'Nimani aniqlashtirish kerak', 'Needs attention')}:`);
@@ -394,7 +400,7 @@ async function sendPendingDraft(input: {
   const needsDebtCard = ['debt', 'debt_payment'].includes(input.operationType)
     && input.reasons.some((reason) => ['NO_SOURCE_CARD', 'AMBIGUOUS_SOURCE_CARD'].includes(reason));
   const needsNormalCard = input.operationType === 'transaction'
-    && input.reasons.some((reason) => ['INSUFFICIENT_FUNDS', 'NO_CARD_IN_CURRENCY', 'AMBIGUOUS_CARD_HINT'].includes(reason));
+    && input.reasons.some((reason) => ['INSUFFICIENT_FUNDS', 'NO_CARD_IN_CURRENCY', 'AMBIGUOUS_CARD_HINT', 'NO_CARDS'].includes(reason));
   if (needsSource || needsNormalCard || needsDebtCard) {
     cardIds.slice(0, 6).forEach((id, optionIndex) => {
       const card = input.catalog.cards.find((entry) => entry.id === id)!;
@@ -482,6 +488,67 @@ async function answerNonTransaction(
     await refundAiMessage(uid, isPremium);
     throw new TelegramChatError(error);
   }
+}
+
+/**
+ * Turns a receipt photo into one expense draft. Receipts never name a card and the
+ * amount comes from OCR, so the user always confirms: the draft offers card buttons
+ * (picking one saves it) plus "Save" for an entry without a card.
+ * Returns false when the photo is not a readable receipt.
+ */
+export async function processReceipt(input: {
+  uid: string;
+  chatId: string;
+  messageId: number;
+  updateId: number;
+  fileId: string;
+  language: SupportedLanguage;
+  isPremium: boolean;
+}): Promise<boolean> {
+  const catalog = await loadCatalog(input.uid, input.language);
+  const receipt = await extractReceipt(input.uid, input.fileId, catalog.prompt);
+  if (!receipt.isReceipt || !Number.isFinite(receipt.total) || receipt.total <= 0 || receipt.total > 1e15) return false;
+
+  const comment = (receipt.comment || receipt.merchant).slice(0, 80);
+  const item: ParsedItem = {
+    rawText: receipt.merchant, kind: 'transaction', type: 'expense', amount: receipt.total,
+    amountLiteral: String(receipt.total), currency: receipt.currency, categoryId: receipt.categoryId,
+    categoryConfidence: receipt.categoryConfidence, suggestedCategoryName: receipt.suggestedCategoryName,
+    suggestedCategoryIcon: receipt.suggestedCategoryIcon, subcategoryId: receipt.subcategoryId, comment,
+    dateISO: receipt.dateISO, cardHint: '', fromCardHint: '', toCardHint: '', toAmount: 0, toAmountLiteral: '',
+    toCurrency: receipt.currency, debtId: '', person: '', debtDirection: '', commissionType: '', commissionValue: 0,
+    dueDateISO: '', amountConfidence: receipt.amountConfidence, typeConfidence: 1, notes: '',
+  };
+  const category = resolveCategory(item, catalog.categories, catalog.subcategories, input.language);
+  const operationDate = resolveDate(item.dateISO, Date.now(), env.TELEGRAM_DEFAULT_TIMEZONE);
+  const reasons: DraftReason[] = [];
+  if (item.amountConfidence < 0.9) reasons.push('LOW_AMOUNT_CONFIDENCE');
+  if (category.reason) reasons.push(category.reason);
+  if (operationDate.reason) reasons.push(operationDate.reason);
+  if (catalog.cards.length > 0) reasons.push('NO_CARDS');
+  const transaction: Record<string, unknown> = {
+    type: 'expense',
+    amount: receipt.total,
+    currency: receipt.currency,
+    categoryId: category.categoryId,
+    ...(category.subcategoryId ? { subcategoryId: category.subcategoryId } : {}),
+    comment,
+    date: operationDate.date,
+  };
+  if (receipt.currency !== 'UZS') {
+    const rate = await getRateToBase(receipt.currency, operationDate.date);
+    if (rate) Object.assign(transaction, { baseAmount: Math.round(receipt.total * rate), fxRate: rate, fxRateSource: 'NBU' });
+    else reasons.push('FX_UNAVAILABLE');
+  }
+  await sendPendingDraft({
+    uid: input.uid, chatId: input.chatId, messageId: input.messageId, index: 1,
+    operationKey: `${input.updateId}:1`, sourceText: `🧾 ${receipt.merchant}`, operationType: 'transaction',
+    draft: transaction, reasons, amountAlternative: null,
+    suggestion: category.categoryId ? null : { categoryName: item.suggestedCategoryName.slice(0, 40), categoryIcon: item.suggestedCategoryIcon.slice(0, 8) },
+    catalog, language: input.language, isPremium: input.isPremium,
+  });
+  logger.info({ uid: input.uid, updateId: input.updateId, reasons }, 'telegram.receipt.draft_created');
+  return true;
 }
 
 export async function processQuickEntry(input: {

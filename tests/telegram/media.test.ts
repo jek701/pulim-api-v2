@@ -9,16 +9,21 @@ const mocks = vi.hoisted(() => ({
   consumeParse: vi.fn(),
   refundParse: vi.fn(),
   handleTextMessage: vi.fn(),
+  processReceipt: vi.fn(),
+  deleteMessage: vi.fn(),
 }));
 
 vi.mock('../../src/telegram/context', () => ({ resolveUserContext: mocks.resolveUserContext }));
 vi.mock('../../src/services/entitlement.service', () => ({ getIsPremium: mocks.getIsPremium }));
-vi.mock('../../src/telegram/client', () => ({ sendMessage: mocks.sendMessage, sendChatAction: mocks.sendChatAction }));
+vi.mock('../../src/telegram/client', () => ({
+  sendMessage: mocks.sendMessage, sendChatAction: mocks.sendChatAction, deleteMessage: mocks.deleteMessage,
+}));
+vi.mock('../../src/telegram/quickEntry.service', () => ({ processReceipt: mocks.processReceipt }));
 vi.mock('../../src/telegram/media.service', () => ({ transcribeVoice: mocks.transcribeVoice }));
 vi.mock('../../src/telegram/usage.repository', () => ({ consumeParse: mocks.consumeParse, refundParse: mocks.refundParse }));
 vi.mock('../../src/telegram/handlers/message.handler', () => ({ handleTextMessage: mocks.handleTextMessage }));
 
-const { handleVoiceMessage } = await import('../../src/telegram/handlers/media.handler');
+const { handleReceiptPhoto, handleVoiceMessage } = await import('../../src/telegram/handlers/media.handler');
 
 const voice = {
   updateId: 7, messageId: 11, chatId: '42', telegramId: '42', fileId: 'file', duration: 5,
@@ -73,5 +78,47 @@ describe('handleVoiceMessage', () => {
 
     expect(mocks.consumeParse).not.toHaveBeenCalled();
     expect(mocks.transcribeVoice).not.toHaveBeenCalled();
+  });
+});
+
+describe('handleReceiptPhoto', () => {
+  const photo = { updateId: 9, messageId: 12, chatId: '42', telegramId: '42', fileId: 'photo' };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.resolveUserContext.mockResolvedValue({ uid: 'u1', language: 'ru', profile: {} });
+    mocks.sendMessage.mockResolvedValue({ message_id: 3 });
+    mocks.deleteMessage.mockResolvedValue(true);
+    mocks.consumeParse.mockResolvedValue(null);
+  });
+
+  it('offers Premium to free users without reading the photo', async () => {
+    mocks.getIsPremium.mockResolvedValue(false);
+
+    await handleReceiptPhoto(photo);
+
+    expect(mocks.processReceipt).not.toHaveBeenCalled();
+    expect(mocks.sendMessage.mock.calls[0]![1]).toContain('Premium');
+  });
+
+  it('creates a draft and removes the progress message', async () => {
+    mocks.getIsPremium.mockResolvedValue(true);
+    mocks.processReceipt.mockResolvedValue(true);
+
+    await handleReceiptPhoto(photo);
+
+    expect(mocks.processReceipt).toHaveBeenCalledWith(expect.objectContaining({ uid: 'u1', fileId: 'photo', updateId: 9 }));
+    expect(mocks.deleteMessage).toHaveBeenCalledWith('42', 3);
+    expect(mocks.refundParse).not.toHaveBeenCalled();
+  });
+
+  it('refunds and explains when the photo is not a readable receipt', async () => {
+    mocks.getIsPremium.mockResolvedValue(true);
+    mocks.processReceipt.mockResolvedValue(false);
+
+    await handleReceiptPhoto(photo);
+
+    expect(mocks.refundParse).toHaveBeenCalledWith('u1', '9');
+    expect(mocks.sendMessage.mock.calls.at(-1)![1]).toContain('чек');
   });
 });

@@ -1,10 +1,11 @@
 import { env } from '../../config/env';
 import { getIsPremium } from '../../services/entitlement.service';
 import { logger } from '../../utils/logger';
-import { sendChatAction, sendMessage } from '../client';
+import { deleteMessage, sendChatAction, sendMessage } from '../client';
 import { resolveUserContext, type TelegramUserContext } from '../context';
 import { languageFromTelegram, t, type MessageKey } from '../i18n';
 import { transcribeVoice } from '../media.service';
+import { processReceipt } from '../quickEntry.service';
 import { escapeHtml, loginKeyboard, openAppKeyboard, premiumKeyboard } from '../render';
 import { consumeParse, refundParse } from '../usage.repository';
 import { handleTextMessage } from './message.handler';
@@ -84,4 +85,37 @@ export async function handleVoiceMessage(input: MediaInput & {
     reply_parameters: { message_id: input.messageId, allow_sending_without_reply: true },
   });
   return handleTextMessage({ ...input, text });
+}
+
+export async function handleReceiptPhoto(input: MediaInput & { fileId: string }): Promise<string | null> {
+  const { context, allowed } = await premiumMediaContext(input, 'premium_receipt_required');
+  if (!context || !allowed) return context?.uid ?? null;
+  if (!(await consumeMediaQuota(input, context))) return context.uid;
+
+  const reading = await sendMessage(input.chatId, t(context.language, 'receipt_reading'), {
+    reply_parameters: { message_id: input.messageId, allow_sending_without_reply: true },
+  }).catch(() => null);
+  let recognised = false;
+  try {
+    recognised = await processReceipt({
+      uid: context.uid,
+      chatId: input.chatId,
+      messageId: input.messageId,
+      updateId: input.updateId,
+      fileId: input.fileId,
+      language: context.language,
+      isPremium: true,
+    });
+  } catch (error) {
+    logger.warn({ err: error, uid: context.uid }, 'telegram.receipt.failed');
+  } finally {
+    if (reading) await deleteMessage(input.chatId, reading.message_id).catch(() => undefined);
+  }
+  if (!recognised) {
+    await refundParse(context.uid, String(input.updateId));
+    await sendMessage(input.chatId, t(context.language, 'receipt_failed'), {
+      reply_parameters: { message_id: input.messageId, allow_sending_without_reply: true },
+    });
+  }
+  return context.uid;
 }

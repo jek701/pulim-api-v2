@@ -40,6 +40,7 @@ const EnvSchema = z.object({
   TELEGRAM_MAX_MESSAGE_CHARS: z.coerce.number().int().positive().max(4_000).default(1_000),
   TELEGRAM_TRANSCRIBE_MODEL: z.string().default('gpt-4o-mini-transcribe'),
   TELEGRAM_VOICE_MAX_SECONDS: z.coerce.number().int().positive().max(600).default(60),
+  TELEGRAM_RECEIPT_MODEL: z.string().default('gpt-5.4-mini'),
   TELEGRAM_FX_RETRY_INTERVAL_MS: z.coerce.number().int().min(5_000).default(60_000),
   TELEGRAM_FX_RETRY_BATCH_SIZE: z.coerce.number().int().positive().max(100).default(20),
   TELEGRAM_FX_MAX_RETRY_HOURS: z.coerce.number().positive().default(168),

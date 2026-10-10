@@ -3,7 +3,7 @@ import { logger } from '../utils/logger';
 import { sendMessage } from './client';
 import { handleCallbackQuery } from './handlers/callback.handler';
 import { handleCommand } from './handlers/command.handler';
-import { handleVoiceMessage } from './handlers/media.handler';
+import { handleReceiptPhoto, handleVoiceMessage } from './handlers/media.handler';
 import { handleTextMessage } from './handlers/message.handler';
 import { t } from './i18n';
 import { resolveUserContext } from './context';
@@ -25,6 +25,8 @@ const messageSchema = z.object({
 }).passthrough();
 
 const voiceSchema = z.object({ file_id: z.string(), duration: z.number() }).passthrough();
+const photoSchema = z.array(z.object({ file_id: z.string(), width: z.number(), height: z.number() }).passthrough()).min(1);
+const imageDocumentSchema = z.object({ file_id: z.string(), mime_type: z.string().regex(/^image\/(jpeg|png|webp)$/) }).passthrough();
 
 export const telegramUpdateSchema = z.object({
   update_id: z.number().int().nonnegative(),
@@ -86,6 +88,20 @@ export async function dispatchUpdate(update: TelegramUpdate): Promise<string | n
       languageCode: message.from.language_code,
       fileId: voice.data.file_id,
       duration: voice.data.duration,
+    });
+  }
+  // Telegram lists photo sizes smallest first; the largest reads best. Receipts sent
+  // "as a file" arrive as an image document instead.
+  const photo = photoSchema.safeParse(message.photo);
+  const imageDocument = imageDocumentSchema.safeParse(message.document);
+  if (photo.success || imageDocument.success) {
+    return handleReceiptPhoto({
+      updateId: update.update_id,
+      messageId: message.message_id,
+      chatId,
+      telegramId,
+      languageCode: message.from.language_code,
+      fileId: photo.success ? photo.data[photo.data.length - 1]!.file_id : imageDocument.data!.file_id,
     });
   }
   if (message.voice || message.photo || message.document || message.audio) {

@@ -145,7 +145,7 @@ async function remainingKeyboard(
       callback_data: 'v1:newcat:0',
     }]);
   }
-  if (operationType === 'transaction' && (reasons.includes('NO_CARD_IN_CURRENCY') || reasons.includes('INSUFFICIENT_FUNDS') || reasons.includes('AMBIGUOUS_CARD_HINT'))) {
+  if (operationType === 'transaction' && (reasons.includes('NO_CARD_IN_CURRENCY') || reasons.includes('INSUFFICIENT_FUNDS') || reasons.includes('AMBIGUOUS_CARD_HINT') || reasons.includes('NO_CARDS'))) {
     const ids = message.options?.cardIds ?? [];
     const docs = await Promise.all(ids.slice(0, 6).map((id) => db.collection('cards').doc(id).get()));
     docs.forEach((document, index) => {
