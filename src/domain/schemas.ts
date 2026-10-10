@@ -113,6 +113,19 @@ export const cardCreateSchema = z.object({
 });
 export const cardUpdateSchema = cardCreateSchema.partial();
 
+// --- Household budget ---
+export const householdCreateSchema = z.object({
+  name: z.string().trim().min(1).max(60),
+  currency: currencySchema.default('UZS'),
+});
+
+export const householdUpdateSchema = householdCreateSchema.pick({ name: true }).partial();
+
+export const householdCardAccessSchema = z.object({
+  enabled: z.boolean(),
+  showBalance: z.boolean().default(false),
+});
+
 // --- Budgets ---
 export const budgetSetSchema = z.object({
   amount: positive,

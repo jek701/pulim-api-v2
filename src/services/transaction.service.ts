@@ -141,6 +141,9 @@ export async function updateTransaction(uid: string, id: string, patch: Row): Pr
   const result = await db.runTransaction(async (tx) => {
     const original = await readOwned(tx, txnsCol().doc(id), uid, 'Transaction not found.');
     const old = original.data;
+    if (old.scope === 'household') {
+      throw AppError.badRequest('Edit this operation from the family space.');
+    }
     if (old.source) {
       throw AppError.badRequest(
         'This operation must be edited through its dedicated endpoint.',
@@ -425,6 +428,9 @@ export async function updateReturn(
 export async function deleteTransaction(uid: string, id: string): Promise<void> {
   await db.runTransaction(async (tx) => {
     const { ref, data } = await readOwned(tx, txnsCol().doc(id), uid, 'Transaction not found.');
+    if (data.scope === 'household') {
+      throw AppError.badRequest('Delete this operation from the family space.');
+    }
 
     // ---- reads first (Firestore transactions forbid reads after writes) ----
 
@@ -504,17 +510,14 @@ export async function deleteTransaction(uid: string, id: string): Promise<void> 
  * Matches the frontend: a bulk wipe that does NOT reverse card balances.
  */
 export async function clearAllTransactions(uid: string): Promise<{ deleted: number }> {
-  let deleted = 0;
-  for (;;) {
-    const snap = await txnsCol().where('userId', '==', uid).limit(400).get();
-    if (snap.empty) break;
+  const snap = await txnsCol().where('userId', '==', uid).get();
+  const personal = snap.docs.filter((doc) => doc.data().scope !== 'household');
+  for (let index = 0; index < personal.length; index += 400) {
     const batch = db.batch();
-    snap.docs.forEach((d) => batch.delete(d.ref));
+    personal.slice(index, index + 400).forEach((doc) => batch.delete(doc.ref));
     await batch.commit();
-    deleted += snap.size;
-    if (snap.size < 400) break;
   }
-  return { deleted };
+  return { deleted: personal.length };
 }
 
 /** Card-to-card transfer recorded as one transaction plus both balance adjustments. */

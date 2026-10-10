@@ -185,6 +185,9 @@ export interface Subcategory {
   id: string;
   name: string;
   categoryId: string;
+  categoryName?: string;
+  categoryIcon?: string;
+  categoryColor?: string;
   userId: string;
   createdAt: number;
 }
@@ -210,6 +213,12 @@ export interface Transaction {
   baseAmount?: number;
   fxRate?: number;
   fxRateSource?: 'NBU' | 'manual';
+  scope?: 'personal' | 'household';
+  householdId?: string;
+  createdBy?: string;
+  createdByName?: string;
+  accountOwnerId?: string;
+  accountOwnerName?: string;
   date: number;
   userId: string;
   createdAt: number;
@@ -234,8 +243,37 @@ export interface Card {
   limit?: number;
   dueDay?: number;
   color?: string;
+  scope?: 'personal' | 'household';
+  householdId?: string;
+  createdBy?: string;
+  familyAccess?: {
+    householdId: string;
+    enabled: boolean;
+    showBalance: boolean;
+    updatedAt: number;
+  };
   userId: string;
   createdAt: number;
+}
+
+export type HouseholdRole = 'owner' | 'member';
+
+export interface HouseholdMember {
+  userId: string;
+  name: string;
+  role: HouseholdRole;
+  joinedAt: number;
+}
+
+export interface Household {
+  id: string;
+  name: string;
+  currency: Currency;
+  ownerUserId: string;
+  memberIds: string[];
+  members: HouseholdMember[];
+  createdAt: number;
+  updatedAt: number;
 }
 
 export interface Budget {
