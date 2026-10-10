@@ -38,6 +38,17 @@ export const phoneAuthLimiter = rateLimit({
   handler: json429('Too many verification requests. Please try again shortly.'),
 });
 
+/** Per-IP guard on the key-authenticated iPhone Shortcut endpoints (one entry is ~3 requests). */
+export const shortcutLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 60,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  handler: (_req, res) => {
+    res.status(429).type('text/plain; charset=utf-8').send('⏳ Слишком много запросов. Подождите минуту.');
+  },
+});
+
 /** Broad IP guard; Telegram-specific per-user limits are enforced after identity resolution. */
 export const telegramWebhookLimiter = rateLimit({
   windowMs: 60_000,

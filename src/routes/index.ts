@@ -1,6 +1,6 @@
 import { Router, type Express } from 'express';
 import { authenticate } from '../middleware/authenticate';
-import { aiLimiter, phoneAuthLimiter, telegramAuthLimiter, telegramWebhookLimiter } from '../middleware/rateLimit';
+import { aiLimiter, phoneAuthLimiter, shortcutLimiter, telegramAuthLimiter, telegramWebhookLimiter } from '../middleware/rateLimit';
 import { healthRouter } from './health.routes';
 import { telegramAuthRouter } from './telegramAuth.routes';
 import { phoneAuthRouter } from './phoneAuth.routes';
@@ -22,6 +22,8 @@ import { billingInternalRouter } from './billingInternal.routes';
 import { telegramWebhookRouter } from './telegramWebhook.routes';
 import { notificationSettingsRouter } from './notificationSettings.routes';
 import { devNotesRouter } from './devNotes.routes';
+import { shortcutRouter } from './shortcut.routes';
+import { shortcutTokenRouter } from './shortcutToken.routes';
 
 /** Mounts every router. Public routes first, then the authenticated `/v1` tree. */
 export function mountRoutes(app: Express): void {
@@ -30,6 +32,7 @@ export function mountRoutes(app: Express): void {
   app.use('/auth/phone', phoneAuthLimiter, phoneAuthRouter);
   app.use('/internal/v1/billing/events', billingInternalRouter);
   app.use('/telegram/webhook', telegramWebhookLimiter, telegramWebhookRouter);
+  app.use('/shortcut/v1', shortcutLimiter, shortcutRouter);
 
   const v1 = Router();
   v1.use(authenticate);
@@ -50,6 +53,7 @@ export function mountRoutes(app: Express): void {
   v1.use('/ai-chats', aiChatsRouter);
   v1.use('/ai', aiLimiter, aiRouter);
   v1.use('/dev-notes', devNotesRouter);
+  v1.use('/shortcut-token', shortcutTokenRouter);
 
   app.use('/v1', v1);
 }
