@@ -188,7 +188,10 @@ export async function listShortcutCategories(user: ShortcutUser): Promise<string
 }
 
 export function parseShortcutAmount(value: unknown): number | null {
-  const normalized = String(value ?? '').replace(/\s/g, '').replace(',', '.');
+  const compact = String(value ?? '').replace(/[\s'’]/g, '');
+  // iPhone locales format numbers as "25,000" or "25.000" (grouping) and "12,5" (decimal).
+  const grouped = /^\d{1,3}([.,])\d{3}(\1\d{3})*$/.test(compact);
+  const normalized = grouped ? compact.replace(/[.,]/g, '') : compact.replace(',', '.');
   if (!/^\d+(\.\d{1,2})?$/.test(normalized)) return null;
   const amount = Number(normalized);
   return amount > 0 && amount <= 1e15 ? amount : null;

@@ -145,7 +145,7 @@ describe('shortcut expense entry', () => {
     expect(shortcut.parseShortcutAmount(value)).toBeNull();
   });
 
-  it.each([['25000', 25_000], ['25 000', 25_000], ['12,5', 12.5], [42, 42]] as const)('parses amount %s', (value, expected) => {
+  it.each([['25000', 25_000], ['25 000', 25_000], ['25,000', 25_000], ['1.250.000', 1_250_000], ['12,5', 12.5], ['12.50', 12.5], [42, 42]] as const)('parses amount %s', (value, expected) => {
     expect(shortcut.parseShortcutAmount(value)).toBe(expected);
   });
 });
