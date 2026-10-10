@@ -1,9 +1,15 @@
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomInt } from 'node:crypto';
+import { env } from '../config/env';
 import { db, FieldValue } from '../config/firebase';
 import { DEFAULT_CATEGORIES, defaultCategoryId } from '../domain/defaultCategories';
 import { balanceDelta } from '../domain/balance';
 import { FREE_LIMITS } from '../domain/entitlements';
+import { getProfile } from '../repositories/profile.repository';
+import { savePreparedInlineMessage, savePreparedKeyboardButton, TelegramApiError } from '../telegram/client';
+import { familyInviteLink, inviteShareArticle, pickButtonText } from '../telegram/familyInvite';
+import { normalizeLanguage } from '../telegram/i18n';
 import { getIsPremium } from './entitlement.service';
+import { verifyTelegramInitData } from './telegramVerify.service';
 import { AppError } from '../utils/AppError';
 
 type Row = Record<string, any>;
@@ -14,6 +20,11 @@ const cards = () => db.collection('cards');
 const transactions = () => db.collection('transactions');
 const categories = () => db.collection('categories');
 const budgets = () => db.collection('budgets');
+const invitePicks = () => db.collection('householdInvitePicks');
+
+const INVITE_PICK_TTL_MS = 60 * 60 * 1000;
+/** Bot invitations a household may prepare per day; keeps the bot from being used for spam. */
+const INVITE_PICKS_PER_DAY = 20;
 
 async function displayName(uid: string): Promise<string> {
   const profile = await db.collection('profiles').doc(uid).get();
@@ -81,8 +92,153 @@ export async function createInvite(uid: string): Promise<Row> {
     status: 'pending',
   };
   await invites().doc(token).create(invite);
-  return { token, householdName: household.name, expiresAt: invite.expiresAt };
+  return { token, householdName: household.name, expiresAt: invite.expiresAt, link: familyInviteLink(token) };
 }
+
+async function ownPendingInvite(uid: string, token: string): Promise<{ household: Row; invite: Row }> {
+  const household = await requireHousehold(uid);
+  const snap = await invites().doc(token).get();
+  const invite = snap.data();
+  if (!snap.exists || !invite || invite.householdId !== household.id) {
+    throw AppError.notFound('Приглашение не найдено.');
+  }
+  if (invite.status !== 'pending' || invite.expiresAt < Date.now()) {
+    throw new AppError(410, 'INVITE_EXPIRED', 'Приглашение больше не действует.');
+  }
+  return { household, invite };
+}
+
+/**
+ * The Telegram account running the Mini App. Prepared buttons and messages are bound
+ * to it, so it comes from verified init data and must belong to this Pulim user.
+ */
+async function miniAppTelegramId(uid: string, telegramInitData: string): Promise<number> {
+  let telegramId = '';
+  try {
+    const parsed = verifyTelegramInitData(telegramInitData, env.TELEGRAM_BOT_TOKEN);
+    telegramId = String((JSON.parse(parsed.user ?? '{}') as { id?: number | string }).id ?? '');
+  } catch {
+    telegramId = '';
+  }
+  if (!telegramId) throw new AppError(401, 'TELEGRAM_AUTH_FAILED', 'Откройте Pulim в Telegram.');
+  const mapping = (await db.collection('telegramUsers').doc(telegramId).get()).data();
+  if ((mapping?.profileUid ?? mapping?.uid) !== uid) {
+    throw AppError.forbidden('TELEGRAM_ACCOUNT_MISMATCH', 'Этот Telegram не привязан к вашему аккаунту.');
+  }
+  return Number(telegramId);
+}
+
+async function profileLanguage(uid: string) {
+  return normalizeLanguage((await getProfile(uid))?.language);
+}
+
+async function withTelegram<T>(call: () => Promise<T>): Promise<T> {
+  try {
+    return await call();
+  } catch (error) {
+    if (error instanceof TelegramApiError) {
+      throw new AppError(502, 'TELEGRAM_UNAVAILABLE', 'Telegram сейчас недоступен. Попробуйте ещё раз.');
+    }
+    throw error;
+  }
+}
+
+async function takeInvitePickQuota(householdId: string): Promise<void> {
+  const ref = households().doc(householdId);
+  const day = new Date().toISOString().slice(0, 10);
+  await db.runTransaction(async (tx) => {
+    const quota = (await tx.get(ref)).data()?.invitePickQuota as { day?: string; count?: number } | undefined;
+    const count = quota?.day === day ? quota.count ?? 0 : 0;
+    if (count >= INVITE_PICKS_PER_DAY) {
+      throw new AppError(429, 'INVITE_LIMIT', 'Слишком много приглашений за сегодня. Попробуйте завтра.');
+    }
+    tx.update(ref, { invitePickQuota: { day, count: count + 1 } });
+  });
+}
+
+/**
+ * Prepares the Telegram contact picker for an invite. The picked partner reaches the
+ * bot as a `users_shared` message, handled by the family invite bot handler.
+ */
+export async function prepareInvitePick(uid: string, token: string, telegramInitData: string): Promise<Row> {
+  const { household } = await ownPendingInvite(uid, token);
+  if ((household.memberIds ?? []).length >= 2) {
+    throw new AppError(409, 'HOUSEHOLD_FULL', 'В этом совместном бюджете уже два участника.');
+  }
+  const telegramId = await miniAppTelegramId(uid, telegramInitData);
+  const language = await profileLanguage(uid);
+  await takeInvitePickQuota(household.id);
+  const requestId = randomInt(1, 2 ** 31 - 1);
+  const prepared = await withTelegram(() => savePreparedKeyboardButton(telegramId, {
+    text: pickButtonText(language),
+    request_users: { request_id: requestId, user_is_bot: false, max_quantity: 1, request_name: true, request_username: true },
+  }));
+  const now = Date.now();
+  await invitePicks().doc(`${telegramId}_${requestId}`).create({
+    token,
+    uid,
+    householdId: household.id,
+    createdAt: now,
+    expiresAt: now + INVITE_PICK_TTL_MS,
+  });
+  await invites().doc(token).update({ delivery: { status: 'awaiting_pick', updatedAt: now } });
+  return { buttonId: prepared.id };
+}
+
+/** Prepares the invite card the Mini App sends to a chat of the user's choice. */
+export async function prepareInviteShare(uid: string, token: string, telegramInitData: string): Promise<Row> {
+  const { household } = await ownPendingInvite(uid, token);
+  const telegramId = await miniAppTelegramId(uid, telegramInitData);
+  const language = await profileLanguage(uid);
+  const prepared = await withTelegram(() => savePreparedInlineMessage(
+    telegramId,
+    inviteShareArticle(language, household.name, token),
+    { allow_user_chats: true },
+  ));
+  return { messageId: prepared.id };
+}
+
+export async function inviteStatus(uid: string, token: string): Promise<Row> {
+  const household = await requireHousehold(uid);
+  const snap = await invites().doc(token).get();
+  const invite = snap.data();
+  if (!snap.exists || !invite || invite.householdId !== household.id) {
+    throw AppError.notFound('Приглашение не найдено.');
+  }
+  return { token, status: invite.status, expiresAt: invite.expiresAt, delivery: invite.delivery ?? null };
+}
+
+/** Single-use: resolves a contact pick back to its invite, or null when stale. */
+export async function consumeInvitePick(
+  telegramId: string,
+  requestId: number,
+): Promise<{ token: string; inviterUid: string; household: Row } | null> {
+  const ref = invitePicks().doc(`${telegramId}_${requestId}`);
+  const pick = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) return null;
+    tx.delete(ref);
+    return snap.data()!;
+  });
+  if (!pick || pick.expiresAt < Date.now()) return null;
+  const [inviteSnap, householdSnap] = await Promise.all([
+    invites().doc(String(pick.token)).get(),
+    households().doc(String(pick.householdId)).get(),
+  ]);
+  const invite = inviteSnap.data();
+  const household = householdSnap.data();
+  if (!invite || invite.status !== 'pending' || invite.expiresAt < Date.now()) return null;
+  if (!household || (household.memberIds ?? []).length >= 2) return null;
+  return { token: String(pick.token), inviterUid: String(pick.uid), household: { id: householdSnap.id, ...household } };
+}
+
+export async function recordInviteDelivery(
+  token: string,
+  delivery: { status: 'delivered' | 'not_delivered'; recipientName: string },
+): Promise<void> {
+  await invites().doc(token).update({ delivery: { ...delivery, updatedAt: Date.now() } });
+}
+
 
 export async function inviteInfo(token: string): Promise<Row> {
   const snap = await invites().doc(token).get();
@@ -166,7 +322,7 @@ export async function setHouseholdBudget(
   return { id, ...row };
 }
 
-function memberName(household: Row, uid: string): string {
+export function memberName(household: Row, uid: string): string {
   return household.members?.find((member: Row) => member.userId === uid)?.name ?? 'Участник';
 }
 

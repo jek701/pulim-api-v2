@@ -90,6 +90,34 @@ export function editMessageText(
   }, signal);
 }
 
+export interface KeyboardButtonRequestUsers {
+  request_id: number;
+  user_is_bot?: boolean;
+  max_quantity?: number;
+  request_name?: boolean;
+  request_username?: boolean;
+}
+
+/**
+ * Stores a request_users button that the Mini App opens with `WebApp.requestChat`
+ * (Bot API 9.6). The picked users reach the bot as a `users_shared` message.
+ */
+export function savePreparedKeyboardButton(
+  userId: number,
+  button: { text: string; request_users: KeyboardButtonRequestUsers },
+): Promise<{ id: string }> {
+  return callTelegram('savePreparedKeyboardButton', { user_id: userId, button });
+}
+
+/** Stores a message the Mini App user can send to a chat with `WebApp.shareMessage` (Bot API 8.0). */
+export function savePreparedInlineMessage(
+  userId: number,
+  result: Record<string, unknown>,
+  options: { allow_user_chats?: boolean; allow_group_chats?: boolean } = {},
+): Promise<{ id: string; expiration_date: number }> {
+  return callTelegram('savePreparedInlineMessage', { user_id: userId, result, ...options });
+}
+
 export function answerCallbackQuery(id: string, text?: string): Promise<boolean> {
   return callTelegram('answerCallbackQuery', {
     callback_query_id: id,

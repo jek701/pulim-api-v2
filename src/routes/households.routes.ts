@@ -6,6 +6,7 @@ import {
   cardCreateSchema,
   householdCardAccessSchema,
   householdCreateSchema,
+  householdTelegramSchema,
   householdUpdateSchema,
   transactionCreateSchema,
 } from '../domain/schemas';
@@ -24,6 +25,15 @@ router.patch('/current', validate(householdUpdateSchema), asyncHandler(async (re
 }));
 router.post('/current/invites', asyncHandler(async (req, res) => {
   res.status(201).json(await household.createInvite(req.uid));
+}));
+router.get('/current/invites/:token', asyncHandler(async (req, res) => {
+  res.json(await household.inviteStatus(req.uid, String(req.params.token)));
+}));
+router.post('/current/invites/:token/pick', validate(householdTelegramSchema), asyncHandler(async (req, res) => {
+  res.json(await household.prepareInvitePick(req.uid, String(req.params.token), req.body.telegramInitData));
+}));
+router.post('/current/invites/:token/share', validate(householdTelegramSchema), asyncHandler(async (req, res) => {
+  res.json(await household.prepareInviteShare(req.uid, String(req.params.token), req.body.telegramInitData));
 }));
 router.get('/invites/:token', asyncHandler(async (req, res) => {
   res.json(await household.inviteInfo(String(req.params.token)));

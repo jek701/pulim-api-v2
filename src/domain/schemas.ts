@@ -121,6 +121,11 @@ export const householdCreateSchema = z.object({
 
 export const householdUpdateSchema = householdCreateSchema.pick({ name: true }).partial();
 
+/** Verified server-side: prepared Telegram buttons/messages are bound to this Mini App user. */
+export const householdTelegramSchema = z.object({
+  telegramInitData: z.string().min(1),
+});
+
 export const householdCardAccessSchema = z.object({
   enabled: z.boolean(),
   showBalance: z.boolean().default(false),

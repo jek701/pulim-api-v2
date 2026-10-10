@@ -3,6 +3,7 @@ import { logger } from '../utils/logger';
 import { sendMessage } from './client';
 import { handleCallbackQuery } from './handlers/callback.handler';
 import { handleCommand } from './handlers/command.handler';
+import { handleFamilyInvitePick } from './handlers/familyInvite.handler';
 import { handleReceiptPhoto, handleVoiceMessage } from './handlers/media.handler';
 import { handleTextMessage } from './handlers/message.handler';
 import { t } from './i18n';
@@ -26,6 +27,15 @@ const messageSchema = z.object({
 
 const voiceSchema = z.object({ file_id: z.string(), duration: z.number() }).passthrough();
 const photoSchema = z.array(z.object({ file_id: z.string(), width: z.number(), height: z.number() }).passthrough()).min(1);
+const usersSharedSchema = z.object({
+  request_id: z.number().int(),
+  users: z.array(z.object({
+    user_id: z.union([z.number(), z.string()]),
+    first_name: z.string().optional(),
+    last_name: z.string().optional(),
+    username: z.string().optional(),
+  }).passthrough()).min(1),
+}).passthrough();
 const imageDocumentSchema = z.object({ file_id: z.string(), mime_type: z.string().regex(/^image\/(jpeg|png|webp)$/) }).passthrough();
 
 export const telegramUpdateSchema = z.object({
@@ -55,6 +65,16 @@ export async function dispatchUpdate(update: TelegramUpdate): Promise<string | n
   if (!message || message.chat.type !== 'private' || !message.from) return null;
   const chatId = String(message.chat.id);
   const telegramId = String(message.from.id);
+  // A contact picked in the Mini App's family invite flow (WebApp.requestChat).
+  const usersShared = usersSharedSchema.safeParse(message.users_shared);
+  if (usersShared.success) {
+    return handleFamilyInvitePick({
+      chatId,
+      telegramId,
+      requestId: usersShared.data.request_id,
+      users: usersShared.data.users,
+    });
+  }
   if (message.text?.startsWith('/')) {
     const text = message.text.trim();
     const [rawCommand = '', ...parts] = text.split(/\s+/);
