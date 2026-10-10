@@ -44,7 +44,7 @@ export async function ensureNotificationDefaults(uid: string): Promise<void> {
   });
 }
 
-async function cancelPending(uid: string, reason: string): Promise<void> {
+async function cancelPending(uid: string, reason: string, includeCampaign = true): Promise<void> {
   while (true) {
     const snapshot = await db.collection('notifications')
       .where('userId', '==', uid)
@@ -52,13 +52,17 @@ async function cancelPending(uid: string, reason: string): Promise<void> {
       .limit(400)
       .get();
     if (snapshot.empty) return;
+    const cancellable = includeCampaign
+      ? snapshot.docs
+      : snapshot.docs.filter((document) => document.data().type !== 'campaign');
+    if (!cancellable.length) return;
     const batch = db.batch();
     const now = Date.now();
-    snapshot.docs.forEach((document) => batch.set(document.ref, {
+    cancellable.forEach((document) => batch.set(document.ref, {
       status: 'cancelled', skipReason: reason, leaseUntil: null, updatedAt: now,
     }, { merge: true }));
     await batch.commit();
-    if (snapshot.size < 400) return;
+    if (snapshot.size < 400 || cancellable.length < snapshot.size) return;
   }
 }
 
@@ -72,7 +76,7 @@ export async function setNotificationsEnabled(uid: string, enabled: boolean): Pr
       : 0,
     updatedAt: now,
   });
-  if (!enabled) await cancelPending(uid, 'disabled');
+  if (!enabled) await cancelPending(uid, 'disabled', false);
   const snap = await profileRef(uid).get();
   return snap.data()!.notifications as NotificationSettings;
 }

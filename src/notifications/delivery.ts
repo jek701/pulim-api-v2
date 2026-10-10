@@ -21,6 +21,7 @@ import { markTelegramUnavailable } from './settings';
 import { renderNotification } from './render/blocks';
 import type { QueuedNotification } from './types';
 import { exhaustedAttempts, retryDelay } from './backoff';
+import { markCampaignTelegramOutcome } from '../communications/repository';
 
 const wait = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 
@@ -44,6 +45,9 @@ async function deliver(
 ): Promise<void> {
   if (now > notification.staleAt) {
     await finishNotification(notification.id, 'skipped', 'stale');
+    if (notification.payload.kind === 'campaign') {
+      await markCampaignTelegramOutcome(notification.payload.campaignId, notification.userId, 'failed');
+    }
     logger.info({ uid: notification.userId, type: notification.type, skipReason: 'stale' }, 'notify.skipped');
     return;
   }
@@ -51,10 +55,14 @@ async function deliver(
   if (!claimed) return;
   const profile = await getProfile(claimed.userId);
   const settings = profile?.notifications;
-  if (!profile || !settings?.enabled || !settings.telegram.chatId
+  const campaign = claimed.payload.kind === 'campaign';
+  const campaignId = claimed.payload.kind === 'campaign' ? claimed.payload.campaignId : null;
+  const channelEnabled = campaign ? profile?.communications?.marketing.telegram === true : settings?.enabled === true;
+  if (!profile || !channelEnabled || !settings?.telegram.chatId
     || settings.telegram.status === 'blocked'
     || settings.telegram.status === 'unreachable') {
     await finishNotification(claimed.id, 'skipped', 'disabled');
+    if (campaignId) await markCampaignTelegramOutcome(campaignId, claimed.userId, 'failed');
     logger.info({ uid: claimed.userId, type: claimed.type, skipReason: 'disabled' }, 'notify.skipped');
     return;
   }
@@ -67,15 +75,16 @@ async function deliver(
   const previousAttempt = lastAttemptByChat.get(deliveryChatId) ?? 0;
   const chatDelay = Math.max(0, 1_000 - (Date.now() - previousAttempt));
   if (chatDelay) await wait(chatDelay);
-  const reservation = await reserveSafetySlot(claimed.userId, now);
+  const reservation = await reserveSafetySlot(claimed.userId, now, campaign);
   if (reservation !== 'ok') {
     await finishNotification(claimed.id, 'skipped', reservation === 'cap' ? 'safety_cap' : 'disabled');
+    if (campaignId) await markCampaignTelegramOutcome(campaignId, claimed.userId, 'failed');
     if (reservation === 'cap') logger.error({ uid: claimed.userId, type: claimed.type }, 'notify.safety_cap');
     return;
   }
 
   const language = normalizeLanguage(profile.language);
-  const includeIntro = !settings.introSentAt;
+  const includeIntro = !campaign && !settings.introSentAt;
   const rendered = renderNotification(claimed.payload, language, includeIntro);
   let sentToTelegram = false;
   try {
@@ -83,6 +92,7 @@ async function deliver(
     const message = await sendMessage(deliveryChatId, rendered.text, { reply_markup: rendered.keyboard });
     sentToTelegram = true;
     await markNotificationSent(claimed, message.message_id, includeIntro);
+    if (campaignId) await markCampaignTelegramOutcome(campaignId, claimed.userId, 'sent');
     await safeStat(true, false);
     await saveMessage({
       userId: claimed.userId,
@@ -97,6 +107,7 @@ async function deliver(
   } catch (error) {
     if (sentToTelegram) {
       await finishNotification(claimed.id, 'failed', 'post_send_state_failed').catch(() => undefined);
+      if (campaignId) await markCampaignTelegramOutcome(campaignId, claimed.userId, 'failed').catch(() => undefined);
       logger.error({ err: error, uid: claimed.userId, type: claimed.type }, 'notify.post_send_state_failed');
       return;
     }
@@ -106,6 +117,7 @@ async function deliver(
       if (unavailable) {
         await markTelegramUnavailable(claimed.userId, unavailable, error.description);
         await finishNotification(claimed.id, 'cancelled', unavailable);
+        if (campaignId) await markCampaignTelegramOutcome(campaignId, claimed.userId, 'failed');
         await safeStat(false, true);
         logger.warn({ uid: claimed.userId, reason: unavailable }, 'notify.blocked');
         return;
@@ -119,6 +131,7 @@ async function deliver(
     await safeStat(false, false);
     if (exhaustedAttempts(claimed.attempts, env.NOTIFY_MAX_ATTEMPTS)) {
       await finishNotification(claimed.id, 'failed', error instanceof Error ? error.message : String(error));
+      if (campaignId) await markCampaignTelegramOutcome(campaignId, claimed.userId, 'failed');
       logger.error({ err: error, uid: claimed.userId, type: claimed.type, attempts: claimed.attempts }, 'notify.failed');
       return;
     }

@@ -1,6 +1,6 @@
 import type { SupportedLanguage } from '../telegram/types';
 
-export type NotificationType = 'daily' | 'budget_80' | 'budget_100' | 'trial_started';
+export type NotificationType = 'daily' | 'budget_80' | 'budget_100' | 'trial_started' | 'campaign';
 export type NotificationStatus = 'pending' | 'sending' | 'sent' | 'skipped' | 'failed' | 'cancelled';
 
 export interface SubscriptionEvent {
@@ -122,7 +122,16 @@ export interface TrialStartedPayload {
   premiumUntil: number;
 }
 
-export type NotificationPayload = DailyPayload | BudgetPayload | TrialStartedPayload;
+export interface CampaignPayload {
+  kind: 'campaign';
+  campaignId: string;
+  title: string;
+  body: string;
+  ctaLabel?: string;
+  ctaUrl?: string;
+}
+
+export type NotificationPayload = DailyPayload | BudgetPayload | TrialStartedPayload | CampaignPayload;
 
 export interface NotificationStateEffects {
   trialAvailableSent?: boolean;

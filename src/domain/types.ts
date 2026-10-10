@@ -116,6 +116,9 @@ export interface UserProfile {
   usage?: UsageState;
   createdAt?: number;
   notifications?: NotificationSettings;
+  communications?: {
+    marketing: { inApp: boolean; telegram: boolean };
+  };
   notificationsPromptDismissed?: boolean;
   updatedAt: number;
 }

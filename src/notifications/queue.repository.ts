@@ -303,13 +303,13 @@ export async function finishNotification(
   }, { merge: true });
 }
 
-export async function reserveSafetySlot(uid: string, now: number): Promise<'ok' | 'disabled' | 'cap'> {
+export async function reserveSafetySlot(uid: string, now: number, allowReminderDisabled = false): Promise<'ok' | 'disabled' | 'cap'> {
   const ref = profileRef(uid);
   const today = dateKey(now, env.NOTIFY_TIMEZONE);
   return db.runTransaction(async (transaction) => {
     const snap = await transaction.get(ref);
     const settings = snap.data()?.notifications as NotificationSettings | undefined;
-    if (!settings?.enabled || settings.telegram.status === 'blocked' || settings.telegram.status === 'unreachable') {
+    if (!settings || (!allowReminderDisabled && !settings.enabled) || settings.telegram.status === 'blocked' || settings.telegram.status === 'unreachable') {
       return 'disabled';
     }
     const sent = settings.sentDay === today ? Number(settings.sentCount ?? 0) : 0;

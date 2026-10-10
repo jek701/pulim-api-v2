@@ -57,6 +57,18 @@ export function renderKeyboard(payload: NotificationPayload, language: Supported
     const result = dailyActions(payload, language, completedActions);
     return { keyboard: { inline_keyboard: result.rows }, items: result.items };
   }
+  if (payload.kind === 'campaign') {
+    const target = payload.ctaUrl
+      ? payload.ctaUrl.startsWith('/') ? new URL(payload.ctaUrl, env.WEB_APP_URL).toString() : payload.ctaUrl
+      : env.WEB_APP_URL;
+    return {
+      keyboard: { inline_keyboard: [[{
+        text: payload.ctaLabel || notificationStrings.open(language),
+        ...(target.startsWith(env.WEB_APP_URL) ? { web_app: { url: target } } : { url: target }),
+      }]] },
+      items: [] as Item[],
+    };
+  }
   return {
     keyboard: { inline_keyboard: [[
       { text: notificationStrings.open(language), web_app: { url: env.WEB_APP_URL } },

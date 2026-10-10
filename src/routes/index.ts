@@ -24,6 +24,7 @@ import { notificationSettingsRouter } from './notificationSettings.routes';
 import { devNotesRouter } from './devNotes.routes';
 import { shortcutRouter } from './shortcut.routes';
 import { shortcutTokenRouter } from './shortcutToken.routes';
+import { communicationsRouter } from './communications.routes';
 
 /** Mounts every router. Public routes first, then the authenticated `/v1` tree. */
 export function mountRoutes(app: Express): void {
@@ -53,6 +54,7 @@ export function mountRoutes(app: Express): void {
   v1.use('/ai-chats', aiChatsRouter);
   v1.use('/ai', aiLimiter, aiRouter);
   v1.use('/dev-notes', devNotesRouter);
+  v1.use('/communications', communicationsRouter);
   v1.use('/shortcut-token', shortcutTokenRouter);
 
   app.use('/v1', v1);

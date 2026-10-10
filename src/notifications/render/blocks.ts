@@ -211,7 +211,8 @@ export function renderNotification(
 ): RenderedNotification {
   let text = payload.kind === 'daily' ? renderDaily(payload, language, completedActions)
     : payload.kind === 'budget' ? renderBudget(payload, language)
-      : renderTrialStarted(payload, language);
+      : payload.kind === 'campaign' ? `<b>${safe(payload.title, 80)}</b>\n\n${safe(payload.body, 2_000)}`
+        : renderTrialStarted(payload, language);
   if (includeIntro) text += localized(language,
     '\n\n—\nЭто напоминания Pulim. Отключить: /stop',
     '\n\n—\nBu Pulim eslatmalari. O‘chirish: /stop',
