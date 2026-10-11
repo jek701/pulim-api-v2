@@ -482,6 +482,95 @@ export async function createHouseholdTransaction(uid: string, input: Row): Promi
   });
 }
 
+/** Edit an ordinary family operation and move its balance impact atomically. */
+export async function updateHouseholdTransaction(uid: string, id: string, patch: Row): Promise<Row> {
+  const household = await requireHousehold(uid);
+  const categoryId = typeof patch.categoryId === 'string' ? patch.categoryId : null;
+  const category = categoryId ? await categories().doc(categoryId).get() : null;
+  if (category && (!category.exists || category.data()!.householdId !== household.id)) {
+    throw AppError.notFound('Категория не найдена.');
+  }
+
+  return db.runTransaction(async (tx) => {
+    const ref = transactions().doc(id);
+    const snap = await tx.get(ref);
+    if (!snap.exists || snap.data()!.householdId !== household.id) {
+      throw AppError.notFound('Операция не найдена.');
+    }
+    const old = snap.data()!;
+    if (old.source) {
+      throw AppError.badRequest('Эту операцию нужно менять в соответствующем разделе.', { source: old.source });
+    }
+
+    const merged = { ...old, ...patch };
+    const oldCardId = old.cardId ? String(old.cardId) : undefined;
+    const newCardId = merged.cardId ? String(merged.cardId) : undefined;
+
+    // Firestore requires all reads before writes. The old card may no longer be
+    // shared, but its original balance impact still has to be reversed.
+    const oldCardRef = oldCardId ? cards().doc(oldCardId) : null;
+    const oldCardSnap = oldCardRef ? await tx.get(oldCardRef) : null;
+    const oldCardData = oldCardSnap?.exists ? oldCardSnap.data()! : null;
+    const oldCardIsOriginal = oldCardData && (
+      (oldCardData.scope === 'household' && oldCardData.householdId === household.id)
+      || (old.accountOwnerId && oldCardData.userId === old.accountOwnerId)
+    );
+    const newCard = newCardId === oldCardId && oldCardIsOriginal
+      ? (() => {
+          const shared = oldCardData.scope === 'household' && oldCardData.householdId === household.id;
+          const personal = oldCardData.familyAccess?.enabled === true
+            && oldCardData.familyAccess?.householdId === household.id;
+          if (!shared && !personal) {
+            throw AppError.forbidden('CARD_NOT_SHARED', 'Этот счёт недоступен семье.');
+          }
+          return { ref: oldCardRef!, data: oldCardData };
+        })()
+      : await allowedCard(tx, household.id, newCardId);
+
+    if (oldCardRef && oldCardData && oldCardIsOriginal && newCard && oldCardId === newCardId) {
+      const delta = -balanceDelta(oldCardData.cardType, old.type, old.amount)
+        + balanceDelta(newCard.data.cardType, merged.type, merged.amount);
+      if (delta !== 0) tx.update(oldCardRef, { balance: FieldValue.increment(delta) });
+    } else {
+      if (oldCardRef && oldCardData && oldCardIsOriginal) {
+        tx.update(oldCardRef, {
+          balance: FieldValue.increment(-balanceDelta(oldCardData.cardType, old.type, old.amount)),
+        });
+      }
+      if (newCard) {
+        tx.update(newCard.ref, {
+          balance: FieldValue.increment(balanceDelta(newCard.data.cardType, merged.type, merged.amount)),
+        });
+      }
+    }
+
+    const fallbackOwnerId = String(old.createdBy || uid);
+    const accountOwnerId = newCard?.data.scope === 'household'
+      ? undefined
+      : (newCard?.data.userId ?? fallbackOwnerId);
+    const writePatch: Row = {
+      ...patch,
+      ...(category ? {
+        categoryName: category.data()!.name,
+        categoryIcon: category.data()!.icon,
+        categoryColor: category.data()!.color,
+      } : {}),
+      accountOwnerId: accountOwnerId ?? FieldValue.delete(),
+      accountOwnerName: accountOwnerId ? memberName(household, accountOwnerId) : FieldValue.delete(),
+      userId: accountOwnerId ?? `household:${household.id}`,
+      updatedAt: Date.now(),
+    };
+    tx.set(ref, writePatch, { merge: true });
+    return {
+      id,
+      ...merged,
+      ...writePatch,
+      accountOwnerId,
+      accountOwnerName: accountOwnerId ? memberName(household, accountOwnerId) : undefined,
+    };
+  });
+}
+
 export async function deleteHouseholdTransaction(uid: string, id: string): Promise<void> {
   const household = await requireHousehold(uid);
   await db.runTransaction(async (tx) => {
@@ -491,6 +580,9 @@ export async function deleteHouseholdTransaction(uid: string, id: string): Promi
       throw AppError.notFound('Операция не найдена.');
     }
     const row = snap.data()!;
+    if (row.source) {
+      throw AppError.badRequest('Эту операцию нужно удалять в соответствующем разделе.', { source: row.source });
+    }
     const cardRef = row.cardId ? cards().doc(String(row.cardId)) : null;
     const cardSnap = cardRef ? await tx.get(cardRef) : null;
     const cardData = cardSnap?.exists ? cardSnap.data()! : null;

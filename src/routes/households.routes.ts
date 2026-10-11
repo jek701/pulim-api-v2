@@ -9,6 +9,7 @@ import {
   householdTelegramSchema,
   householdUpdateSchema,
   transactionCreateSchema,
+  transactionUpdateSchema,
 } from '../domain/schemas';
 import * as household from '../services/household.service';
 
@@ -67,6 +68,9 @@ router.get('/current/transactions', asyncHandler(async (req, res) => {
 }));
 router.post('/current/transactions', validate(transactionCreateSchema), asyncHandler(async (req, res) => {
   res.status(201).json(await household.createHouseholdTransaction(req.uid, req.body));
+}));
+router.patch('/current/transactions/:id', validate(transactionUpdateSchema), asyncHandler(async (req, res) => {
+  res.json(await household.updateHouseholdTransaction(req.uid, String(req.params.id), req.body));
 }));
 router.delete('/current/transactions/:id', asyncHandler(async (req, res) => {
   await household.deleteHouseholdTransaction(req.uid, String(req.params.id));
