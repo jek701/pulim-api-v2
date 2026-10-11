@@ -1,6 +1,7 @@
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../utils/AppError';
 import * as profileService from '../services/profile.service';
+import { syncMemberName } from '../services/household.service';
 import { getProfile, mergeProfile } from '../repositories/profile.repository';
 
 export const postBootstrap = asyncHandler(async (req, res) => {
@@ -19,6 +20,9 @@ export const getProfileHandler = asyncHandler(async (req, res) => {
 
 export const patchProfile = asyncHandler(async (req, res) => {
   await mergeProfile(req.uid, req.body);
+  if (typeof req.body.name === 'string' && req.body.name.trim()) {
+    await syncMemberName(req.uid, req.body.name);
+  }
   res.json(await getProfile(req.uid));
 });
 

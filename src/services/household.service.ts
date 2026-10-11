@@ -44,6 +44,25 @@ export async function requireHousehold(uid: string): Promise<Row> {
   return household;
 }
 
+/** Keep the denormalized member label in sync when a user changes their profile name. */
+export async function syncMemberName(uid: string, name: string): Promise<void> {
+  const household = await currentHousehold(uid);
+  const trimmedName = name.trim();
+  if (!household || !trimmedName) return;
+
+  const ref = households().doc(household.id);
+  await db.runTransaction(async tx => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) return;
+    const data = snap.data()!;
+    const members = (data.members ?? []).map((member: Row) => (
+      member.userId === uid ? { ...member, name: trimmedName } : member
+    ));
+    if (!members.some((member: Row) => member.userId === uid)) return;
+    tx.update(ref, { members, updatedAt: Date.now() });
+  });
+}
+
 export async function createHousehold(uid: string, input: { name: string; currency: string }): Promise<Row> {
   if (await currentHousehold(uid)) {
     throw new AppError(409, 'HOUSEHOLD_EXISTS', 'Вы уже состоите в совместном бюджете.');
