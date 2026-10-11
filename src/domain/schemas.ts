@@ -154,6 +154,13 @@ export const savingsGoalUpdateSchema = savingsGoalCreateSchema
   .pick({ name: true, icon: true, deadline: true, color: true })
   .extend({ targetAmount: z.number().finite().positive() })
   .partial();
+export const householdGoalCreateSchema = savingsGoalCreateSchema.extend({
+  targetAmount: z.number().finite().positive(),
+});
+export const householdGoalContributionSchema = z.object({
+  amount: z.number().finite().positive(),
+  accountId: z.string().min(1),
+});
 
 // --- Subscriptions ---
 export const subscriptionCreateSchema = z.object({

@@ -6,8 +6,11 @@ import {
   cardCreateSchema,
   householdCardAccessSchema,
   householdCreateSchema,
+  householdGoalContributionSchema,
+  householdGoalCreateSchema,
   householdTelegramSchema,
   householdUpdateSchema,
+  savingsGoalUpdateSchema,
   transactionCreateSchema,
   transactionUpdateSchema,
 } from '../domain/schemas';
@@ -61,6 +64,23 @@ router.post('/current/cards', validate(cardCreateSchema), asyncHandler(async (re
 }));
 router.patch('/current/cards/:id/access', validate(householdCardAccessSchema), asyncHandler(async (req, res) => {
   res.json(await household.setCardFamilyAccess(req.uid, String(req.params.id), req.body));
+}));
+
+router.get('/current/goals', asyncHandler(async (req, res) => {
+  res.json(await household.listHouseholdGoals(req.uid));
+}));
+router.post('/current/goals', validate(householdGoalCreateSchema), asyncHandler(async (req, res) => {
+  res.status(201).json(await household.createHouseholdGoal(req.uid, req.body));
+}));
+router.patch('/current/goals/:id', validate(savingsGoalUpdateSchema), asyncHandler(async (req, res) => {
+  res.json(await household.updateHouseholdGoal(req.uid, String(req.params.id), req.body));
+}));
+router.post('/current/goals/:id/contribute', validate(householdGoalContributionSchema), asyncHandler(async (req, res) => {
+  res.json(await household.contributeHouseholdGoal(req.uid, String(req.params.id), req.body.amount, req.body.accountId));
+}));
+router.delete('/current/goals/:id', asyncHandler(async (req, res) => {
+  await household.deleteHouseholdGoal(req.uid, String(req.params.id));
+  res.status(204).end();
 }));
 
 router.get('/current/transactions', asyncHandler(async (req, res) => {

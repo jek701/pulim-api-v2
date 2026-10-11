@@ -20,6 +20,7 @@ const cards = () => db.collection('cards');
 const transactions = () => db.collection('transactions');
 const categories = () => db.collection('categories');
 const budgets = () => db.collection('budgets');
+const savingsGoals = () => db.collection('savingsGoals');
 const invitePicks = () => db.collection('householdInvitePicks');
 
 const INVITE_PICK_TTL_MS = 60 * 60 * 1000;
@@ -416,6 +417,105 @@ export async function setCardFamilyAccess(
   await ref.update({ familyAccess });
   const updated = await ref.get();
   return { id: updated.id, ...updated.data() };
+}
+
+export async function listHouseholdGoals(uid: string): Promise<Row[]> {
+  const household = await requireHousehold(uid);
+  const snap = await savingsGoals().where('householdId', '==', household.id).get();
+  return snap.docs
+    .map(doc => ({ id: doc.id, ...doc.data() }) as Row)
+    .sort((a, b) => (a.deadline ?? 0) - (b.deadline ?? 0));
+}
+
+export async function createHouseholdGoal(uid: string, input: Row): Promise<Row> {
+  const household = await requireHousehold(uid);
+  const ref = savingsGoals().doc();
+  const row = {
+    ...input,
+    savedAmount: 0,
+    scope: 'household',
+    householdId: household.id,
+    userId: `household:${household.id}`,
+    createdBy: uid,
+    createdAt: Date.now(),
+  };
+  await ref.create(row);
+  return { id: ref.id, ...row };
+}
+
+export async function updateHouseholdGoal(uid: string, id: string, patch: Row): Promise<Row> {
+  const household = await requireHousehold(uid);
+  const ref = savingsGoals().doc(id);
+  const snap = await ref.get();
+  if (!snap.exists || snap.data()!.householdId !== household.id) {
+    throw AppError.notFound('Цель не найдена.');
+  }
+  const update = { ...patch, updatedAt: Date.now() };
+  await ref.set(update, { merge: true });
+  return { id, ...snap.data(), ...update };
+}
+
+/** Atomically move money from a family-visible account into the canonical shared goal. */
+export async function contributeHouseholdGoal(
+  uid: string,
+  id: string,
+  amount: number,
+  accountId: string,
+): Promise<Row> {
+  const household = await requireHousehold(uid);
+  return db.runTransaction(async (tx) => {
+    const goalRef = savingsGoals().doc(id);
+    const goalSnap = await tx.get(goalRef);
+    if (!goalSnap.exists || goalSnap.data()!.householdId !== household.id) {
+      throw AppError.notFound('Цель не найдена.');
+    }
+    const goal = goalSnap.data()!;
+    const card = await allowedCard(tx, household.id, accountId);
+    if (!card) throw AppError.notFound('Счёт не найден.');
+    if (card.data.currency !== goal.currency) {
+      throw AppError.badRequest('Валюта счёта должна совпадать с валютой цели.');
+    }
+
+    const now = Date.now();
+    const accountOwnerId = card.data.scope === 'household' ? undefined : card.data.userId;
+    const transactionRef = transactions().doc();
+    tx.update(goalRef, { savedAmount: FieldValue.increment(amount), updatedAt: now });
+    tx.update(card.ref, {
+      balance: FieldValue.increment(balanceDelta(card.data.cardType, 'expense', amount)),
+    });
+    tx.create(transactionRef, {
+      type: 'expense',
+      amount,
+      currency: goal.currency,
+      categoryId: '',
+      cardId: accountId,
+      source: 'savings',
+      sourceLabel: `Savings: ${goal.name}`,
+      goalId: id,
+      scope: 'household',
+      householdId: household.id,
+      createdBy: uid,
+      createdByName: memberName(household, uid),
+      ...(accountOwnerId ? {
+        accountOwnerId,
+        accountOwnerName: memberName(household, accountOwnerId),
+      } : {}),
+      userId: accountOwnerId ?? `household:${household.id}`,
+      date: now,
+      createdAt: now,
+    });
+    return { id, contributed: amount };
+  });
+}
+
+export async function deleteHouseholdGoal(uid: string, id: string): Promise<void> {
+  const household = await requireHousehold(uid);
+  const ref = savingsGoals().doc(id);
+  const snap = await ref.get();
+  if (!snap.exists || snap.data()!.householdId !== household.id) {
+    throw AppError.notFound('Цель не найдена.');
+  }
+  await ref.delete();
 }
 
 async function allowedCard(
