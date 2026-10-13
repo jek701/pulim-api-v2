@@ -1,5 +1,26 @@
 # Production cutover Firestore → MySQL
 
+## Выполнено 13 октября 2026
+
+Переключение разрешено владельцем и выполнено. Production API `fd3a49a` работает
+с `pulim_app`; UI `5ab75ac` развёрнут из migration branch (PR #1 остаётся открытым).
+Payment сохранён на `f37069e`, его код и тарифы не обновлялись. Все пять PM2-процессов
+online; внешние API/Payment readiness и сайт вернули HTTP 200.
+
+Финальный snapshot: 3242 документа. Непосредственно перед открытием SQL verify:
+compared=3242, mismatches=0, projectionMismatches=0, countMismatches=0.
+Firestore freeze verification до и после открытия: compared=3242, changed=0.
+Paid entitlements: 2, несовпадений billingVersion и срока Premium при проверке
+в UTC нет. Payment outbox: DELIVERED=11, прежний DEAD=1 сохранён.
+
+Защищённые snapshots, исходные конфигурации, старый API artifact и временные отметки
+freeze/T1/open сохранены в `/root/pulim-backups/firestore-mysql-20261013`.
+Первый post-cutover dump обеих баз создан в `mysql-daily/20261013T185241Z`.
+Ежедневный root cron: 03:17 по часовому поясу сервера, backup app и Payment,
+проверка gzip и SHA256; автоматическое удаление копий выключено.
+Firebase Auth и исходный Firestore сохранены. После T1 действует процедура
+fix-forward/актуального reverse mapping ниже, а не возврат к старому snapshot.
+
 Дата подготовки: 13 октября 2026. Production: SSH `myserver`, Node 24.15,
 MySQL 8.0.46; API `/root/pulim-api-v2`, UI `/root/pulim-ui-v2`,
 Payment `/root/pulim-payment-api`.

@@ -183,3 +183,14 @@ Production preflight: server Node 24.15.0 / MySQL 8.0.46, root-only stage build 
 подготовлены, текущие API/UI/Payment продолжают работать в старом режиме.
 Cloud Functions API disabled; client writes уже запрещены; composite indexes=0, TTL=0.
 Операционный шаг остаётся в [cutover runbook](mysql-cutover.ru.md).
+
+## Production переключён — 13 октября 2026, 23:52 Asia/Tashkent
+
+После явного разрешения владельца writers остановлены и сделан финальный snapshot.
+Все 3242 документа перенесены в отдельную production `pulim_app`, полная проверка
+перед открытием показала ноль расхождений данных, проекций и количества.
+Исходный Firestore после открытия остался неизменным. API/UI обновлены; Payment
+перезапущен с прежним кодом и тарифами, Auth сохранён. Все пять процессов online,
+три внешние HTTP-проверки вернули 200. Paid billingVersion и сроки совпадают в UTC.
+Созданы серверные backups и ежедневный cron. Результат и дальнейшая процедура
+восстановления зафиксированы в [cutover runbook](mysql-cutover.ru.md).
