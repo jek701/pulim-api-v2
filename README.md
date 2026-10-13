@@ -190,6 +190,11 @@ FX loops, webhook registration, notifications and communication workers.
 `MAINTENANCE_MODE=true` returns 503 on all non-health API routes and disables jobs.
 `NOTIFICATIONS_ENABLED=false` alone still allows communications in normal worker mode.
 
+For a limited notification rollout, set `NOTIFY_ALLOWED_UIDS` to the comma-separated
+Firebase UIDs allowed to receive queued Telegram messages (including campaigns).
+An empty value allows all recipients when `NOTIFICATIONS_ENABLED=true`. The allowlist
+limits planning, queue creation and delivery without changing other users’ settings.
+
 Run exactly one worker. `/health` and `/health/live` are liveness endpoints;
 `/health/ready` checks MySQL and the schema migration marker. Startup fails closed
 when SQL is unavailable; there is no Firestore fallback. Graceful shutdown drains

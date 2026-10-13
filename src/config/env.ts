@@ -60,6 +60,8 @@ const EnvSchema = z
     // Notifications are dark-launched: deploy infrastructure and backfill first,
     // then enable the worker explicitly in the environment.
     NOTIFICATIONS_ENABLED: boolish,
+    // Empty keeps the full rollout; a non-empty list limits every queued Telegram delivery.
+    NOTIFY_ALLOWED_UIDS: z.string().default(''),
     NOTIFY_EMBEDDED: boolish,
     NOTIFY_TIMEZONE: z.string().default('Asia/Tashkent'),
     NOTIFY_DIGEST_HOUR: z.coerce.number().int().min(0).max(23).default(10),
@@ -255,3 +257,10 @@ export const isProd = env.NODE_ENV === 'production';
 
 /** Eskiz can only be called once the cabinet credentials are present. */
 export const eskizConfigured = Boolean(env.ESKIZ_EMAIL && env.ESKIZ_PASSWORD);
+
+export const notificationAllowedUids = new Set(
+  env.NOTIFY_ALLOWED_UIDS.split(',').map((uid) => uid.trim()).filter(Boolean),
+);
+export function notificationRecipientAllowed(uid: string): boolean {
+  return notificationAllowedUids.size === 0 || notificationAllowedUids.has(uid);
+}

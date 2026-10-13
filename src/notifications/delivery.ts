@@ -1,4 +1,4 @@
-import { env } from '../config/env';
+import { env, notificationRecipientAllowed } from '../config/env';
 import { getProfile } from '../repositories/profile.repository';
 import { TelegramApiError, sendMessage } from '../telegram/client';
 import { normalizeLanguage } from '../telegram/i18n';
@@ -43,6 +43,7 @@ async function deliver(
   now: number,
   lastAttemptByChat: Map<string, number>,
 ): Promise<void> {
+  if (!notificationRecipientAllowed(notification.userId)) return;
   if (now > notification.staleAt) {
     await finishNotification(notification.id, 'skipped', 'stale');
     if (notification.payload.kind === 'campaign') {

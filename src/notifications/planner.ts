@@ -7,7 +7,7 @@ import {
   queryTable,
   readDocument,
 } from '../db/documents';
-import { env } from '../config/env';
+import { env, notificationAllowedUids, notificationRecipientAllowed } from '../config/env';
 import type { Budget, Category, Subcategory, Transaction, UserProfile } from '../domain/types';
 import { getProfile, profileRef } from '../repositories/profile.repository';
 import { logger } from '../utils/logger';
@@ -72,6 +72,7 @@ async function processProfile(
   now: number,
 ): Promise<'queued' | 'skipped'> {
   const uid = document.id;
+  if (!notificationRecipientAllowed(uid)) return 'skipped';
   const dueAt = Number(document.data.notifications?.nextDailyAt ?? now);
   const next = nextDailySlot(now, env.NOTIFY_DIGEST_HOUR, env.NOTIFY_TIMEZONE);
   await patchDocument(profileRef(uid), { 'notifications.nextDailyAt': next, updatedAt: now });
@@ -160,7 +161,20 @@ export async function runPlanner(now = Date.now()): Promise<{
   const recoveredTasks = await recoverExpiredBudgetTasks(now);
   if (recoveredTasks) logger.warn({ recoveredTasks }, 'notify.budget_tasks.recovered');
   const totals = { scanned: 0, queued: 0, skipped: 0 };
-  for (let page = 0; page < 10; page += 1) {
+  if (notificationAllowedUids.size) {
+    for (const uid of notificationAllowedUids) {
+      const document = await readDocument(profileRef(uid));
+      const dueAt = Number(document.data.notifications?.nextDailyAt ?? 0);
+      if (!document.exists || dueAt <= 0 || dueAt > now) continue;
+      totals.scanned += 1;
+      try {
+        totals[await processProfile(document, now)] += 1;
+      } catch (error) {
+        totals.skipped += 1;
+        logger.error({ err: error, uid }, 'notify.planner.profile_failed');
+      }
+    }
+  } else for (let page = 0; page < 10; page += 1) {
     const snapshot = await readDocument(
       limitQuery(
         orderQuery(

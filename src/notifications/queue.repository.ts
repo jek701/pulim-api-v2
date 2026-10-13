@@ -13,7 +13,7 @@ import {
   saveDocument,
 } from '../db/documents';
 import { createHash } from 'node:crypto';
-import { env } from '../config/env';
+import { env, notificationAllowedUids, notificationRecipientAllowed } from '../config/env';
 import type { NotificationSettings, UserProfile } from '../domain/types';
 import { getProfile, profileRef } from '../repositories/profile.repository';
 import { logger } from '../utils/logger';
@@ -27,8 +27,14 @@ import type {
   QueuedNotification,
   TrialStartedPayload,
 } from './types';
-const notificationCollection = () => queryTable('notifications');
-const taskCollection = () => queryTable('notificationTasks');
+function scopedCollection(name: 'notifications' | 'notificationTasks') {
+  const query = queryTable(name);
+  return notificationAllowedUids.size
+    ? filterQuery(query, 'userId', 'in', [...notificationAllowedUids])
+    : query;
+}
+const notificationCollection = () => scopedCollection('notifications');
+const taskCollection = () => scopedCollection('notificationTasks');
 function digest(value: string): string {
   return createHash('sha256').update(value).digest('hex').slice(0, 32);
 }
@@ -50,6 +56,7 @@ export async function createNotification(input: {
   stateKeys?: string[];
   stateEffects?: NotificationStateEffects;
 }): Promise<boolean> {
+  if (!notificationRecipientAllowed(input.userId)) return false;
   const now = Date.now();
   const runAt = input.runAt ?? now;
   const ref = documentKey(notificationCollection(), digest(input.dedupeKey));
@@ -88,7 +95,7 @@ export async function createNotification(input: {
   }
 }
 export async function queueTrialStarted(uid: string): Promise<boolean> {
-  if (!env.NOTIFICATIONS_ENABLED) return false;
+  if (!env.NOTIFICATIONS_ENABLED || !notificationRecipientAllowed(uid)) return false;
   const profile = await getProfile(uid);
   const settings = profile?.notifications;
   const premiumUntil = profile?.subscription?.premiumUntil;
@@ -107,7 +114,7 @@ export async function queueTrialStarted(uid: string): Promise<boolean> {
   });
 }
 export async function scheduleBudgetCheck(uid: string): Promise<void> {
-  if (!env.NOTIFICATIONS_ENABLED) return;
+  if (!env.NOTIFICATIONS_ENABLED || !notificationRecipientAllowed(uid)) return;
   const ref = documentKey(taskCollection(), digest(`budget_check:${uid}`));
   const now = Date.now();
   await runSqlTransaction(async (transaction) => {
@@ -577,6 +584,7 @@ export function profileCanReceive(
 } {
   const settings = profile?.notifications;
   return Boolean(
+    profile && notificationRecipientAllowed(profile.id) &&
     settings?.enabled &&
     settings.telegram.chatId &&
     settings.telegram.status !== 'blocked' &&
