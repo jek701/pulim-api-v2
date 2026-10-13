@@ -1,15 +1,24 @@
-import { db } from '../config/firebase';
+import {
+  filterQuery,
+  limitQuery,
+  patchDocument,
+  queryTable,
+  readDocument,
+  runSqlTransaction,
+  writeBatch,
+} from '../db/documents';
 import { env } from '../config/env';
 import type { NotificationSettings, UserProfile } from '../domain/types';
 import { profileRef } from '../repositories/profile.repository';
 import { nextDailySlot } from './schedule';
-
 function latestChatId(profile: Partial<UserProfile>): string | null {
   const ids = profile.telegramChatIds ?? [];
   return ids.length ? String(ids[ids.length - 1]) : null;
 }
-
-export function notificationDefaults(profile: Partial<UserProfile>, now = Date.now()): NotificationSettings {
+export function notificationDefaults(
+  profile: Partial<UserProfile>,
+  now = Date.now(),
+): NotificationSettings {
   return {
     enabled: true,
     telegram: {
@@ -27,49 +36,64 @@ export function notificationDefaults(profile: Partial<UserProfile>, now = Date.n
     lastSentAt: null,
   };
 }
-
 export async function ensureNotificationDefaults(uid: string): Promise<void> {
   const ref = profileRef(uid);
-  await db.runTransaction(async (transaction) => {
-    const snap = await transaction.get(ref);
+  await runSqlTransaction(async (transaction) => {
+    const snap = await transaction.read(ref);
     if (!snap.exists) return;
-    const data = snap.data() as UserProfile;
+    const data = snap.data as UserProfile;
     const patch: Record<string, unknown> = {};
     if (typeof data.createdAt !== 'number') patch.createdAt = data.updatedAt || Date.now();
     if (!data.notifications) patch.notifications = notificationDefaults(data);
     if (Object.keys(patch).length) {
       patch.updatedAt = Date.now();
-      transaction.set(ref, patch, { merge: true });
+      transaction.save(ref, patch, { merge: true });
     }
   });
 }
-
 async function cancelPending(uid: string, reason: string, includeCampaign = true): Promise<void> {
   while (true) {
-    const snapshot = await db.collection('notifications')
-      .where('userId', '==', uid)
-      .where('status', '==', 'pending')
-      .limit(400)
-      .get();
+    const snapshot = await readDocument(
+      limitQuery(
+        filterQuery(
+          filterQuery(queryTable('notifications'), 'userId', '==', uid),
+          'status',
+          '==',
+          'pending',
+        ),
+        400,
+      ),
+    );
     if (snapshot.empty) return;
     const cancellable = includeCampaign
-      ? snapshot.docs
-      : snapshot.docs.filter((document) => document.data().type !== 'campaign');
+      ? snapshot.rows
+      : snapshot.rows.filter((document) => document.data.type !== 'campaign');
     if (!cancellable.length) return;
-    const batch = db.batch();
+    const batch = writeBatch();
     const now = Date.now();
-    cancellable.forEach((document) => batch.set(document.ref, {
-      status: 'cancelled', skipReason: reason, leaseUntil: null, updatedAt: now,
-    }, { merge: true }));
+    cancellable.forEach((document) =>
+      batch.save(
+        document.key,
+        {
+          status: 'cancelled',
+          skipReason: reason,
+          leaseUntil: null,
+          updatedAt: now,
+        },
+        { merge: true },
+      ),
+    );
     await batch.commit();
     if (snapshot.size < 400 || cancellable.length < snapshot.size) return;
   }
 }
-
-export async function setNotificationsEnabled(uid: string, enabled: boolean): Promise<NotificationSettings> {
+export async function setNotificationsEnabled(
+  uid: string,
+  enabled: boolean,
+): Promise<NotificationSettings> {
   await ensureNotificationDefaults(uid);
   const now = Date.now();
-  await profileRef(uid).update({
+  await patchDocument(profileRef(uid), {
     'notifications.enabled': enabled,
     'notifications.nextDailyAt': enabled
       ? nextDailySlot(now, env.NOTIFY_DIGEST_HOUR, env.NOTIFY_TIMEZONE)
@@ -77,14 +101,13 @@ export async function setNotificationsEnabled(uid: string, enabled: boolean): Pr
     updatedAt: now,
   });
   if (!enabled) await cancelPending(uid, 'disabled', false);
-  const snap = await profileRef(uid).get();
-  return snap.data()!.notifications as NotificationSettings;
+  const snap = await readDocument(profileRef(uid));
+  return snap.data!.notifications as NotificationSettings;
 }
-
 export async function markTelegramReachable(uid: string, chatId: string): Promise<void> {
   await ensureNotificationDefaults(uid);
   const now = Date.now();
-  await profileRef(uid).update({
+  await patchDocument(profileRef(uid), {
     'notifications.telegram.chatId': String(chatId),
     'notifications.telegram.status': 'reachable',
     'notifications.telegram.lastError': null,
@@ -92,7 +115,6 @@ export async function markTelegramReachable(uid: string, chatId: string): Promis
     updatedAt: now,
   });
 }
-
 export async function markTelegramUnavailable(
   uid: string,
   status: 'blocked' | 'unreachable',
@@ -100,7 +122,7 @@ export async function markTelegramUnavailable(
 ): Promise<void> {
   await ensureNotificationDefaults(uid);
   const now = Date.now();
-  await profileRef(uid).update({
+  await patchDocument(profileRef(uid), {
     'notifications.telegram.status': status,
     'notifications.telegram.lastError': error.slice(0, 500),
     'notifications.telegram.checkedAt': now,

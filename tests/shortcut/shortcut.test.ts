@@ -20,7 +20,8 @@ function collection(name: string) {
     doc,
     where: (field: string, _op: string, value: unknown) => ({
       get: async () => {
-        const docs = [...rows.entries()].filter(([, row]) => row[field] === value)
+        const docs = [...rows.entries()]
+          .filter(([, row]) => row[field] === value)
           .map(([id, row]) => ({ id, data: () => row, ref: { id, collection: name } }));
         return { empty: docs.length === 0, docs };
       },
@@ -28,26 +29,59 @@ function collection(name: string) {
   };
 }
 
-vi.mock('../../src/config/firebase', () => ({
-  db: {
-    collection,
-    batch: () => {
-      const deletes: Array<{ id: string; collection: string }> = [];
+vi.mock('../../src/db/documents', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/db/documents')>();
+  const rowsFor = (name: string) => {
+    if (!store.collections.has(name)) store.collections.set(name, new Map());
+    return store.collections.get(name)!;
+  };
+  return {
+    ...actual,
+    readDocument: async (input: {
+      table: string;
+      id?: string;
+      filters?: Array<{ field: string; value: unknown }>;
+    }) => {
+      const rows = rowsFor(input.table);
+      const record = (id: string, data: Row | undefined) => ({
+        id,
+        key: { table: input.table, id },
+        exists: !!data,
+        data,
+      });
+      if (input.id) return record(input.id, rows.get(input.id));
+      const records = [...rows]
+        .filter(([, data]) =>
+          (input.filters ?? []).every((filter) => data[filter.field] === filter.value),
+        )
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([id, data]) => record(id, data));
+      return { rows: records, empty: !records.length, size: records.length };
+    },
+    insertDocument: async (key: { table: string; id: string }, data: Row) =>
+      rowsFor(key.table).set(key.id, data),
+    patchDocument: async (key: { table: string; id: string }, patch: Row) => {
+      const rows = rowsFor(key.table);
+      rows.set(key.id, { ...rows.get(key.id), ...patch });
+    },
+    writeBatch: () => {
+      const keys: Array<{ table: string; id: string }> = [];
       return {
-        delete: (ref: { id: string; collection: string }) => deletes.push(ref),
-        commit: async () => deletes.forEach((ref) => store.collections.get(ref.collection)!.delete(ref.id)),
+        remove: (key: { table: string; id: string }) => keys.push(key),
+        commit: async () => keys.forEach((key) => rowsFor(key.table).delete(key.id)),
       };
     },
-  },
-  auth: {},
-  Timestamp: {},
-  FieldValue: {},
-}));
+  };
+});
 
 const premium = vi.hoisted(() => ({ value: true }));
 const created = vi.hoisted(() => [] as Row[]);
-vi.mock('../../src/services/entitlement.service', () => ({ getIsPremium: async () => premium.value }));
-vi.mock('../../src/repositories/profile.repository', () => ({ getProfile: async () => ({ language: 'ru' }) }));
+vi.mock('../../src/services/entitlement.service', () => ({
+  getIsPremium: async () => premium.value,
+}));
+vi.mock('../../src/repositories/profile.repository', () => ({
+  getProfile: async () => ({ language: 'ru' }),
+}));
 vi.mock('../../src/services/fxRates.service', () => ({ getRateToBase: async () => 12_800 }));
 vi.mock('../../src/services/transaction.service', () => ({
   createTransaction: async (_uid: string, input: Row) => {
@@ -63,13 +97,49 @@ function seed() {
   created.length = 0;
   premium.value = true;
   const cards = collection('cards');
-  void cards.doc('humo').create({ userId: 'u1', name: 'Humo', bank: 'Kapital', cardType: 'debit', currency: 'UZS', balance: 500_000, createdAt: 1 });
-  void cards.doc('visa').create({ userId: 'u1', name: 'Visa', bank: '', cardType: 'debit', currency: 'USD', balance: 100, createdAt: 2 });
-  void cards.doc('other').create({ userId: 'u2', name: 'Not mine', bank: '', cardType: 'debit', currency: 'UZS', balance: 0, createdAt: 3 });
-  void collection('userSettings').doc('u1').create({ cardOrder: ['visa', 'humo'] });
+  void cards
+    .doc('humo')
+    .create({
+      userId: 'u1',
+      name: 'Humo',
+      bank: 'Kapital',
+      cardType: 'debit',
+      currency: 'UZS',
+      balance: 500_000,
+      createdAt: 1,
+    });
+  void cards
+    .doc('visa')
+    .create({
+      userId: 'u1',
+      name: 'Visa',
+      bank: '',
+      cardType: 'debit',
+      currency: 'USD',
+      balance: 100,
+      createdAt: 2,
+    });
+  void cards
+    .doc('other')
+    .create({
+      userId: 'u2',
+      name: 'Not mine',
+      bank: '',
+      cardType: 'debit',
+      currency: 'UZS',
+      balance: 0,
+      createdAt: 3,
+    });
+  void collection('userSettings')
+    .doc('u1')
+    .create({ cardOrder: ['visa', 'humo'] });
   const categories = collection('categories');
-  void categories.doc('food').create({ userId: 'u1', name: 'Food', icon: '🍔', type: 'expense', createdAt: 1 });
-  void categories.doc('salary').create({ userId: 'u1', name: 'Salary', icon: '💼', type: 'income', createdAt: 2 });
+  void categories
+    .doc('food')
+    .create({ userId: 'u1', name: 'Food', icon: '🍔', type: 'expense', createdAt: 1 });
+  void categories
+    .doc('salary')
+    .create({ userId: 'u1', name: 'Salary', icon: '💼', type: 'income', createdAt: 2 });
 }
 
 describe('shortcut keys', () => {
@@ -81,32 +151,43 @@ describe('shortcut keys', () => {
     expect(token.startsWith('pulim_sc_')).toBe(true);
     expect(status).toMatchObject({ active: true, hint: token.slice(-4) });
     expect([...store.collections.get('shortcutTokens')!.keys()]).not.toContain(token);
-    await expect(shortcut.authenticateShortcut(`Bearer ${token}`, 'ru')).resolves.toEqual({ uid: 'u1', language: 'ru' });
+    await expect(shortcut.authenticateShortcut(`Bearer ${token}`, 'ru')).resolves.toEqual({
+      uid: 'u1',
+      language: 'ru',
+    });
   });
 
   it('a new key disconnects the old one', async () => {
     const first = await shortcut.issueShortcutToken('u1');
     await shortcut.issueShortcutToken('u1');
 
-    await expect(shortcut.authenticateShortcut(`Bearer ${first.token}`, 'ru')).rejects.toMatchObject({ status: 401 });
+    await expect(
+      shortcut.authenticateShortcut(`Bearer ${first.token}`, 'ru'),
+    ).rejects.toMatchObject({ status: 401 });
   });
 
   it('free users cannot create a key', async () => {
     premium.value = false;
-    await expect(shortcut.issueShortcutToken('u1')).rejects.toMatchObject({ code: 'PREMIUM_REQUIRED' });
+    await expect(shortcut.issueShortcutToken('u1')).rejects.toMatchObject({
+      code: 'PREMIUM_REQUIRED',
+    });
   });
 
   it('explains Premium when an existing key belongs to a lapsed subscriber', async () => {
     const { token } = await shortcut.issueShortcutToken('u1');
     premium.value = false;
 
-    await expect(shortcut.authenticateShortcut(`Bearer ${token}`, 'ru'))
-      .rejects.toMatchObject({ status: 402, text: expect.stringContaining('Premium') });
+    await expect(shortcut.authenticateShortcut(`Bearer ${token}`, 'ru')).rejects.toMatchObject({
+      status: 402,
+      text: expect.stringContaining('Premium'),
+    });
   });
 
   it('rejects malformed keys with a readable message', async () => {
-    await expect(shortcut.authenticateShortcut('Bearer nope', 'en'))
-      .rejects.toMatchObject({ status: 401, text: expect.stringContaining('Settings') });
+    await expect(shortcut.authenticateShortcut('Bearer nope', 'en')).rejects.toMatchObject({
+      status: 401,
+      text: expect.stringContaining('Settings'),
+    });
   });
 });
 
@@ -120,9 +201,19 @@ describe('shortcut expense entry', () => {
   });
 
   it('records the expense on the picked card', async () => {
-    const reply = await shortcut.addShortcutExpense(user, { amount: '25 000', card: '💳 Humo · Kapital', category: '🍔 Еда' });
+    const reply = await shortcut.addShortcutExpense(user, {
+      amount: '25 000',
+      card: '💳 Humo · Kapital',
+      category: '🍔 Еда',
+    });
 
-    expect(created[0]).toMatchObject({ type: 'expense', amount: 25_000, currency: 'UZS', cardId: 'humo', categoryId: 'food' });
+    expect(created[0]).toMatchObject({
+      type: 'expense',
+      amount: 25_000,
+      currency: 'UZS',
+      cardId: 'humo',
+      categoryId: 'food',
+    });
     expect(reply).toContain('✅ Записано');
     expect(reply).toContain('Остаток');
   });
@@ -130,14 +221,25 @@ describe('shortcut expense entry', () => {
   it('stores the NBU rate for a foreign-currency card so statistics stay in UZS', async () => {
     await shortcut.addShortcutExpense(user, { amount: 10, card: '💳 Visa', category: '🍔 Еда' });
 
-    expect(created[0]).toMatchObject({ currency: 'USD', baseAmount: 128_000, fxRate: 12_800, fxRateSource: 'NBU' });
+    expect(created[0]).toMatchObject({
+      currency: 'USD',
+      baseAmount: 128_000,
+      fxRate: 12_800,
+      fxRateSource: 'NBU',
+    });
   });
 
   it('refuses unknown cards and categories instead of guessing', async () => {
-    await expect(shortcut.addShortcutExpense(user, { amount: 1000, card: '💳 Not mine', category: '🍔 Еда' }))
-      .rejects.toMatchObject({ status: 400 });
-    await expect(shortcut.addShortcutExpense(user, { amount: 1000, card: '💳 Humo · Kapital', category: '💼 Зарплата' }))
-      .rejects.toMatchObject({ status: 400 });
+    await expect(
+      shortcut.addShortcutExpense(user, { amount: 1000, card: '💳 Not mine', category: '🍔 Еда' }),
+    ).rejects.toMatchObject({ status: 400 });
+    await expect(
+      shortcut.addShortcutExpense(user, {
+        amount: 1000,
+        card: '💳 Humo · Kapital',
+        category: '💼 Зарплата',
+      }),
+    ).rejects.toMatchObject({ status: 400 });
     expect(created).toHaveLength(0);
   });
 
@@ -145,7 +247,15 @@ describe('shortcut expense entry', () => {
     expect(shortcut.parseShortcutAmount(value)).toBeNull();
   });
 
-  it.each([['25000', 25_000], ['25 000', 25_000], ['25,000', 25_000], ['1.250.000', 1_250_000], ['12,5', 12.5], ['12.50', 12.5], [42, 42]] as const)('parses amount %s', (value, expected) => {
+  it.each([
+    ['25000', 25_000],
+    ['25 000', 25_000],
+    ['25,000', 25_000],
+    ['1.250.000', 1_250_000],
+    ['12,5', 12.5],
+    ['12.50', 12.5],
+    [42, 42],
+  ] as const)('parses amount %s', (value, expected) => {
     expect(shortcut.parseShortcutAmount(value)).toBe(expected);
   });
 });

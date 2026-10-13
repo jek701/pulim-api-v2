@@ -1,9 +1,16 @@
-import { db, Timestamp } from '../config/firebase';
+import {
+  DocumentData,
+  Timestamp,
+  documentKey,
+  insertDocument,
+  queryTable,
+  readDocument,
+  saveDocument,
+} from '../db/documents';
 import { env } from '../config/env';
 import { createHash } from 'node:crypto';
 import type { DraftReason } from './types';
 import type { ParsedOperationKind } from './types';
-
 export interface DraftInput {
   userId: string;
   chatId: string;
@@ -14,22 +21,28 @@ export interface DraftInput {
   operationType?: ParsedOperationKind;
   draft: Record<string, unknown>;
   amountAlternative: number | null;
-  suggestion: { categoryName: string; categoryIcon: string } | null;
+  suggestion: {
+    categoryName: string;
+    categoryIcon: string;
+  } | null;
   reasons: DraftReason[];
   status?: 'pending' | 'waiting_fx';
 }
-
-export async function createDraft(input: DraftInput): Promise<({ id: string } & DraftInput & Record<string, unknown>)> {
+export async function createDraft(input: DraftInput): Promise<
+  {
+    id: string;
+  } & DraftInput &
+    Record<string, unknown>
+> {
   const id = createHash('sha256').update(`${input.userId}:${input.operationKey}`).digest('hex');
-  const ref = db.collection('telegramDrafts').doc(id);
+  const ref = documentKey(queryTable('telegramDrafts'), id);
   const now = Date.now();
   const status = input.status ?? 'pending';
-  const ttlHours = status === 'waiting_fx'
-    ? env.TELEGRAM_FX_MAX_RETRY_HOURS
-    : env.TELEGRAM_DRAFT_TTL_HOURS;
-  const expiresAtMs = now + ttlHours * 60 * 60_000;
+  const ttlHours =
+    status === 'waiting_fx' ? env.TELEGRAM_FX_MAX_RETRY_HOURS : env.TELEGRAM_DRAFT_TTL_HOURS;
+  const expiresAtMs = now + ttlHours * 60 * 60000;
   try {
-    await ref.create({
+    await insertDocument(ref, {
       ...input,
       sourceText: input.sourceText.slice(0, 500),
       status,
@@ -43,19 +56,25 @@ export async function createDraft(input: DraftInput): Promise<({ id: string } & 
     });
     return { id: ref.id, ...input, status };
   } catch (error) {
-    const code = (error as { code?: number | string }).code;
+    const code = (
+      error as {
+        code?: number | string;
+      }
+    ).code;
     if (code !== 6 && code !== 'already-exists') throw error;
-    const existing = await ref.get();
-    return { id: existing.id, ...input, ...existing.data() };
+    const existing = await readDocument(ref);
+    return { id: existing.id, ...input, ...existing.data };
   }
 }
-
 export async function updateDraft(id: string, patch: Record<string, unknown>): Promise<void> {
-  await db.collection('telegramDrafts').doc(id).set({ ...patch, updatedAt: Date.now() }, { merge: true });
+  await saveDocument(
+    documentKey(queryTable('telegramDrafts'), id),
+    { ...patch, updatedAt: Date.now() },
+    { merge: true },
+  );
 }
-
-export async function getOwnedDraft(id: string, uid: string): Promise<FirebaseFirestore.DocumentData | null> {
-  const snap = await db.collection('telegramDrafts').doc(id).get();
-  if (!snap.exists || snap.data()!.userId !== uid) return null;
-  return { id: snap.id, ...snap.data() };
+export async function getOwnedDraft(id: string, uid: string): Promise<DocumentData | null> {
+  const snap = await readDocument(documentKey(queryTable('telegramDrafts'), id));
+  if (!snap.exists || snap.data!.userId !== uid) return null;
+  return { id: snap.id, ...snap.data };
 }

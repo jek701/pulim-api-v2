@@ -1,7 +1,12 @@
-import { db, Timestamp } from '../config/firebase';
-
+import {
+  Timestamp,
+  documentKey,
+  queryTable,
+  readDocument,
+  runSqlTransaction,
+  saveDocument,
+} from '../db/documents';
 const COLLECTION = 'phoneVerifications';
-
 export interface PhoneVerificationRecord {
   /** SHA-256 of `code:phone` — the plain code is never stored. */
   codeHash: string;
@@ -19,15 +24,14 @@ export interface PhoneVerificationRecord {
   createdAt: number;
   updatedAt: number;
 }
-
 /** Doc id: bare digits, so `+998 90 123 45 67` and `998901234567` share one record. */
-const ref = (phoneDigits: string) => db.collection(COLLECTION).doc(phoneDigits);
-
-export async function getVerification(phoneDigits: string): Promise<PhoneVerificationRecord | null> {
-  const snap = await ref(phoneDigits).get();
-  return snap.exists ? (snap.data() as PhoneVerificationRecord) : null;
+const ref = (phoneDigits: string) => documentKey(queryTable(COLLECTION), phoneDigits);
+export async function getVerification(
+  phoneDigits: string,
+): Promise<PhoneVerificationRecord | null> {
+  const snap = await readDocument(ref(phoneDigits));
+  return snap.exists ? (snap.data as PhoneVerificationRecord) : null;
 }
-
 interface SaveInput {
   phoneDigits: string;
   codeHash: string;
@@ -39,11 +43,11 @@ interface SaveInput {
   /** TTL field for a Firestore policy on `expiresAt` — keeps the collection self-cleaning. */
   retainUntilMs: number;
 }
-
 export async function saveIssuedCode(input: SaveInput): Promise<void> {
   const now = Date.now();
-  const existed = (await ref(input.phoneDigits).get()).exists;
-  await ref(input.phoneDigits).set(
+  const existed = (await readDocument(ref(input.phoneDigits))).exists;
+  await saveDocument(
+    ref(input.phoneDigits),
     {
       codeHash: input.codeHash,
       purpose: input.purpose,
@@ -61,26 +65,24 @@ export async function saveIssuedCode(input: SaveInput): Promise<void> {
     { merge: true },
   );
 }
-
 export async function recordFailedAttempt(phoneDigits: string): Promise<number> {
-  return db.runTransaction(async (tx) => {
-    const snap = await tx.get(ref(phoneDigits));
-    const attempts = Number((snap.data() as PhoneVerificationRecord | undefined)?.attempts ?? 0) + 1;
-    tx.set(ref(phoneDigits), { attempts, updatedAt: Date.now() }, { merge: true });
+  return runSqlTransaction(async (tx) => {
+    const snap = await tx.read(ref(phoneDigits));
+    const attempts = Number((snap.data as PhoneVerificationRecord | undefined)?.attempts ?? 0) + 1;
+    tx.save(ref(phoneDigits), { attempts, updatedAt: Date.now() }, { merge: true });
     return attempts;
   });
 }
-
 /**
  * Atomically burns the code so a leaked SMS cannot be replayed and two parallel
  * requests cannot both mint a session. Returns false when it was already used.
  */
 export async function consumeCode(phoneDigits: string, codeHash: string): Promise<boolean> {
-  return db.runTransaction(async (tx) => {
-    const snap = await tx.get(ref(phoneDigits));
-    const data = snap.data() as PhoneVerificationRecord | undefined;
+  return runSqlTransaction(async (tx) => {
+    const snap = await tx.read(ref(phoneDigits));
+    const data = snap.data as PhoneVerificationRecord | undefined;
     if (!data || data.consumedAt || data.codeHash !== codeHash) return false;
-    tx.set(ref(phoneDigits), { consumedAt: Date.now(), updatedAt: Date.now() }, { merge: true });
+    tx.save(ref(phoneDigits), { consumedAt: Date.now(), updatedAt: Date.now() }, { merge: true });
     return true;
   });
 }

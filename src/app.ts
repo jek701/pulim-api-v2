@@ -1,7 +1,7 @@
 import express, { type Request } from 'express';
 import helmet from 'helmet';
 import cors, { type CorsOptions } from 'cors';
-import { corsOrigins, isProd } from './config/env';
+import { corsOrigins, env, isProd } from './config/env';
 import { requestLogger } from './middleware/requestContext';
 import { errorHandler } from './middleware/errorHandler';
 import { notFound } from './middleware/notFound';
@@ -42,13 +42,25 @@ export function createApp() {
   app.use(helmet());
   app.use(cors(buildCorsOptions()));
   app.use(requestLogger);
-  app.use(express.json({
-    limit: '1mb',
-    verify(req, _res, buffer) {
-      // Required for HMAC verification of payment-service events.
-      (req as Request).rawBody = Buffer.from(buffer);
-    },
-  }));
+  app.use((req, res, next) => {
+    if (!env.MAINTENANCE_MODE || /^\/health(?:\/(?:live|ready))?\/?$/.test(req.path)) {
+      next();
+      return;
+    }
+    res.setHeader('Retry-After', '60');
+    res
+      .status(503)
+      .json({ error: { code: 'MAINTENANCE', message: 'Service is temporarily unavailable.' } });
+  });
+  app.use(
+    express.json({
+      limit: '1mb',
+      verify(req, _res, buffer) {
+        // Required for HMAC verification of payment-service events.
+        (req as Request).rawBody = Buffer.from(buffer);
+      },
+    }),
+  );
 
   mountRoutes(app);
 

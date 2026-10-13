@@ -1,7 +1,7 @@
 {
   "name": "pulim-api",
   "version": "1.0.0",
-  "description": "Pulim budget tracker REST API (Firestore + Firebase Auth, TypeScript).",
+  "description": "Pulim budget tracker REST API (MySQL + Firebase Auth, TypeScript).",
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
@@ -13,8 +13,20 @@
     "lint": "eslint .",
     "test": "vitest run",
     "format": "prettier --write .",
-    "migrate:firestore": "tsx scripts/migrate-firestore.ts",
-    "backfill:notifications": "tsx scripts/backfill-notification-settings.ts"
+    "backfill:notifications": "tsx scripts/backfill-notification-settings.ts",
+    "data:inventory": "node --import tsx scripts/migration/inventory-firestore.ts",
+    "typecheck:migration": "tsc -p tsconfig.migration.json",
+    "db:migrate": "node --import tsx src/db/migrate.ts",
+    "db:migrate:prod": "node dist/db/migrate.js",
+    "data:export-firestore": "node --import tsx scripts/migration/cli.ts export-firestore",
+    "data:import-mysql": "node --import tsx scripts/migration/cli.ts import-mysql",
+    "data:verify": "node --import tsx scripts/migration/cli.ts verify",
+    "data:export-mysql": "node --import tsx scripts/migration/cli.ts export-mysql",
+    "data:restore-plan": "node --import tsx scripts/migration/cli.ts restore-plan",
+    "data:restore-firestore": "node --import tsx scripts/migration/cli.ts restore-firestore",
+    "test:mysql": "node --env-file=.env.mysql-test node_modules/vitest/vitest.mjs run tests/migration/mysql.integration.test.ts tests/migration/transfer.integration.test.ts --no-file-parallelism",
+    "prebuild": "node scripts/clean-dist.cjs",
+    "data:verify-source-frozen": "node --import tsx scripts/migration/cli.ts verify-source-frozen"
   },
   "keywords": [
     "budget",
@@ -24,6 +36,7 @@
   ],
   "license": "ISC",
   "dependencies": {
+    "@google-cloud/firestore": "7.11.6",
     "cors": "^2.8.5",
     "dayjs": "^1.11.21",
     "dotenv": "^16.4.7",
@@ -31,6 +44,8 @@
     "express-rate-limit": "^7.5.0",
     "firebase-admin": "^13.0.2",
     "helmet": "^8.0.0",
+    "kysely": "0.29.4",
+    "mysql2": "3.23.2",
     "openai": "^6.46.0",
     "pino": "^9.6.0",
     "pino-http": "^10.4.0",
@@ -49,5 +64,8 @@
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.19.1",
     "vitest": "^4.1.10"
+  },
+  "engines": {
+    "node": ">=24"
   }
 }

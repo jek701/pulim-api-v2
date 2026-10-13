@@ -2,19 +2,33 @@ import { timingSafeEqual } from 'node:crypto';
 import { Router } from 'express';
 import { env } from '../config/env';
 import { dispatchUpdate, telegramUpdateSchema } from '../telegram/dispatcher';
-import { abandonUpdate, claimUpdate, completeUpdate, enqueueUpdate, failUpdate, listRecoverableUpdates } from '../telegram/dedupe.repository';
+import {
+  abandonUpdate,
+  claimUpdate,
+  completeUpdate,
+  enqueueUpdate,
+  failUpdate,
+  listRecoverableUpdates,
+} from '../telegram/dedupe.repository';
 import { logger } from '../utils/logger';
 import { sendMessage } from '../telegram/client';
 import { resolveUserContext } from '../telegram/context';
 import { t } from '../telegram/i18n';
 
 const router = Router();
+const inFlight = new Set<Promise<void>>();
+export async function drainTelegramUpdates(): Promise<void> {
+  await Promise.allSettled([...inFlight]);
+}
 
 function secretMatches(received: string | undefined): boolean {
   if (!received) return false;
   const expectedBuffer = Buffer.from(env.TELEGRAM_WEBHOOK_SECRET);
   const receivedBuffer = Buffer.from(received);
-  return expectedBuffer.length === receivedBuffer.length && timingSafeEqual(expectedBuffer, receivedBuffer);
+  return (
+    expectedBuffer.length === receivedBuffer.length &&
+    timingSafeEqual(expectedBuffer, receivedBuffer)
+  );
 }
 
 async function processUpdate(update: ReturnType<typeof telegramUpdateSchema.parse>): Promise<void> {
@@ -39,10 +53,16 @@ export async function recoverTelegramUpdates(): Promise<void> {
       const parsed = telegramUpdateSchema.safeParse(row.payload);
       if (row.attempts >= 10) {
         await abandonUpdate(row.updateId, 'MAX_ATTEMPTS');
-        logger.error({ updateId: row.updateId, attempts: row.attempts }, 'telegram.update.abandoned');
+        logger.error(
+          { updateId: row.updateId, attempts: row.attempts },
+          'telegram.update.abandoned',
+        );
         if (parsed.success && parsed.data.message?.from) {
           const chatId = String(parsed.data.message.chat.id);
-          const context = await resolveUserContext(String(parsed.data.message.from.id), chatId).catch(() => null);
+          const context = await resolveUserContext(
+            String(parsed.data.message.from.id),
+            chatId,
+          ).catch(() => null);
           await sendMessage(chatId, t(context?.language ?? 'uz', 'error')).catch(() => undefined);
         }
         continue;
@@ -66,12 +86,25 @@ router.post('/', async (req, res, next) => {
       return;
     }
     const update = telegramUpdateSchema.parse(req.body);
-    const updateType = update.callback_query ? 'callback_query' : update.message ? 'message' : 'other';
+    const updateType = update.callback_query
+      ? 'callback_query'
+      : update.message
+        ? 'message'
+        : 'other';
     const chatId = update.message?.chat.id ?? update.callback_query?.message?.chat.id ?? null;
-    logger.info({ updateId: update.update_id, type: updateType, chatId }, 'telegram.update.received');
+    logger.info(
+      { updateId: update.update_id, type: updateType, chatId },
+      'telegram.update.received',
+    );
     const inserted = await enqueueUpdate(update.update_id, update);
     res.status(200).json({ ok: true });
-    if (inserted) void processUpdate(update);
+    if (inserted) {
+      const pending = processUpdate(update).catch((error) =>
+        logger.error({ err: error }, 'telegram.processing.failed'),
+      );
+      inFlight.add(pending);
+      void pending.finally(() => inFlight.delete(pending));
+    }
   } catch (error) {
     next(error);
   }

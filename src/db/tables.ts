@@ -1,0 +1,47 @@
+/** Closed mapping: table identifiers never come from request parameters. */
+export const tables = {
+  profiles: 'profiles',
+  userSettings: 'user_settings',
+  categories: 'categories',
+  subcategories: 'subcategories',
+  cards: 'cards',
+  transactions: 'transactions',
+  budgets: 'budgets',
+  savingsGoals: 'savings_goals',
+  debts: 'debts',
+  deposits: 'deposits',
+  subscriptions: 'subscriptions',
+  planned_expenses: 'planned_expenses',
+  households: 'households',
+  householdInvites: 'household_invites',
+  householdInvitePicks: 'household_invite_picks',
+  telegramUsers: 'telegram_users',
+  phoneVerifications: 'phone_verifications',
+  shortcutTokens: 'shortcut_tokens',
+  billingEvents: 'billing_events',
+  aiChats: 'ai_chats',
+  aiUsage: 'ai_usage',
+  aiFeedback: 'ai_feedback',
+  aiForecastCache: 'ai_forecast_cache',
+  fxRates: 'fx_rates',
+  telegramUpdates: 'telegram_updates',
+  telegramOperations: 'telegram_operations',
+  telegramDrafts: 'telegram_drafts',
+  telegramSessions: 'telegram_sessions',
+  telegramMessages: 'telegram_messages',
+  telegramUsage: 'telegram_usage',
+  notifications: 'notifications',
+  notificationTasks: 'notification_tasks',
+  notificationState: 'notification_state',
+  notificationStats: 'notification_stats',
+  communicationCampaigns: 'communication_campaigns',
+  inAppMessages: 'in_app_messages',
+  communicationDeliveries: 'communication_deliveries',
+  devNotes: 'dev_notes',
+  devNoteScreenshots: 'dev_note_screenshots',
+} as const;
+export type Entity = keyof typeof tables;
+export function entity(name: string): Entity {
+  if (!Object.hasOwn(tables, name)) throw new Error(`Unsupported storage entity: ${name}`);
+  return name as Entity;
+}

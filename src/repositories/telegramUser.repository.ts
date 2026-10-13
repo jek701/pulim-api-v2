@@ -1,12 +1,17 @@
-import { db } from '../config/firebase';
-
+import {
+  DocumentData,
+  documentKey,
+  filterQuery,
+  limitQuery,
+  queryTable,
+  readDocument,
+  saveDocument,
+} from '../db/documents';
 const COLLECTION = 'telegramUsers';
-
 export interface TelegramUserRecord {
   id: string;
-  data: FirebaseFirestore.DocumentData;
+  data: DocumentData;
 }
-
 /**
  * Resolve a Telegram user. Primary lookup is by telegramId (the doc key, stable
  * across devices); falls back to a chatId query for legacy records.
@@ -15,20 +20,15 @@ export async function findTelegramUser(
   telegramId: string,
   chatId: string,
 ): Promise<TelegramUserRecord | null> {
-  const doc = await db.collection(COLLECTION).doc(String(telegramId)).get();
-  if (doc.exists) return { id: doc.id, data: doc.data()! };
-
-  const snapshot = await db
-    .collection(COLLECTION)
-    .where('chatId', '==', String(chatId))
-    .limit(1)
-    .get();
+  const doc = await readDocument(documentKey(queryTable(COLLECTION), String(telegramId)));
+  if (doc.exists) return { id: doc.id, data: doc.data! };
+  const snapshot = await readDocument(
+    limitQuery(filterQuery(queryTable(COLLECTION), 'chatId', '==', String(chatId)), 1),
+  );
   if (snapshot.empty) return null;
-
-  const fallback = snapshot.docs[0]!;
-  return { id: fallback.id, data: fallback.data() };
+  const fallback = snapshot.rows[0]!;
+  return { id: fallback.id, data: fallback.data };
 }
-
 interface TelegramUserPayload {
   chatId: string;
   telegramId: string;
@@ -41,7 +41,6 @@ interface TelegramUserPayload {
     photo_url?: string;
   };
 }
-
 /**
  * Upsert the chatId→uid mapping. Writes BOTH `profileUid` (canonical) and `uid`
  * (what the frontend + firestore.rules read) during the transition window.
@@ -49,7 +48,8 @@ interface TelegramUserPayload {
  */
 export async function saveTelegramUser(payload: TelegramUserPayload): Promise<void> {
   const { chatId, telegramId, telegramUser, profileUid } = payload;
-  await db.collection(COLLECTION).doc(String(telegramId)).set(
+  await saveDocument(
+    documentKey(queryTable(COLLECTION), String(telegramId)),
     {
       chatId: String(chatId),
       telegramId: String(telegramId),

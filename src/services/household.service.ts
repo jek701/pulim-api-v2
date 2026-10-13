@@ -1,76 +1,95 @@
+import {
+  DocumentKey,
+  SqlTransaction,
+  countQuery,
+  documentKey,
+  filterQuery,
+  insertDocument,
+  limitQuery,
+  patchDocument,
+  patchValue,
+  queryTable,
+  readDocument,
+  removeDocument,
+  runSqlTransaction,
+  saveDocument,
+  writeBatch,
+} from '../db/documents';
 import { randomBytes, randomInt } from 'node:crypto';
 import { env } from '../config/env';
-import { db, FieldValue } from '../config/firebase';
 import { DEFAULT_CATEGORIES, defaultCategoryId } from '../domain/defaultCategories';
 import { balanceDelta } from '../domain/balance';
 import { FREE_LIMITS } from '../domain/entitlements';
 import { getProfile } from '../repositories/profile.repository';
-import { savePreparedInlineMessage, savePreparedKeyboardButton, TelegramApiError } from '../telegram/client';
+import {
+  savePreparedInlineMessage,
+  savePreparedKeyboardButton,
+  TelegramApiError,
+} from '../telegram/client';
 import { familyInviteLink, inviteShareArticle, pickButtonText } from '../telegram/familyInvite';
 import { normalizeLanguage } from '../telegram/i18n';
 import { getIsPremium } from './entitlement.service';
 import { verifyTelegramInitData } from './telegramVerify.service';
 import { AppError } from '../utils/AppError';
-
 type Row = Record<string, any>;
-
-const households = () => db.collection('households');
-const invites = () => db.collection('householdInvites');
-const cards = () => db.collection('cards');
-const transactions = () => db.collection('transactions');
-const categories = () => db.collection('categories');
-const budgets = () => db.collection('budgets');
-const savingsGoals = () => db.collection('savingsGoals');
-const invitePicks = () => db.collection('householdInvitePicks');
-
+const households = () => queryTable('households');
+const invites = () => queryTable('householdInvites');
+const cards = () => queryTable('cards');
+const transactions = () => queryTable('transactions');
+const categories = () => queryTable('categories');
+const budgets = () => queryTable('budgets');
+const savingsGoals = () => queryTable('savingsGoals');
+const invitePicks = () => queryTable('householdInvitePicks');
 const INVITE_PICK_TTL_MS = 60 * 60 * 1000;
 /** Bot invitations a household may prepare per day; keeps the bot from being used for spam. */
 const INVITE_PICKS_PER_DAY = 20;
-
 async function displayName(uid: string): Promise<string> {
-  const profile = await db.collection('profiles').doc(uid).get();
-  return String(profile.data()?.name || 'Участник');
+  const profile = await readDocument(documentKey(queryTable('profiles'), uid));
+  return String(profile.data?.name || 'Участник');
 }
-
 export async function currentHousehold(uid: string): Promise<Row | null> {
-  const snap = await households().where('memberIds', 'array-contains', uid).limit(1).get();
+  const snap = await readDocument(
+    limitQuery(filterQuery(households(), 'memberIds', 'array-contains', uid), 1),
+  );
   if (snap.empty) return null;
-  const doc = snap.docs[0];
-  return { id: doc.id, ...doc.data() };
+  const doc = snap.rows[0];
+  return { id: doc.id, ...doc.data };
 }
-
 export async function requireHousehold(uid: string): Promise<Row> {
   const household = await currentHousehold(uid);
   if (!household) throw AppError.notFound('Совместный бюджет не найден.');
   return household;
 }
-
 /** Keep the denormalized member label in sync when a user changes their profile name. */
 export async function syncMemberName(uid: string, name: string): Promise<void> {
   const household = await currentHousehold(uid);
   const trimmedName = name.trim();
   if (!household || !trimmedName) return;
-
-  const ref = households().doc(household.id);
-  await db.runTransaction(async tx => {
-    const snap = await tx.get(ref);
+  const ref = documentKey(households(), household.id);
+  await runSqlTransaction(async (tx) => {
+    const snap = await tx.read(ref);
     if (!snap.exists) return;
-    const data = snap.data()!;
-    const members = (data.members ?? []).map((member: Row) => (
-      member.userId === uid ? { ...member, name: trimmedName } : member
-    ));
+    const data = snap.data!;
+    const members = (data.members ?? []).map((member: Row) =>
+      member.userId === uid ? { ...member, name: trimmedName } : member,
+    );
     if (!members.some((member: Row) => member.userId === uid)) return;
-    tx.update(ref, { members, updatedAt: Date.now() });
+    tx.patch(ref, { members, updatedAt: Date.now() });
   });
 }
-
-export async function createHousehold(uid: string, input: { name: string; currency: string }): Promise<Row> {
+export async function createHousehold(
+  uid: string,
+  input: {
+    name: string;
+    currency: string;
+  },
+): Promise<Row> {
   if (await currentHousehold(uid)) {
     throw new AppError(409, 'HOUSEHOLD_EXISTS', 'Вы уже состоите в совместном бюджете.');
   }
   const now = Date.now();
   const name = await displayName(uid);
-  const ref = households().doc();
+  const ref = documentKey(households());
   const household = {
     name: input.name.trim(),
     currency: input.currency,
@@ -80,26 +99,29 @@ export async function createHousehold(uid: string, input: { name: string; curren
     createdAt: now,
     updatedAt: now,
   };
-  const batch = db.batch();
-  batch.create(ref, household);
+  const batch = writeBatch();
+  batch.insert(ref, household);
   for (const category of DEFAULT_CATEGORIES) {
     const id = defaultCategoryId(`household_${ref.id}`, category.type, category.name);
-    batch.set(categories().doc(id), { ...category, householdId: ref.id, createdAt: now });
+    batch.save(documentKey(categories(), id), { ...category, householdId: ref.id, createdAt: now });
   }
   await batch.commit();
   return { id: ref.id, ...household };
 }
-
-export async function updateHousehold(uid: string, input: { name?: string }): Promise<Row> {
+export async function updateHousehold(
+  uid: string,
+  input: {
+    name?: string;
+  },
+): Promise<Row> {
   const household = await requireHousehold(uid);
   if (household.ownerUserId !== uid) {
     throw AppError.forbidden('HOUSEHOLD_OWNER_REQUIRED', 'Только владелец может менять настройки.');
   }
   const patch = { ...(input.name ? { name: input.name.trim() } : {}), updatedAt: Date.now() };
-  await households().doc(household.id).set(patch, { merge: true });
+  await saveDocument(documentKey(households(), household.id), patch, { merge: true });
   return { ...household, ...patch };
 }
-
 export async function createInvite(uid: string): Promise<Row> {
   const household = await requireHousehold(uid);
   const token = randomBytes(24).toString('base64url');
@@ -111,14 +133,24 @@ export async function createInvite(uid: string): Promise<Row> {
     expiresAt: now + 7 * 24 * 60 * 60 * 1000,
     status: 'pending',
   };
-  await invites().doc(token).create(invite);
-  return { token, householdName: household.name, expiresAt: invite.expiresAt, link: familyInviteLink(token) };
+  await insertDocument(documentKey(invites(), token), invite);
+  return {
+    token,
+    householdName: household.name,
+    expiresAt: invite.expiresAt,
+    link: familyInviteLink(token),
+  };
 }
-
-async function ownPendingInvite(uid: string, token: string): Promise<{ household: Row; invite: Row }> {
+async function ownPendingInvite(
+  uid: string,
+  token: string,
+): Promise<{
+  household: Row;
+  invite: Row;
+}> {
   const household = await requireHousehold(uid);
-  const snap = await invites().doc(token).get();
-  const invite = snap.data();
+  const snap = await readDocument(documentKey(invites(), token));
+  const invite = snap.data;
   if (!snap.exists || !invite || invite.householdId !== household.id) {
     throw AppError.notFound('Приглашение не найдено.');
   }
@@ -127,7 +159,6 @@ async function ownPendingInvite(uid: string, token: string): Promise<{ household
   }
   return { household, invite };
 }
-
 /**
  * The Telegram account running the Mini App. Prepared buttons and messages are bound
  * to it, so it comes from verified init data and must belong to this Pulim user.
@@ -136,51 +167,73 @@ async function miniAppTelegramId(uid: string, telegramInitData: string): Promise
   let telegramId = '';
   try {
     const parsed = verifyTelegramInitData(telegramInitData, env.TELEGRAM_BOT_TOKEN);
-    telegramId = String((JSON.parse(parsed.user ?? '{}') as { id?: number | string }).id ?? '');
+    telegramId = String(
+      (
+        JSON.parse(parsed.user ?? '{}') as {
+          id?: number | string;
+        }
+      ).id ?? '',
+    );
   } catch {
     telegramId = '';
   }
   if (!telegramId) throw new AppError(401, 'TELEGRAM_AUTH_FAILED', 'Откройте Pulim в Telegram.');
-  const mapping = (await db.collection('telegramUsers').doc(telegramId).get()).data();
+  const mapping = (await readDocument(documentKey(queryTable('telegramUsers'), telegramId))).data;
   if ((mapping?.profileUid ?? mapping?.uid) !== uid) {
-    throw AppError.forbidden('TELEGRAM_ACCOUNT_MISMATCH', 'Этот Telegram не привязан к вашему аккаунту.');
+    throw AppError.forbidden(
+      'TELEGRAM_ACCOUNT_MISMATCH',
+      'Этот Telegram не привязан к вашему аккаунту.',
+    );
   }
   return Number(telegramId);
 }
-
 async function profileLanguage(uid: string) {
   return normalizeLanguage((await getProfile(uid))?.language);
 }
-
 async function withTelegram<T>(call: () => Promise<T>): Promise<T> {
   try {
     return await call();
   } catch (error) {
     if (error instanceof TelegramApiError) {
-      throw new AppError(502, 'TELEGRAM_UNAVAILABLE', 'Telegram сейчас недоступен. Попробуйте ещё раз.');
+      throw new AppError(
+        502,
+        'TELEGRAM_UNAVAILABLE',
+        'Telegram сейчас недоступен. Попробуйте ещё раз.',
+      );
     }
     throw error;
   }
 }
-
 async function takeInvitePickQuota(householdId: string): Promise<void> {
-  const ref = households().doc(householdId);
+  const ref = documentKey(households(), householdId);
   const day = new Date().toISOString().slice(0, 10);
-  await db.runTransaction(async (tx) => {
-    const quota = (await tx.get(ref)).data()?.invitePickQuota as { day?: string; count?: number } | undefined;
-    const count = quota?.day === day ? quota.count ?? 0 : 0;
+  await runSqlTransaction(async (tx) => {
+    const quota = (await tx.read(ref)).data?.invitePickQuota as
+      | {
+          day?: string;
+          count?: number;
+        }
+      | undefined;
+    const count = quota?.day === day ? (quota.count ?? 0) : 0;
     if (count >= INVITE_PICKS_PER_DAY) {
-      throw new AppError(429, 'INVITE_LIMIT', 'Слишком много приглашений за сегодня. Попробуйте завтра.');
+      throw new AppError(
+        429,
+        'INVITE_LIMIT',
+        'Слишком много приглашений за сегодня. Попробуйте завтра.',
+      );
     }
-    tx.update(ref, { invitePickQuota: { day, count: count + 1 } });
+    tx.patch(ref, { invitePickQuota: { day, count: count + 1 } });
   });
 }
-
 /**
  * Prepares the Telegram contact picker for an invite. The picked partner reaches the
  * bot as a `users_shared` message, handled by the family invite bot handler.
  */
-export async function prepareInvitePick(uid: string, token: string, telegramInitData: string): Promise<Row> {
+export async function prepareInvitePick(
+  uid: string,
+  token: string,
+  telegramInitData: string,
+): Promise<Row> {
   const { household } = await ownPendingInvite(uid, token);
   if ((household.memberIds ?? []).length >= 2) {
     throw new AppError(409, 'HOUSEHOLD_FULL', 'В этом совместном бюджете уже два участника.');
@@ -189,94 +242,119 @@ export async function prepareInvitePick(uid: string, token: string, telegramInit
   const language = await profileLanguage(uid);
   await takeInvitePickQuota(household.id);
   const requestId = randomInt(1, 2 ** 31 - 1);
-  const prepared = await withTelegram(() => savePreparedKeyboardButton(telegramId, {
-    text: pickButtonText(language),
-    request_users: { request_id: requestId, user_is_bot: false, max_quantity: 1, request_name: true, request_username: true },
-  }));
+  const prepared = await withTelegram(() =>
+    savePreparedKeyboardButton(telegramId, {
+      text: pickButtonText(language),
+      request_users: {
+        request_id: requestId,
+        user_is_bot: false,
+        max_quantity: 1,
+        request_name: true,
+        request_username: true,
+      },
+    }),
+  );
   const now = Date.now();
-  await invitePicks().doc(`${telegramId}_${requestId}`).create({
+  await insertDocument(documentKey(invitePicks(), `${telegramId}_${requestId}`), {
     token,
     uid,
     householdId: household.id,
     createdAt: now,
     expiresAt: now + INVITE_PICK_TTL_MS,
   });
-  await invites().doc(token).update({ delivery: { status: 'awaiting_pick', updatedAt: now } });
+  await patchDocument(documentKey(invites(), token), {
+    delivery: { status: 'awaiting_pick', updatedAt: now },
+  });
   return { buttonId: prepared.id };
 }
-
 /** Prepares the invite card the Mini App sends to a chat of the user's choice. */
-export async function prepareInviteShare(uid: string, token: string, telegramInitData: string): Promise<Row> {
+export async function prepareInviteShare(
+  uid: string,
+  token: string,
+  telegramInitData: string,
+): Promise<Row> {
   const { household } = await ownPendingInvite(uid, token);
   const telegramId = await miniAppTelegramId(uid, telegramInitData);
   const language = await profileLanguage(uid);
-  const prepared = await withTelegram(() => savePreparedInlineMessage(
-    telegramId,
-    inviteShareArticle(language, household.name, token),
-    { allow_user_chats: true },
-  ));
+  const prepared = await withTelegram(() =>
+    savePreparedInlineMessage(telegramId, inviteShareArticle(language, household.name, token), {
+      allow_user_chats: true,
+    }),
+  );
   return { messageId: prepared.id };
 }
-
 export async function inviteStatus(uid: string, token: string): Promise<Row> {
   const household = await requireHousehold(uid);
-  const snap = await invites().doc(token).get();
-  const invite = snap.data();
+  const snap = await readDocument(documentKey(invites(), token));
+  const invite = snap.data;
   if (!snap.exists || !invite || invite.householdId !== household.id) {
     throw AppError.notFound('Приглашение не найдено.');
   }
-  return { token, status: invite.status, expiresAt: invite.expiresAt, delivery: invite.delivery ?? null };
+  return {
+    token,
+    status: invite.status,
+    expiresAt: invite.expiresAt,
+    delivery: invite.delivery ?? null,
+  };
 }
-
 /** Single-use: resolves a contact pick back to its invite, or null when stale. */
 export async function consumeInvitePick(
   telegramId: string,
   requestId: number,
-): Promise<{ token: string; inviterUid: string; household: Row } | null> {
-  const ref = invitePicks().doc(`${telegramId}_${requestId}`);
-  const pick = await db.runTransaction(async (tx) => {
-    const snap = await tx.get(ref);
+): Promise<{
+  token: string;
+  inviterUid: string;
+  household: Row;
+} | null> {
+  const ref = documentKey(invitePicks(), `${telegramId}_${requestId}`);
+  const pick = await runSqlTransaction(async (tx) => {
+    const snap = await tx.read(ref);
     if (!snap.exists) return null;
-    tx.delete(ref);
-    return snap.data()!;
+    tx.remove(ref);
+    return snap.data!;
   });
   if (!pick || pick.expiresAt < Date.now()) return null;
   const [inviteSnap, householdSnap] = await Promise.all([
-    invites().doc(String(pick.token)).get(),
-    households().doc(String(pick.householdId)).get(),
+    readDocument(documentKey(invites(), String(pick.token))),
+    readDocument(documentKey(households(), String(pick.householdId))),
   ]);
-  const invite = inviteSnap.data();
-  const household = householdSnap.data();
+  const invite = inviteSnap.data;
+  const household = householdSnap.data;
   if (!invite || invite.status !== 'pending' || invite.expiresAt < Date.now()) return null;
   if (!household || (household.memberIds ?? []).length >= 2) return null;
-  return { token: String(pick.token), inviterUid: String(pick.uid), household: { id: householdSnap.id, ...household } };
+  return {
+    token: String(pick.token),
+    inviterUid: String(pick.uid),
+    household: { id: householdSnap.id, ...household },
+  };
 }
-
 export async function recordInviteDelivery(
   token: string,
-  delivery: { status: 'delivered' | 'not_delivered'; recipientName: string },
+  delivery: {
+    status: 'delivered' | 'not_delivered';
+    recipientName: string;
+  },
 ): Promise<void> {
-  await invites().doc(token).update({ delivery: { ...delivery, updatedAt: Date.now() } });
+  await patchDocument(documentKey(invites(), token), {
+    delivery: { ...delivery, updatedAt: Date.now() },
+  });
 }
-
-
 export async function inviteInfo(token: string): Promise<Row> {
-  const snap = await invites().doc(token).get();
+  const snap = await readDocument(documentKey(invites(), token));
   if (!snap.exists) throw AppError.notFound('Приглашение не найдено.');
-  const invite = snap.data()!;
+  const invite = snap.data!;
   if (invite.status !== 'pending' || invite.expiresAt < Date.now()) {
     throw new AppError(410, 'INVITE_EXPIRED', 'Приглашение больше не действует.');
   }
-  const household = await households().doc(invite.householdId).get();
+  const household = await readDocument(documentKey(households(), invite.householdId));
   if (!household.exists) throw AppError.notFound('Совместный бюджет не найден.');
   return {
     token,
     householdId: household.id,
-    householdName: household.data()!.name,
+    householdName: household.data!.name,
     expiresAt: invite.expiresAt,
   };
 }
-
 export async function acceptInvite(uid: string, token: string): Promise<Row> {
   const existing = await currentHousehold(uid);
   const info = await inviteInfo(token);
@@ -285,49 +363,61 @@ export async function acceptInvite(uid: string, token: string): Promise<Row> {
   }
   if (existing && existing.id === info.householdId) return existing;
   const memberName = await displayName(uid);
-  const inviteRef = invites().doc(token);
-  const householdRef = households().doc(info.householdId);
-  await db.runTransaction(async (tx) => {
-    const [inviteSnap, householdSnap] = await Promise.all([tx.get(inviteRef), tx.get(householdRef)]);
-    if (!inviteSnap.exists || inviteSnap.data()!.status !== 'pending' || inviteSnap.data()!.expiresAt < Date.now()) {
+  const inviteRef = documentKey(invites(), token);
+  const householdRef = documentKey(households(), info.householdId);
+  await runSqlTransaction(async (tx) => {
+    const [inviteSnap, householdSnap] = await Promise.all([
+      tx.read(inviteRef),
+      tx.read(householdRef),
+    ]);
+    if (
+      !inviteSnap.exists ||
+      inviteSnap.data!.status !== 'pending' ||
+      inviteSnap.data!.expiresAt < Date.now()
+    ) {
       throw new AppError(410, 'INVITE_EXPIRED', 'Приглашение больше не действует.');
     }
     if (!householdSnap.exists) throw AppError.notFound('Совместный бюджет не найден.');
-    const data = householdSnap.data()!;
+    const data = householdSnap.data!;
     if ((data.memberIds ?? []).length >= 2) {
       throw new AppError(409, 'HOUSEHOLD_FULL', 'В этом совместном бюджете уже два участника.');
     }
     const now = Date.now();
-    tx.update(householdRef, {
-      memberIds: FieldValue.arrayUnion(uid),
-      members: FieldValue.arrayUnion({ userId: uid, name: memberName, role: 'member', joinedAt: now }),
+    tx.patch(householdRef, {
+      memberIds: patchValue.arrayUnion(uid),
+      members: patchValue.arrayUnion({
+        userId: uid,
+        name: memberName,
+        role: 'member',
+        joinedAt: now,
+      }),
       updatedAt: now,
     });
-    tx.update(inviteRef, { status: 'accepted', acceptedBy: uid, acceptedAt: now });
+    tx.patch(inviteRef, { status: 'accepted', acceptedBy: uid, acceptedAt: now });
   });
   return requireHousehold(uid);
 }
-
 export async function listHouseholdCategories(uid: string): Promise<Row[]> {
   const household = await requireHousehold(uid);
-  const snap = await categories().where('householdId', '==', household.id).get();
-  return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  const snap = await readDocument(filterQuery(categories(), 'householdId', '==', household.id));
+  return snap.rows.map((doc) => ({ id: doc.id, ...doc.data }));
 }
-
 export async function listHouseholdBudgets(uid: string): Promise<Row[]> {
   const household = await requireHousehold(uid);
-  const snap = await budgets().where('householdId', '==', household.id).get();
-  return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  const snap = await readDocument(filterQuery(budgets(), 'householdId', '==', household.id));
+  return snap.rows.map((doc) => ({ id: doc.id, ...doc.data }));
 }
-
 export async function setHouseholdBudget(
   uid: string,
   categoryId: string,
-  input: { amount: number; currency: string },
+  input: {
+    amount: number;
+    currency: string;
+  },
 ): Promise<Row> {
   const household = await requireHousehold(uid);
-  const category = await categories().doc(categoryId).get();
-  if (!category.exists || category.data()!.householdId !== household.id) {
+  const category = await readDocument(documentKey(categories(), categoryId));
+  if (!category.exists || category.data!.householdId !== household.id) {
     throw AppError.notFound('Категория не найдена.');
   }
   const id = `${household.id}_${categoryId}`;
@@ -338,14 +428,12 @@ export async function setHouseholdBudget(
     currency: input.currency,
     updatedAt: Date.now(),
   };
-  await budgets().doc(id).set(row, { merge: true });
+  await saveDocument(documentKey(budgets(), id), row, { merge: true });
   return { id, ...row };
 }
-
 export function memberName(household: Row, uid: string): string {
   return household.members?.find((member: Row) => member.userId === uid)?.name ?? 'Участник';
 }
-
 function cardDto(card: Row, household: Row, uid: string): Row {
   const isHouseholdAccount = card.scope === 'household';
   const isOwner = card.userId === uid;
@@ -359,27 +447,27 @@ function cardDto(card: Row, household: Row, uid: string): Row {
     balanceHidden: !showBalance,
   };
 }
-
 export async function listHouseholdCards(uid: string): Promise<Row[]> {
   const household = await requireHousehold(uid);
   const [sharedSnap, personalSnap] = await Promise.all([
-    cards().where('householdId', '==', household.id).get(),
-    cards().where('familyAccess.householdId', '==', household.id).get(),
+    readDocument(filterQuery(cards(), 'householdId', '==', household.id)),
+    readDocument(filterQuery(cards(), 'familyAccess.householdId', '==', household.id)),
   ]);
   const rows: Row[] = [
-    ...sharedSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }) as Row),
-    ...personalSnap.docs
-      .map(doc => ({ id: doc.id, ...doc.data() }) as Row)
-      .filter(card => card.familyAccess?.enabled === true),
+    ...sharedSnap.rows.map((doc) => ({ id: doc.id, ...doc.data }) as Row),
+    ...personalSnap.rows
+      .map((doc) => ({ id: doc.id, ...doc.data }) as Row)
+      .filter((card) => card.familyAccess?.enabled === true),
   ];
-  return rows.map(card => cardDto(card, household, uid));
+  return rows.map((card) => cardDto(card, household, uid));
 }
-
 export async function createHouseholdCard(uid: string, input: Row): Promise<Row> {
   const household = await requireHousehold(uid);
   // Shared accounts follow the same free-plan limits as personal ones (see enforceLimit).
   if (!(await getIsPremium(uid))) {
-    const count = (await cards().where('householdId', '==', household.id).count().get()).data().count;
+    const count = (
+      await readDocument(countQuery(filterQuery(cards(), 'householdId', '==', household.id)))
+    ).data.count;
     if (count >= FREE_LIMITS.cards) {
       throw AppError.forbidden('LIMIT_REACHED', `The free plan allows ${FREE_LIMITS.cards} cards.`);
     }
@@ -387,7 +475,7 @@ export async function createHouseholdCard(uid: string, input: Row): Promise<Row>
       throw AppError.forbidden('PREMIUM_REQUIRED', 'The free plan allows debit cards only.');
     }
   }
-  const ref = cards().doc();
+  const ref = documentKey(cards());
   const row = {
     ...input,
     scope: 'household',
@@ -396,40 +484,45 @@ export async function createHouseholdCard(uid: string, input: Row): Promise<Row>
     userId: `household:${household.id}`,
     createdAt: Date.now(),
   };
-  await ref.create(row);
+  await insertDocument(ref, row);
   return cardDto({ id: ref.id, ...row }, household, uid);
 }
-
 export async function setCardFamilyAccess(
   uid: string,
   cardId: string,
-  input: { enabled: boolean; showBalance: boolean },
+  input: {
+    enabled: boolean;
+    showBalance: boolean;
+  },
 ): Promise<Row> {
   const household = await requireHousehold(uid);
-  const ref = cards().doc(cardId);
-  const snap = await ref.get();
-  if (!snap.exists || snap.data()!.userId !== uid || snap.data()!.scope === 'household') {
+  const ref = documentKey(cards(), cardId);
+  const snap = await readDocument(ref);
+  if (!snap.exists || snap.data!.userId !== uid || snap.data!.scope === 'household') {
     throw AppError.notFound('Личный счёт не найден.');
   }
   const familyAccess = input.enabled
-    ? { householdId: household.id, enabled: true, showBalance: input.showBalance, updatedAt: Date.now() }
-    : FieldValue.delete();
-  await ref.update({ familyAccess });
-  const updated = await ref.get();
-  return { id: updated.id, ...updated.data() };
+    ? {
+        householdId: household.id,
+        enabled: true,
+        showBalance: input.showBalance,
+        updatedAt: Date.now(),
+      }
+    : patchValue.delete();
+  await patchDocument(ref, { familyAccess });
+  const updated = await readDocument(ref);
+  return { id: updated.id, ...updated.data };
 }
-
 export async function listHouseholdGoals(uid: string): Promise<Row[]> {
   const household = await requireHousehold(uid);
-  const snap = await savingsGoals().where('householdId', '==', household.id).get();
-  return snap.docs
-    .map(doc => ({ id: doc.id, ...doc.data() }) as Row)
+  const snap = await readDocument(filterQuery(savingsGoals(), 'householdId', '==', household.id));
+  return snap.rows
+    .map((doc) => ({ id: doc.id, ...doc.data }) as Row)
     .sort((a, b) => (a.deadline ?? 0) - (b.deadline ?? 0));
 }
-
 export async function createHouseholdGoal(uid: string, input: Row): Promise<Row> {
   const household = await requireHousehold(uid);
-  const ref = savingsGoals().doc();
+  const ref = documentKey(savingsGoals());
   const row = {
     ...input,
     savedAmount: 0,
@@ -439,22 +532,20 @@ export async function createHouseholdGoal(uid: string, input: Row): Promise<Row>
     createdBy: uid,
     createdAt: Date.now(),
   };
-  await ref.create(row);
+  await insertDocument(ref, row);
   return { id: ref.id, ...row };
 }
-
 export async function updateHouseholdGoal(uid: string, id: string, patch: Row): Promise<Row> {
   const household = await requireHousehold(uid);
-  const ref = savingsGoals().doc(id);
-  const snap = await ref.get();
-  if (!snap.exists || snap.data()!.householdId !== household.id) {
+  const ref = documentKey(savingsGoals(), id);
+  const snap = await readDocument(ref);
+  if (!snap.exists || snap.data!.householdId !== household.id) {
     throw AppError.notFound('Цель не найдена.');
   }
   const update = { ...patch, updatedAt: Date.now() };
-  await ref.set(update, { merge: true });
-  return { id, ...snap.data(), ...update };
+  await saveDocument(ref, update, { merge: true });
+  return { id, ...snap.data, ...update };
 }
-
 /** Atomically move money from a family-visible account into the canonical shared goal. */
 export async function contributeHouseholdGoal(
   uid: string,
@@ -463,27 +554,26 @@ export async function contributeHouseholdGoal(
   accountId: string,
 ): Promise<Row> {
   const household = await requireHousehold(uid);
-  return db.runTransaction(async (tx) => {
-    const goalRef = savingsGoals().doc(id);
-    const goalSnap = await tx.get(goalRef);
-    if (!goalSnap.exists || goalSnap.data()!.householdId !== household.id) {
+  return runSqlTransaction(async (tx) => {
+    const goalRef = documentKey(savingsGoals(), id);
+    const goalSnap = await tx.read(goalRef);
+    if (!goalSnap.exists || goalSnap.data!.householdId !== household.id) {
       throw AppError.notFound('Цель не найдена.');
     }
-    const goal = goalSnap.data()!;
+    const goal = goalSnap.data!;
     const card = await allowedCard(tx, household.id, accountId);
     if (!card) throw AppError.notFound('Счёт не найден.');
     if (card.data.currency !== goal.currency) {
       throw AppError.badRequest('Валюта счёта должна совпадать с валютой цели.');
     }
-
     const now = Date.now();
     const accountOwnerId = card.data.scope === 'household' ? undefined : card.data.userId;
-    const transactionRef = transactions().doc();
-    tx.update(goalRef, { savedAmount: FieldValue.increment(amount), updatedAt: now });
-    tx.update(card.ref, {
-      balance: FieldValue.increment(balanceDelta(card.data.cardType, 'expense', amount)),
+    const transactionRef = documentKey(transactions());
+    tx.patch(goalRef, { savedAmount: patchValue.increment(amount), updatedAt: now });
+    tx.patch(card.ref, {
+      balance: patchValue.increment(balanceDelta(card.data.cardType, 'expense', amount)),
     });
-    tx.create(transactionRef, {
+    tx.insert(transactionRef, {
       type: 'expense',
       amount,
       currency: goal.currency,
@@ -496,10 +586,12 @@ export async function contributeHouseholdGoal(
       householdId: household.id,
       createdBy: uid,
       createdByName: memberName(household, uid),
-      ...(accountOwnerId ? {
-        accountOwnerId,
-        accountOwnerName: memberName(household, accountOwnerId),
-      } : {}),
+      ...(accountOwnerId
+        ? {
+            accountOwnerId,
+            accountOwnerName: memberName(household, accountOwnerId),
+          }
+        : {}),
       userId: accountOwnerId ?? `household:${household.id}`,
       date: now,
       createdAt: now,
@@ -507,55 +599,57 @@ export async function contributeHouseholdGoal(
     return { id, contributed: amount };
   });
 }
-
 export async function deleteHouseholdGoal(uid: string, id: string): Promise<void> {
   const household = await requireHousehold(uid);
-  const ref = savingsGoals().doc(id);
-  const snap = await ref.get();
-  if (!snap.exists || snap.data()!.householdId !== household.id) {
+  const ref = documentKey(savingsGoals(), id);
+  const snap = await readDocument(ref);
+  if (!snap.exists || snap.data!.householdId !== household.id) {
     throw AppError.notFound('Цель не найдена.');
   }
-  await ref.delete();
+  await removeDocument(ref);
 }
-
 async function allowedCard(
-  tx: FirebaseFirestore.Transaction,
+  tx: SqlTransaction,
   householdId: string,
   cardId?: string,
-): Promise<{ ref: FirebaseFirestore.DocumentReference; data: Row } | null> {
+): Promise<{
+  ref: DocumentKey;
+  data: Row;
+} | null> {
   if (!cardId) return null;
-  const ref = cards().doc(cardId);
-  const snap = await tx.get(ref);
+  const ref = documentKey(cards(), cardId);
+  const snap = await tx.read(ref);
   if (!snap.exists) throw AppError.notFound('Счёт не найден.');
-  const data = snap.data()!;
+  const data = snap.data!;
   const shared = data.scope === 'household' && data.householdId === householdId;
-  const personal = data.familyAccess?.enabled === true && data.familyAccess?.householdId === householdId;
-  if (!shared && !personal) throw AppError.forbidden('CARD_NOT_SHARED', 'Этот счёт недоступен семье.');
+  const personal =
+    data.familyAccess?.enabled === true && data.familyAccess?.householdId === householdId;
+  if (!shared && !personal)
+    throw AppError.forbidden('CARD_NOT_SHARED', 'Этот счёт недоступен семье.');
   return { ref, data };
 }
-
 export async function listHouseholdTransactions(uid: string): Promise<Row[]> {
   const household = await requireHousehold(uid);
-  const snap = await transactions().where('householdId', '==', household.id).get();
-  return snap.docs
-    .map(doc => ({ id: doc.id, ...doc.data() }) as Row)
+  const snap = await readDocument(filterQuery(transactions(), 'householdId', '==', household.id));
+  return snap.rows
+    .map((doc) => ({ id: doc.id, ...doc.data }) as Row)
     .sort((a, b) => (b.date ?? 0) - (a.date ?? 0) || (b.createdAt ?? 0) - (a.createdAt ?? 0));
 }
-
 export async function createHouseholdTransaction(uid: string, input: Row): Promise<Row> {
   const household = await requireHousehold(uid);
-  const category = await categories().doc(String(input.categoryId)).get();
-  if (!category.exists || category.data()!.householdId !== household.id) {
+  const category = await readDocument(documentKey(categories(), String(input.categoryId)));
+  if (!category.exists || category.data!.householdId !== household.id) {
     throw AppError.notFound('Категория не найдена.');
   }
-  const categoryData = category.data()!;
-  return db.runTransaction(async (tx) => {
+  const categoryData = category.data!;
+  return runSqlTransaction(async (tx) => {
     const card = await allowedCard(tx, household.id, input.cardId);
-    const ref = transactions().doc();
+    const ref = documentKey(transactions());
     const now = Date.now();
     // With no selected account, the creator paid from their own untracked money.
     // It still belongs in their personal ledger, but it does not move a card balance.
-    const accountOwnerId = card?.data.scope === 'household' ? undefined : (card?.data.userId ?? uid);
+    const accountOwnerId =
+      card?.data.scope === 'household' ? undefined : (card?.data.userId ?? uid);
     const row = {
       ...input,
       categoryName: categoryData.name,
@@ -565,102 +659,113 @@ export async function createHouseholdTransaction(uid: string, input: Row): Promi
       householdId: household.id,
       createdBy: uid,
       createdByName: memberName(household, uid),
-      ...(accountOwnerId ? {
-        accountOwnerId,
-        accountOwnerName: memberName(household, accountOwnerId),
-      } : {}),
+      ...(accountOwnerId
+        ? {
+            accountOwnerId,
+            accountOwnerName: memberName(household, accountOwnerId),
+          }
+        : {}),
       userId: accountOwnerId ?? `household:${household.id}`,
       createdAt: now,
     };
-    tx.create(ref, row);
+    tx.insert(ref, row);
     if (card) {
-      tx.update(card.ref, {
-        balance: FieldValue.increment(balanceDelta(card.data.cardType, input.type, input.amount)),
+      tx.patch(card.ref, {
+        balance: patchValue.increment(balanceDelta(card.data.cardType, input.type, input.amount)),
       });
     }
     return { id: ref.id, ...row };
   });
 }
-
 /** Edit an ordinary family operation and move its balance impact atomically. */
-export async function updateHouseholdTransaction(uid: string, id: string, patch: Row): Promise<Row> {
+export async function updateHouseholdTransaction(
+  uid: string,
+  id: string,
+  patch: Row,
+): Promise<Row> {
   const household = await requireHousehold(uid);
   const categoryId = typeof patch.categoryId === 'string' ? patch.categoryId : null;
-  const category = categoryId ? await categories().doc(categoryId).get() : null;
-  if (category && (!category.exists || category.data()!.householdId !== household.id)) {
+  const category = categoryId ? await readDocument(documentKey(categories(), categoryId)) : null;
+  if (category && (!category.exists || category.data!.householdId !== household.id)) {
     throw AppError.notFound('Категория не найдена.');
   }
-
-  return db.runTransaction(async (tx) => {
-    const ref = transactions().doc(id);
-    const snap = await tx.get(ref);
-    if (!snap.exists || snap.data()!.householdId !== household.id) {
+  return runSqlTransaction(async (tx) => {
+    const ref = documentKey(transactions(), id);
+    const snap = await tx.read(ref);
+    if (!snap.exists || snap.data!.householdId !== household.id) {
       throw AppError.notFound('Операция не найдена.');
     }
-    const old = snap.data()!;
+    const old = snap.data!;
     if (old.source) {
-      throw AppError.badRequest('Эту операцию нужно менять в соответствующем разделе.', { source: old.source });
+      throw AppError.badRequest('Эту операцию нужно менять в соответствующем разделе.', {
+        source: old.source,
+      });
     }
-
     const merged = { ...old, ...patch };
     const oldCardId = old.cardId ? String(old.cardId) : undefined;
     const newCardId = merged.cardId ? String(merged.cardId) : undefined;
-
     // Firestore requires all reads before writes. The old card may no longer be
     // shared, but its original balance impact still has to be reversed.
-    const oldCardRef = oldCardId ? cards().doc(oldCardId) : null;
-    const oldCardSnap = oldCardRef ? await tx.get(oldCardRef) : null;
-    const oldCardData = oldCardSnap?.exists ? oldCardSnap.data()! : null;
-    const oldCardIsOriginal = oldCardData && (
-      (oldCardData.scope === 'household' && oldCardData.householdId === household.id)
-      || (old.accountOwnerId && oldCardData.userId === old.accountOwnerId)
-    );
-    const newCard = newCardId === oldCardId && oldCardIsOriginal
-      ? (() => {
-          const shared = oldCardData.scope === 'household' && oldCardData.householdId === household.id;
-          const personal = oldCardData.familyAccess?.enabled === true
-            && oldCardData.familyAccess?.householdId === household.id;
-          if (!shared && !personal) {
-            throw AppError.forbidden('CARD_NOT_SHARED', 'Этот счёт недоступен семье.');
-          }
-          return { ref: oldCardRef!, data: oldCardData };
-        })()
-      : await allowedCard(tx, household.id, newCardId);
-
+    const oldCardRef = oldCardId ? documentKey(cards(), oldCardId) : null;
+    const oldCardSnap = oldCardRef ? await tx.read(oldCardRef) : null;
+    const oldCardData = oldCardSnap?.exists ? oldCardSnap.data! : null;
+    const oldCardIsOriginal =
+      oldCardData &&
+      ((oldCardData.scope === 'household' && oldCardData.householdId === household.id) ||
+        (old.accountOwnerId && oldCardData.userId === old.accountOwnerId));
+    const newCard =
+      newCardId === oldCardId && oldCardIsOriginal
+        ? (() => {
+            const shared =
+              oldCardData.scope === 'household' && oldCardData.householdId === household.id;
+            const personal =
+              oldCardData.familyAccess?.enabled === true &&
+              oldCardData.familyAccess?.householdId === household.id;
+            if (!shared && !personal) {
+              throw AppError.forbidden('CARD_NOT_SHARED', 'Этот счёт недоступен семье.');
+            }
+            return { ref: oldCardRef!, data: oldCardData };
+          })()
+        : await allowedCard(tx, household.id, newCardId);
     if (oldCardRef && oldCardData && oldCardIsOriginal && newCard && oldCardId === newCardId) {
-      const delta = -balanceDelta(oldCardData.cardType, old.type, old.amount)
-        + balanceDelta(newCard.data.cardType, merged.type, merged.amount);
-      if (delta !== 0) tx.update(oldCardRef, { balance: FieldValue.increment(delta) });
+      const delta =
+        -balanceDelta(oldCardData.cardType, old.type, old.amount) +
+        balanceDelta(newCard.data.cardType, merged.type, merged.amount);
+      if (delta !== 0) tx.patch(oldCardRef, { balance: patchValue.increment(delta) });
     } else {
       if (oldCardRef && oldCardData && oldCardIsOriginal) {
-        tx.update(oldCardRef, {
-          balance: FieldValue.increment(-balanceDelta(oldCardData.cardType, old.type, old.amount)),
+        tx.patch(oldCardRef, {
+          balance: patchValue.increment(-balanceDelta(oldCardData.cardType, old.type, old.amount)),
         });
       }
       if (newCard) {
-        tx.update(newCard.ref, {
-          balance: FieldValue.increment(balanceDelta(newCard.data.cardType, merged.type, merged.amount)),
+        tx.patch(newCard.ref, {
+          balance: patchValue.increment(
+            balanceDelta(newCard.data.cardType, merged.type, merged.amount),
+          ),
         });
       }
     }
-
     const fallbackOwnerId = String(old.createdBy || uid);
-    const accountOwnerId = newCard?.data.scope === 'household'
-      ? undefined
-      : (newCard?.data.userId ?? fallbackOwnerId);
+    const accountOwnerId =
+      newCard?.data.scope === 'household' ? undefined : (newCard?.data.userId ?? fallbackOwnerId);
     const writePatch: Row = {
       ...patch,
-      ...(category ? {
-        categoryName: category.data()!.name,
-        categoryIcon: category.data()!.icon,
-        categoryColor: category.data()!.color,
-      } : {}),
-      accountOwnerId: accountOwnerId ?? FieldValue.delete(),
-      accountOwnerName: accountOwnerId ? memberName(household, accountOwnerId) : FieldValue.delete(),
+      ...(category
+        ? {
+            categoryName: category.data!.name,
+            categoryIcon: category.data!.icon,
+            categoryColor: category.data!.color,
+          }
+        : {}),
+      accountOwnerId: accountOwnerId ?? patchValue.delete(),
+      accountOwnerName: accountOwnerId
+        ? memberName(household, accountOwnerId)
+        : patchValue.delete(),
       userId: accountOwnerId ?? `household:${household.id}`,
       updatedAt: Date.now(),
     };
-    tx.set(ref, writePatch, { merge: true });
+    tx.save(ref, writePatch, { merge: true });
     return {
       id,
       ...merged,
@@ -670,31 +775,32 @@ export async function updateHouseholdTransaction(uid: string, id: string, patch:
     };
   });
 }
-
 export async function deleteHouseholdTransaction(uid: string, id: string): Promise<void> {
   const household = await requireHousehold(uid);
-  await db.runTransaction(async (tx) => {
-    const ref = transactions().doc(id);
-    const snap = await tx.get(ref);
-    if (!snap.exists || snap.data()!.householdId !== household.id) {
+  await runSqlTransaction(async (tx) => {
+    const ref = documentKey(transactions(), id);
+    const snap = await tx.read(ref);
+    if (!snap.exists || snap.data!.householdId !== household.id) {
       throw AppError.notFound('Операция не найдена.');
     }
-    const row = snap.data()!;
+    const row = snap.data!;
     if (row.source) {
-      throw AppError.badRequest('Эту операцию нужно удалять в соответствующем разделе.', { source: row.source });
-    }
-    const cardRef = row.cardId ? cards().doc(String(row.cardId)) : null;
-    const cardSnap = cardRef ? await tx.get(cardRef) : null;
-    const cardData = cardSnap?.exists ? cardSnap.data()! : null;
-    const isOriginalSource = cardData && (
-      (cardData.scope === 'household' && cardData.householdId === household.id)
-      || (row.accountOwnerId && cardData.userId === row.accountOwnerId)
-    );
-    if (cardRef && cardData && isOriginalSource) {
-      tx.update(cardRef, {
-        balance: FieldValue.increment(-balanceDelta(cardData.cardType, row.type, row.amount)),
+      throw AppError.badRequest('Эту операцию нужно удалять в соответствующем разделе.', {
+        source: row.source,
       });
     }
-    tx.delete(ref);
+    const cardRef = row.cardId ? documentKey(cards(), String(row.cardId)) : null;
+    const cardSnap = cardRef ? await tx.read(cardRef) : null;
+    const cardData = cardSnap?.exists ? cardSnap.data! : null;
+    const isOriginalSource =
+      cardData &&
+      ((cardData.scope === 'household' && cardData.householdId === household.id) ||
+        (row.accountOwnerId && cardData.userId === row.accountOwnerId));
+    if (cardRef && cardData && isOriginalSource) {
+      tx.patch(cardRef, {
+        balance: patchValue.increment(-balanceDelta(cardData.cardType, row.type, row.amount)),
+      });
+    }
+    tx.remove(ref);
   });
 }

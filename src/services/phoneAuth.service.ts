@@ -1,5 +1,5 @@
 import { createHmac, randomInt, timingSafeEqual } from 'node:crypto';
-import { auth } from '../config/firebase';
+import { auth } from '../config/firebaseAuth';
 import { env } from '../config/env';
 import { AppError } from '../utils/AppError';
 import { logger } from '../utils/logger';
@@ -171,7 +171,10 @@ export async function sendPhoneCode(input: SendCodeInput) {
 
   let requestId: string | null = null;
   if (env.PHONE_AUTH_DEBUG_ECHO_CODE) {
-    logger.warn({ phone: e164 }, '[phone-auth] debug mode: code returned in the response, no SMS sent');
+    logger.warn(
+      { phone: e164 },
+      '[phone-auth] debug mode: code returned in the response, no SMS sent',
+    );
   } else {
     requestId = (await sendSms(digits, message)).requestId;
   }

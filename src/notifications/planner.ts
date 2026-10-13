@@ -1,4 +1,12 @@
-import { db } from '../config/firebase';
+import {
+  StoredDocument,
+  filterQuery,
+  limitQuery,
+  orderQuery,
+  patchDocument,
+  queryTable,
+  readDocument,
+} from '../db/documents';
 import { env } from '../config/env';
 import type { Budget, Category, Subcategory, Transaction, UserProfile } from '../domain/types';
 import { getProfile, profileRef } from '../repositories/profile.repository';
@@ -16,48 +24,60 @@ import {
 } from './queue.repository';
 import { dateKey, currentMonthRange, nextDailySlot } from './schedule';
 import { getNotificationState } from './state.repository';
-
 async function listOwned<T>(collection: string, uid: string): Promise<T[]> {
-  const snapshot = await db.collection(collection).where('userId', '==', uid).get();
-  return snapshot.docs.map((document) => ({ id: document.id, ...document.data() }) as T);
+  const snapshot = await readDocument(filterQuery(queryTable(collection), 'userId', '==', uid));
+  return snapshot.rows.map((document) => ({ id: document.id, ...document.data }) as T);
 }
-
 async function listMonthTransactions(uid: string, now: number): Promise<Transaction[]> {
   const range = currentMonthRange(now, env.NOTIFY_TIMEZONE);
   try {
-    const snapshot = await db.collection('transactions')
-      .where('userId', '==', uid)
-      .where('date', '>=', range.start)
-      .where('date', '<', range.end)
-      .get();
-    return snapshot.docs.map((document) => ({ id: document.id, ...document.data() }) as Transaction);
+    const snapshot = await readDocument(
+      filterQuery(
+        filterQuery(
+          filterQuery(queryTable('transactions'), 'userId', '==', uid),
+          'date',
+          '>=',
+          range.start,
+        ),
+        'date',
+        '<',
+        range.end,
+      ),
+    );
+    return snapshot.rows.map((document) => ({ id: document.id, ...document.data }) as Transaction);
   } catch (error) {
     logger.warn({ err: error, uid }, 'notify.budget.index_fallback');
     const rows = await listOwned<Transaction>('transactions', uid);
     return rows.filter((row) => row.date >= range.start && row.date < range.end);
   }
 }
-
-async function mapWithConcurrency<T>(items: T[], concurrency: number, handler: (item: T) => Promise<void>): Promise<void> {
+async function mapWithConcurrency<T>(
+  items: T[],
+  concurrency: number,
+  handler: (item: T) => Promise<void>,
+): Promise<void> {
   let cursor = 0;
-  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, async () => {
-    while (cursor < items.length) {
-      const item = items[cursor];
-      cursor += 1;
-      if (item !== undefined) await handler(item);
-    }
-  }));
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+      while (cursor < items.length) {
+        const item = items[cursor];
+        cursor += 1;
+        if (item !== undefined) await handler(item);
+      }
+    }),
+  );
 }
-
 async function processProfile(
-  document: FirebaseFirestore.QueryDocumentSnapshot,
+  document: StoredDocument,
   now: number,
 ): Promise<'queued' | 'skipped'> {
   const uid = document.id;
-  const dueAt = Number(document.data().notifications?.nextDailyAt ?? now);
+  const dueAt = Number(document.data.notifications?.nextDailyAt ?? now);
   const next = nextDailySlot(now, env.NOTIFY_DIGEST_HOUR, env.NOTIFY_TIMEZONE);
-  await profileRef(uid).update({ 'notifications.nextDailyAt': next, updatedAt: now });
-  const profile = { id: uid, ...document.data() } as UserProfile & { id: string };
+  await patchDocument(profileRef(uid), { 'notifications.nextDailyAt': next, updatedAt: now });
+  const profile = { id: uid, ...document.data } as UserProfile & {
+    id: string;
+  };
   if (!profileCanReceive(profile)) return 'skipped';
   if (now > dueAt + env.NOTIFY_STALE_AFTER_MS) {
     logger.info({ uid, type: 'daily', skipReason: 'stale_slot' }, 'notify.skipped');
@@ -76,10 +96,10 @@ async function processProfile(
     stateKeys: collected.stateKeys,
     stateEffects: collected.stateEffects,
   });
-  if (queued) logger.info({ uid, type: 'daily', blocks: collected.blockNames }, 'notify.queued.blocks');
+  if (queued)
+    logger.info({ uid, type: 'daily', blocks: collected.blockNames }, 'notify.queued.blocks');
   return queued ? 'queued' : 'skipped';
 }
-
 async function processBudgetTask(task: BudgetTask, now: number): Promise<number> {
   try {
     const profile = await getProfile(task.userId);
@@ -94,22 +114,33 @@ async function processBudgetTask(task: BudgetTask, now: number): Promise<number>
       listOwned<Subcategory>('subcategories', task.userId),
       getNotificationState(task.userId),
     ]);
-    const premium = profile.isPremium === true
-      && typeof profile.subscription?.premiumUntil === 'number'
-      && profile.subscription.premiumUntil > now;
+    const premium =
+      profile.isPremium === true &&
+      typeof profile.subscription?.premiumUntil === 'number' &&
+      profile.subscription.premiumUntil > now;
     const alerts = collectBudgetAlerts({
-      now, timeZone: env.NOTIFY_TIMEZONE, transactions, budgets, categories, subcategories, state, premium,
+      now,
+      timeZone: env.NOTIFY_TIMEZONE,
+      transactions,
+      budgets,
+      categories,
+      subcategories,
+      state,
+      premium,
     });
     let queued = 0;
     for (const alert of alerts) {
-      if (await createNotification({
-        userId: task.userId,
-        chatId: profile.notifications.telegram.chatId!,
-        type: alert.payload.threshold === 100 ? 'budget_100' : 'budget_80',
-        dedupeKey: alert.dedupeKey,
-        payload: alert.payload,
-        stateKeys: alert.stateKeys,
-      })) queued += 1;
+      if (
+        await createNotification({
+          userId: task.userId,
+          chatId: profile.notifications.telegram.chatId!,
+          type: alert.payload.threshold === 100 ? 'budget_100' : 'budget_80',
+          dedupeKey: alert.dedupeKey,
+          payload: alert.payload,
+          stateKeys: alert.stateKeys,
+        })
+      )
+        queued += 1;
     }
     await finishBudgetTask(task);
     return queued;
@@ -119,23 +150,34 @@ async function processBudgetTask(task: BudgetTask, now: number): Promise<number>
     return 0;
   }
 }
-
-export async function runPlanner(now = Date.now()): Promise<{ scanned: number; queued: number; skipped: number }> {
+export async function runPlanner(now = Date.now()): Promise<{
+  scanned: number;
+  queued: number;
+  skipped: number;
+}> {
   if (!env.NOTIFICATIONS_ENABLED) return { scanned: 0, queued: 0, skipped: 0 };
   const startedAt = Date.now();
   const recoveredTasks = await recoverExpiredBudgetTasks(now);
   if (recoveredTasks) logger.warn({ recoveredTasks }, 'notify.budget_tasks.recovered');
   const totals = { scanned: 0, queued: 0, skipped: 0 };
   for (let page = 0; page < 10; page += 1) {
-    const snapshot = await db.collection('profiles')
-      .where('notifications.nextDailyAt', '>', 0)
-      .where('notifications.nextDailyAt', '<=', now)
-      .orderBy('notifications.nextDailyAt')
-      .limit(env.NOTIFY_PLANNER_BATCH)
-      .get();
+    const snapshot = await readDocument(
+      limitQuery(
+        orderQuery(
+          filterQuery(
+            filterQuery(queryTable('profiles'), 'notifications.nextDailyAt', '>', 0),
+            'notifications.nextDailyAt',
+            '<=',
+            now,
+          ),
+          'notifications.nextDailyAt',
+        ),
+        env.NOTIFY_PLANNER_BATCH,
+      ),
+    );
     if (snapshot.empty) break;
     totals.scanned += snapshot.size;
-    await mapWithConcurrency(snapshot.docs, 5, async (document) => {
+    await mapWithConcurrency(snapshot.rows, 5, async (document) => {
       try {
         const result = await processProfile(document, now);
         totals[result] += 1;

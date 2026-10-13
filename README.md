@@ -1,11 +1,15 @@
 # pulim-api
 
+Business storage uses MySQL; Firebase Auth retains the existing project and UID.
+See [migration progress and rehearsal evidence](docs/mysql-migration-progress.ru.md)
+and [the production cutover runbook](docs/mysql-cutover.ru.md).
+
 REST API for the Pulim budget tracker. Owns all data operations and business logic
 that the React frontend previously did directly against Firestore, with server-side
 integrity (atomic money operations), entitlement enforcement, and a server-side OpenAI key.
 
 - **Runtime:** Node.js + TypeScript + Express 5
-- **Datastore:** Firestore via `firebase-admin` (same project & collections as the app)
+- **Datastore:** separate MySQL application schema via Kysely/mysql2; Node >=24
 - **Auth:** Firebase Auth — the API verifies Firebase **ID tokens**; Telegram login mints a custom token
 - **AI:** OpenAI Responses API (`openai`), server-side only, SSE streaming
 
@@ -26,14 +30,15 @@ Scripts: `dev` (watch), `build` (tsc → dist), `start` (run API), `worker`
 See [.env.example](.env.example). Key vars: `FIREBASE_PROJECT_ID` + one credential
 source (`FIREBASE_SERVICE_ACCOUNT_PATH` *or* `FIREBASE_CLIENT_EMAIL`/`FIREBASE_PRIVATE_KEY`),
 `TELEGRAM_BOT_TOKEN`, `OPENAI_API_KEY` (AI endpoints return `503` until set),
-`CORS_ORIGINS` (comma-separated allowlist). Leave `FIRESTORE_DATABASE_ID` empty for
-the default Firestore database `(default)`, or set it if your Firebase project uses
-a named Firestore database.
+`CORS_ORIGINS` (comma-separated allowlist). Set `MYSQL_HOST`, `MYSQL_PORT`,
+`MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD` and a small `MYSQL_CONNECTION_LIMIT`.
+The schema and credentials must be separate from Payment. `FIRESTORE_DATABASE_ID`
+is retained only for explicit source migration tools, not runtime storage.
 
 ## Architecture
 
 Layered: **routes → controllers → services → repositories**. Only repositories/services
-touch Firestore; controllers stay thin. Cross-cutting concerns live in `middleware/`,
+touch SQL; controllers stay thin. Cross-cutting concerns live in `middleware/`,
 the domain model + zod schemas + ported business logic in `domain/`.
 
 ```
@@ -42,8 +47,9 @@ src/
   middleware/  authenticate, requirePremium, enforceLimit, validate, rateLimit, errorHandler, ...
   routes/      one router per resource + telegramAuth + ai + index (mounts /v1)
   controllers/ thin request handlers; crud.ts is a generic factory
-  services/    business logic + atomic Firestore transactions
-  repositories/ base (generic userId-scoped CRUD) + firestore helpers
+  services/    business logic + atomic SQL transactions
+  repositories/ base (generic userId-scoped CRUD) + SQL helpers
+  db/          document tables, codecs, projections, pool and transaction context
   domain/      types, schemas (zod), entitlements, balance/deposit/debt/billing math, recurrence
   prompts/     chat system prompt + financial-context builder
   notifications/ durable queue, planner, delivery, collectors, rendering, schedule
@@ -91,7 +97,7 @@ All below require `Authorization: Bearer <firebaseIdToken>` and are under `/v1`:
 
 Money operations (transaction±balance, transfer, return, refill, debt create/pay,
 deposit collect/close/replenish/withdraw, subscription pay, savings contribute) run in
-`db.runTransaction()` so the transaction document and the affected card balance commit
+`runSqlTransaction()` so the transaction document and the affected card balance commit
 together — a failure leaves nothing partially written.
 
 ### Entitlements
@@ -134,9 +140,8 @@ users and 100 for Premium by default (`TELEGRAM_PARSE_DAILY_LIMIT_FREE` and
 Ambiguous operations remain in `telegramDrafts` and therefore never affect balances
 or statistics. Foreign-currency operations wait durably in `waiting_fx` when the NBU
 API is unavailable; the background worker obtains the rate and atomically writes the
-transaction and card balance later. Firestore TTL should be enabled for the
-`expiresAt` field in `telegramUpdates`, `telegramOperations`, `telegramDrafts`,
-`telegramMessages`, and `telegramSessions`.
+transaction and card balance later. Expiry fields are preserved in SQL. Automatic deletion is not enabled during migration;
+review retention and terminal job states before scheduling cleanup.
 
 Set the public endpoint in the API environment:
 
@@ -153,7 +158,7 @@ ATMOS only.
 
 ### Proactive Telegram notifications
 
-Notifications use a durable Firestore queue and a separate single-instance worker.
+Notifications use a durable MySQL queue and a separate single-instance worker.
 At 10:00 `Asia/Tashkent`, the planner builds at most one daily message per user from
 lifecycle events, subscriptions, debts, credit cards, deposits, goals, and the weekly
 or monthly report. Empty digests are not queued. Budget thresholds and trial-start
@@ -176,25 +181,19 @@ must run exactly one `pulim-worker`; job claims prevent duplicate delivery if an
 process overlaps during a restart, but the global 25 messages/second limiter is local
 to that worker process.
 
-#### First deployment / test Firebase
+#### Deployment and closed checks
 
-Keep `NOTIFICATIONS_ENABLED=false` during the first deployment.
+Apply the SQL schema before startup using explicit database environment variables:
+`node --env-file=/private/path/migration.env --import tsx src/db/migrate.ts`.
+Use `BACKGROUND_JOBS_ENABLED=false` for closed checks: it disables Telegram recovery,
+FX loops, webhook registration, notifications and communication workers.
+`MAINTENANCE_MODE=true` returns 503 on all non-health API routes and disables jobs.
+`NOTIFICATIONS_ENABLED=false` alone still allows communications in normal worker mode.
 
-1. Deploy the indexes in `firestore.indexes.json` to the selected Firebase project
-   (the included `firebase.json` points to it) and wait until all indexes are ready.
-2. In Firestore, enable TTL on `expiresAt` for `notifications` and
-   `notificationTasks`. Existing Telegram TTL policies stay enabled.
-3. Run `npm run backfill:notifications -- --reschedule` with credentials for that
-   project. The script is idempotent and preserves disabled users.
-4. Start the API and worker through `pm2 start ecosystem.config.cjs`.
-5. Set `NOTIFICATIONS_ENABLED=true` in the environment shortly before the 10:00
-   slot and restart both processes with their updated environment.
-
-Use a separate Firebase project and the test bot for integration acceptance before
-production. Verify one daily dedupe key, simultaneous lease claims, quiet-hour
-deferral, `429 retry_after`, blocked/unreachable transitions, callback ownership,
-and idempotent subscription/debt payments. Do not enable production delivery until
-the queue and lease indexes report ready.
+Run exactly one worker. `/health` and `/health/live` are liveness endpoints;
+`/health/ready` checks MySQL and the schema migration marker. Startup fails closed
+when SQL is unavailable; there is no Firestore fallback. Graceful shutdown drains
+requests/background work before closing the SQL pool.
 
 ### Phone sign-in over Eskiz
 
@@ -215,8 +214,7 @@ lifecycle and Firebase Auth is only the session/uid store.
 Because reCAPTCHA is gone, the limits are ours: per-IP `phoneAuthLimiter`
 (20/min), per-number resend cooldown (`PHONE_CODE_RESEND_COOLDOWN_SECONDS`),
 sends per hour (`PHONE_CODE_MAX_SENDS_PER_HOUR`) and wrong-code attempts
-(`PHONE_CODE_MAX_ATTEMPTS`). Enable Firestore TTL on `expiresAt` in
-`phoneVerifications`.
+(`PHONE_CODE_MAX_ATTEMPTS`). Expiry checks are enforced by the application; SQL cleanup is a separate retention-reviewed operation.
 
 Only `+998` numbers are accepted (`/message/sms/send` is domestic; international
 would need `send-global`). The SMS text must match a template approved in the
@@ -251,4 +249,5 @@ savings) with the single corresponding endpoint.
   cannot update one balance leg without the other or desynchronise `returnedAmount`.
 - Call `POST /v1/profile/bootstrap` once after login for default categories and auth
   metadata. Trial activation is a separate explicit `POST /v1/profile/trial/start`.
-- Once writes flow through the API, tighten `firestore.rules` to deny direct client writes.
+- After cutover, keep Firestore as a frozen recovery source; inventory and disable
+  every old writer separately from Firebase Auth.

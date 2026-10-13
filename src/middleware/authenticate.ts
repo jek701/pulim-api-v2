@@ -1,5 +1,5 @@
 import { asyncHandler } from '../utils/asyncHandler';
-import { auth } from '../config/firebase';
+import { auth } from '../config/firebaseAuth';
 import { AppError } from '../utils/AppError';
 
 /**

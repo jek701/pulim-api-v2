@@ -1,4 +1,5 @@
-import { auth, FieldValue } from '../config/firebase';
+import { patchValue, saveDocument } from '../db/documents';
+import { auth } from '../config/firebaseAuth';
 import { env } from '../config/env';
 import { verifyTelegramInitData } from './telegramVerify.service';
 import { findTelegramUser, saveTelegramUser } from '../repositories/telegramUser.repository';
@@ -6,7 +7,6 @@ import { profileRef, profileExists } from '../repositories/profile.repository';
 import { seedDefaultCategories } from './profile.service';
 import { AppError } from '../utils/AppError';
 import { ensureNotificationDefaults, markTelegramReachable } from '../notifications/settings';
-
 interface TelegramUser {
   id: number | string;
   first_name?: string;
@@ -15,14 +15,12 @@ interface TelegramUser {
   language_code?: string;
   photo_url?: string;
 }
-
 export interface TelegramAuthInput {
   telegramInitData: string;
   chatId: string;
   language?: 'uz' | 'ru' | 'en';
   firebaseIdToken?: string;
 }
-
 function buildClaims(tgUser: TelegramUser) {
   const claims: Record<string, string> = {
     provider: 'telegram',
@@ -31,17 +29,22 @@ function buildClaims(tgUser: TelegramUser) {
   if (tgUser.username) claims.telegramUsername = tgUser.username;
   return claims;
 }
-
 function displayNameOf(tgUser: TelegramUser, telegramId: string): string {
   const full = [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' ').trim();
   return full || tgUser.username || `Telegram User ${telegramId}`;
 }
-
 async function ensureFirebaseAuthUser(uid: string, tgUser: TelegramUser, telegramId: string) {
   try {
     await auth.getUser(uid);
   } catch (error) {
-    if ((error as { code?: string }).code !== 'auth/user-not-found') throw error;
+    if (
+      (
+        error as {
+          code?: string;
+        }
+      ).code !== 'auth/user-not-found'
+    )
+      throw error;
     await auth.createUser({
       uid,
       displayName: displayNameOf(tgUser, telegramId),
@@ -49,7 +52,6 @@ async function ensureFirebaseAuthUser(uid: string, tgUser: TelegramUser, telegra
     });
   }
 }
-
 /**
  * Telegram Mini App sign-in / link.
  *  - No `firebaseIdToken`: resolve an existing telegramUsers mapping, or create a
@@ -72,11 +74,9 @@ export async function authenticateTelegram(input: TelegramAuthInput) {
     throw new AppError(401, 'TELEGRAM_AUTH_FAILED', message);
   }
   const telegramId = String(tgUser.id);
-
   let uid: string;
   let isNewUser = false;
   let linkedExistingAccount = false;
-
   if (input.firebaseIdToken) {
     // Linking flow — prove ownership of the target account by verifying its ID token.
     const decoded = await auth.verifyIdToken(input.firebaseIdToken);
@@ -92,7 +92,8 @@ export async function authenticateTelegram(input: TelegramAuthInput) {
     } else {
       uid = `tg_${telegramId}`;
       isNewUser = true;
-      await profileRef(uid).set(
+      await saveDocument(
+        profileRef(uid),
         {
           uid,
           name: displayNameOf(tgUser, telegramId),
@@ -111,12 +112,17 @@ export async function authenticateTelegram(input: TelegramAuthInput) {
       await seedDefaultCategories(uid);
     }
   }
-
   // Persist the chatId↔uid mapping and append the chat id to the profile.
-  await saveTelegramUser({ chatId: input.chatId, telegramId, telegramUser: tgUser, profileUid: uid });
-  await profileRef(uid).set(
+  await saveTelegramUser({
+    chatId: input.chatId,
+    telegramId,
+    telegramUser: tgUser,
+    profileUid: uid,
+  });
+  await saveDocument(
+    profileRef(uid),
     {
-      telegramChatIds: FieldValue.arrayUnion(Number(telegramId)),
+      telegramChatIds: patchValue.arrayUnion(Number(telegramId)),
       ...(input.language ? { language: input.language } : {}),
       ...(linkedExistingAccount ? {} : { isTelegramUser: true }),
       updatedAt: Date.now(),
@@ -125,14 +131,12 @@ export async function authenticateTelegram(input: TelegramAuthInput) {
   );
   await ensureNotificationDefaults(uid);
   await markTelegramReachable(uid, input.chatId);
-
   let customToken: string | undefined;
   if (!linkedExistingAccount) {
     await ensureFirebaseAuthUser(uid, tgUser, telegramId);
     await auth.setCustomUserClaims(uid, buildClaims(tgUser));
     customToken = await auth.createCustomToken(uid, buildClaims(tgUser));
   }
-
   return {
     success: true,
     uid,

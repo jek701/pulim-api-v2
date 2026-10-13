@@ -1,6 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
-vi.mock('../../src/config/firebase', () => ({ db: {}, auth: {}, Timestamp: {}, FieldValue: {} }));
 
 const { formatDraftOperation } = await import('../../src/telegram/quickEntry.service');
 

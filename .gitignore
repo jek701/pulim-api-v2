@@ -8,3 +8,7 @@ dist
 serviceAccountKey.json
 oldServiceAccountKey.json
 .DS_Store
+/.migration-artifacts/
+
+.env.mysql-test
+.env.migration.local

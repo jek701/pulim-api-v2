@@ -1,13 +1,11 @@
+import { Timestamp, documentKey, patchValue, queryTable, runSqlTransaction } from '../db/documents';
 import { createHash } from 'node:crypto';
-import { db, FieldValue, Timestamp } from '../config/firebase';
 import { balanceDelta } from '../domain/balance';
 import { calcDebtTotal } from '../domain/debt';
-import { cardsCol, debtsCol, newTxnRef, readOwned } from '../repositories/firestore.helpers';
+import { cardsCol, debtsCol, newTxnRef, readOwned } from '../repositories/sql.helpers';
 import { telegramOperationMarkerRef, telegramTransactionRef } from './transaction.service';
 import type { Commission } from '../domain/types';
-
 type Row = Record<string, any>;
-
 interface CreateDebtInput {
   direction: 'i_owe' | 'owe_me';
   person: string;
@@ -18,20 +16,17 @@ interface CreateDebtInput {
   comment?: string;
   accountId?: string;
 }
-
 export interface TelegramDebtInput extends CreateDebtInput {
   date?: number;
 }
-
 /** Create a debt and, if an account is chosen, record the initial cash movement atomically. */
 export async function createDebt(uid: string, input: CreateDebtInput): Promise<Row> {
   const now = Date.now();
-  return db.runTransaction(async (tx) => {
+  return runSqlTransaction(async (tx) => {
     const account = input.accountId
-      ? await readOwned(tx, cardsCol().doc(input.accountId), uid, 'Account not found.')
+      ? await readOwned(tx, documentKey(cardsCol(), input.accountId), uid, 'Account not found.')
       : null;
-
-    const debtRef = debtsCol().doc();
+    const debtRef = documentKey(debtsCol());
     const debtDoc = {
       direction: input.direction,
       person: input.person,
@@ -46,52 +41,61 @@ export async function createDebt(uid: string, input: CreateDebtInput): Promise<R
       userId: uid,
       createdAt: now,
     };
-    tx.set(debtRef, debtDoc);
-
+    tx.save(debtRef, debtDoc);
     if (account) {
       // i_owe: you receive money now (income). owe_me: you hand money out (expense).
       const txType = input.direction === 'i_owe' ? 'income' : 'expense';
       const ref = newTxnRef();
-      tx.set(ref, {
-        type: txType, amount: input.amount, currency: input.currency, categoryId: '',
-        source: 'debt_payment', sourceLabel: `Debt: ${input.person}`,
-        debtId: debtRef.id, cardId: account.ref.id, date: now, userId: uid, createdAt: now,
+      tx.save(ref, {
+        type: txType,
+        amount: input.amount,
+        currency: input.currency,
+        categoryId: '',
+        source: 'debt_payment',
+        sourceLabel: `Debt: ${input.person}`,
+        debtId: debtRef.id,
+        cardId: account.ref.id,
+        date: now,
+        userId: uid,
+        createdAt: now,
       });
-      tx.update(account.ref, {
-        balance: FieldValue.increment(balanceDelta(account.data.cardType, txType, input.amount)),
+      tx.patch(account.ref, {
+        balance: patchValue.increment(balanceDelta(account.data.cardType, txType, input.amount)),
       });
     }
     return { id: debtRef.id, ...debtDoc };
   });
 }
-
 /** Idempotent Telegram debt creation. A debt and its optional initial cash
  * movement are committed together and can safely be retried by Telegram. */
 export async function createTelegramDebtOnce(
   uid: string,
   input: TelegramDebtInput,
   operationKey: string,
-): Promise<{ debt: Row; created: boolean; transactionId?: string }> {
+): Promise<{
+  debt: Row;
+  created: boolean;
+  transactionId?: string;
+}> {
   const markerRef = telegramOperationMarkerRef(uid, `debt:${operationKey}`);
-  const debtRef = db.collection('debts').doc(
+  const debtRef = documentKey(
+    queryTable('debts'),
     `telegram_${createHash('sha256').update(`${uid}:${operationKey}`).digest('hex').slice(0, 40)}`,
   );
   const transactionRef = telegramTransactionRef(`debt:${uid}:${operationKey}`, 'telegram_debt_');
-
-  return db.runTransaction(async (tx) => {
-    const marker = await tx.get(markerRef);
+  return runSqlTransaction(async (tx) => {
+    const marker = await tx.read(markerRef);
     if (marker.exists) {
-      const existing = await tx.get(debtRef);
+      const existing = await tx.read(debtRef);
       if (!existing.exists) throw new Error('Telegram debt marker has no debt.');
       return {
-        debt: { id: existing.id, ...existing.data() },
+        debt: { id: existing.id, ...existing.data },
         created: false,
-        ...(existing.data()?.accountId ? { transactionId: transactionRef.id } : {}),
+        ...(existing.data?.accountId ? { transactionId: transactionRef.id } : {}),
       };
     }
-
     const account = input.accountId
-      ? await readOwned(tx, cardsCol().doc(input.accountId), uid, 'Account not found.')
+      ? await readOwned(tx, documentKey(cardsCol(), input.accountId), uid, 'Account not found.')
       : null;
     const now = Date.now();
     const debtDoc = {
@@ -109,8 +113,7 @@ export async function createTelegramDebtOnce(
       userId: uid,
       createdAt: now,
     };
-    tx.create(debtRef, debtDoc);
-
+    tx.insert(debtRef, debtDoc);
     let transactionId: string | undefined;
     if (account) {
       const txType = input.direction === 'i_owe' ? 'income' : 'expense';
@@ -128,68 +131,102 @@ export async function createTelegramDebtOnce(
         userId: uid,
         createdAt: now,
       };
-      tx.create(transactionRef, transactionDoc);
-      tx.update(account.ref, {
-        balance: FieldValue.increment(balanceDelta(account.data.cardType, txType, input.amount)),
+      tx.insert(transactionRef, transactionDoc);
+      tx.patch(account.ref, {
+        balance: patchValue.increment(balanceDelta(account.data.cardType, txType, input.amount)),
       });
       transactionId = transactionRef.id;
     }
-
-    tx.create(markerRef, {
+    tx.insert(markerRef, {
       userId: uid,
       operationKey,
       kind: 'debt',
       debtId: debtRef.id,
       ...(transactionId ? { transactionId } : {}),
       createdAt: now,
-      expiresAt: Timestamp.fromMillis(now + 30 * 86_400_000),
+      expiresAt: Timestamp.fromMillis(now + 30 * 86400000),
     });
     return { debt: { id: debtRef.id, ...debtDoc }, created: true, transactionId };
   });
 }
-
 /** Record a (partial) debt payment, auto-completing when paid amount reaches the commission-adjusted total. */
-export async function payDebt(uid: string, debtId: string, amount: number, accountId?: string): Promise<Row> {
+export async function payDebt(
+  uid: string,
+  debtId: string,
+  amount: number,
+  accountId?: string,
+): Promise<Row> {
   const now = Date.now();
-  return db.runTransaction(async (tx) => {
-    const debt = await readOwned(tx, debtsCol().doc(debtId), uid, 'Debt not found.');
-    const account = accountId ? await readOwned(tx, cardsCol().doc(accountId), uid, 'Account not found.') : null;
-
+  return runSqlTransaction(async (tx) => {
+    const debt = await readOwned(tx, documentKey(debtsCol(), debtId), uid, 'Debt not found.');
+    const account = accountId
+      ? await readOwned(tx, documentKey(cardsCol(), accountId), uid, 'Account not found.')
+      : null;
     const total = calcDebtTotal(debt.data.amount, debt.data.commission);
     const newPaid = (debt.data.paidAmount || 0) + amount;
     // owe_me: they repay you (income). i_owe: you repay them (expense).
     const txType = debt.data.direction === 'owe_me' ? 'income' : 'expense';
-
-    const patch: Record<string, unknown> = { paidAmount: FieldValue.increment(amount) };
+    const patch: Record<string, unknown> = { paidAmount: patchValue.increment(amount) };
     if (newPaid >= total) patch.isPaid = true;
-    tx.update(debt.ref, patch);
-
+    tx.patch(debt.ref, patch);
     const ref = newTxnRef();
-    tx.set(ref, {
-      type: txType, amount, currency: debt.data.currency, categoryId: '',
-      source: 'debt_payment', sourceLabel: `Debt: ${debt.data.person}`,
-      ...(accountId ? { cardId: accountId } : {}), date: now, userId: uid, createdAt: now,
+    tx.save(ref, {
+      type: txType,
+      amount,
+      currency: debt.data.currency,
+      categoryId: '',
+      source: 'debt_payment',
+      sourceLabel: `Debt: ${debt.data.person}`,
+      ...(accountId ? { cardId: accountId } : {}),
+      date: now,
+      userId: uid,
+      createdAt: now,
     });
     if (account) {
-      tx.update(account.ref, { balance: FieldValue.increment(balanceDelta(account.data.cardType, txType, amount)) });
+      tx.patch(account.ref, {
+        balance: patchValue.increment(balanceDelta(account.data.cardType, txType, amount)),
+      });
     }
     return { id: debtId, paidAmount: newPaid, isPaid: newPaid >= total, total };
   });
 }
-
 /** Idempotent Telegram debt payment with an optional balance movement. */
 export async function payTelegramDebtOnce(
   uid: string,
-  input: { debtId: string; amount: number; accountId?: string; date?: number; comment?: string },
+  input: {
+    debtId: string;
+    amount: number;
+    accountId?: string;
+    date?: number;
+    comment?: string;
+  },
   operationKey: string,
-): Promise<{ debtId: string; person: string; direction: 'i_owe' | 'owe_me'; currency: string; amount: number; paidAmount: number; total: number; isPaid: boolean; transactionId?: string; created: boolean }> {
+): Promise<{
+  debtId: string;
+  person: string;
+  direction: 'i_owe' | 'owe_me';
+  currency: string;
+  amount: number;
+  paidAmount: number;
+  total: number;
+  isPaid: boolean;
+  transactionId?: string;
+  created: boolean;
+}> {
   const markerRef = telegramOperationMarkerRef(uid, `debt_payment:${operationKey}`);
-  const transactionRef = telegramTransactionRef(`debt_payment:${uid}:${operationKey}`, 'telegram_debt_payment_');
-
-  return db.runTransaction(async (tx) => {
-    const marker = await tx.get(markerRef);
+  const transactionRef = telegramTransactionRef(
+    `debt_payment:${uid}:${operationKey}`,
+    'telegram_debt_payment_',
+  );
+  return runSqlTransaction(async (tx) => {
+    const marker = await tx.read(markerRef);
     if (marker.exists) {
-      const debt = await readOwned(tx, debtsCol().doc(input.debtId), uid, 'Debt not found.');
+      const debt = await readOwned(
+        tx,
+        documentKey(debtsCol(), input.debtId),
+        uid,
+        'Debt not found.',
+      );
       return {
         debtId: input.debtId,
         person: debt.data.person,
@@ -203,21 +240,19 @@ export async function payTelegramDebtOnce(
         created: false,
       };
     }
-
-    const debt = await readOwned(tx, debtsCol().doc(input.debtId), uid, 'Debt not found.');
+    const debt = await readOwned(tx, documentKey(debtsCol(), input.debtId), uid, 'Debt not found.');
     const total = calcDebtTotal(debt.data.amount, debt.data.commission);
     const paidAmount = Number(debt.data.paidAmount ?? 0);
     const remaining = Math.max(0, total - paidAmount);
     if (debt.data.isPaid || remaining <= 0) throw new Error('Debt is already paid.');
     if (input.amount > remaining) throw new Error('Debt payment exceeds remaining amount.');
     const account = input.accountId
-      ? await readOwned(tx, cardsCol().doc(input.accountId), uid, 'Account not found.')
+      ? await readOwned(tx, documentKey(cardsCol(), input.accountId), uid, 'Account not found.')
       : null;
     const now = Date.now();
     const newPaid = paidAmount + input.amount;
     const isPaid = newPaid >= total;
-    tx.update(debt.ref, { paidAmount: newPaid, isPaid });
-
+    tx.patch(debt.ref, { paidAmount: newPaid, isPaid });
     let transactionId: string | undefined;
     if (account) {
       const txType = debt.data.direction === 'owe_me' ? 'income' : 'expense';
@@ -236,21 +271,20 @@ export async function payTelegramDebtOnce(
         userId: uid,
         createdAt: now,
       };
-      tx.create(transactionRef, transactionDoc);
-      tx.update(account.ref, {
-        balance: FieldValue.increment(balanceDelta(account.data.cardType, txType, input.amount)),
+      tx.insert(transactionRef, transactionDoc);
+      tx.patch(account.ref, {
+        balance: patchValue.increment(balanceDelta(account.data.cardType, txType, input.amount)),
       });
       transactionId = transactionRef.id;
     }
-
-    tx.create(markerRef, {
+    tx.insert(markerRef, {
       userId: uid,
       operationKey,
       kind: 'debt_payment',
       debtId: input.debtId,
       ...(transactionId ? { transactionId } : {}),
       createdAt: now,
-      expiresAt: Timestamp.fromMillis(now + 30 * 86_400_000),
+      expiresAt: Timestamp.fromMillis(now + 30 * 86400000),
     });
     return {
       debtId: input.debtId,

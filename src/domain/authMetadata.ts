@@ -1,4 +1,4 @@
-import type { DecodedToken } from '../config/firebase';
+import type { DecodedToken } from '../config/firebaseAuth';
 import type { AuthMethod } from './types';
 
 const MODERN_AUTH_METHODS: AuthMethod[] = ['google', 'apple', 'phone'];
@@ -60,9 +60,9 @@ export function deriveAuthMetadata(claims: DecodedToken): AuthMetadata {
   const linkedAuthMethods = Array.from(methods);
   const current: AuthMethod | null = isTelegram
     ? 'telegram'
-    : (mapProviderIdToAuthMethod(signInProvider)
-      ?? (claims.provider === 'phone' ? 'phone' : null)
-      ?? (claims.email ? 'email' : null));
+    : (mapProviderIdToAuthMethod(signInProvider) ??
+      (claims.provider === 'phone' ? 'phone' : null) ??
+      (claims.email ? 'email' : null));
 
   const primaryAuthMethod =
     linkedAuthMethods.find((m) => MODERN_AUTH_METHODS.includes(m)) ??

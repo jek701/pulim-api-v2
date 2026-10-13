@@ -1,0 +1,21 @@
+# Isolated local rehearsal DB; contains no production credentials or application workers.
+name: pulim-migration-local
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: pulim_app_rehearsal
+      MYSQL_USER: pulim_app_rehearsal
+      MYSQL_PASSWORD: local-rehearsal-only
+      MYSQL_ROOT_PASSWORD: local-rehearsal-root-only
+    ports:
+      - '127.0.0.1:3308:3306'
+    volumes:
+      - mysql-rehearsal:/var/lib/mysql
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', '127.0.0.1', '--silent']
+      interval: 5s
+      timeout: 3s
+      retries: 30
+volumes:
+  mysql-rehearsal:

@@ -1,25 +1,36 @@
-import { db, FieldValue } from '../config/firebase';
+import { documentKey, patchValue, runSqlTransaction } from '../db/documents';
 import { AppError } from '../utils/AppError';
 import { balanceDelta } from '../domain/balance';
-import { cardsCol, newTxnRef, readOwned } from '../repositories/firestore.helpers';
-
+import { cardsCol, newTxnRef, readOwned } from '../repositories/sql.helpers';
 type Row = Record<string, any>;
-
 /** Pay down a credit card's debt from a debit/cash card. Recorded as one transfer transaction. */
 export async function refillCreditCard(
   uid: string,
-  input: { creditCardId: string; sourceCardId: string; amount: number },
+  input: {
+    creditCardId: string;
+    sourceCardId: string;
+    amount: number;
+  },
 ): Promise<Row> {
   if (input.creditCardId === input.sourceCardId) {
     throw AppError.badRequest('Source and credit card must differ.');
   }
-  return db.runTransaction(async (tx) => {
-    const credit = await readOwned(tx, cardsCol().doc(input.creditCardId), uid, 'Credit card not found.');
-    const source = await readOwned(tx, cardsCol().doc(input.sourceCardId), uid, 'Source card not found.');
+  return runSqlTransaction(async (tx) => {
+    const credit = await readOwned(
+      tx,
+      documentKey(cardsCol(), input.creditCardId),
+      uid,
+      'Credit card not found.',
+    );
+    const source = await readOwned(
+      tx,
+      documentKey(cardsCol(), input.sourceCardId),
+      uid,
+      'Source card not found.',
+    );
     if (credit.data.cardType !== 'credit') {
       throw AppError.badRequest('Target card must be a credit card.');
     }
-
     const ref = newTxnRef();
     const doc = {
       type: 'expense',
@@ -36,12 +47,14 @@ export async function refillCreditCard(
       userId: uid,
       createdAt: Date.now(),
     };
-    tx.set(ref, doc);
-    tx.update(source.ref, {
-      balance: FieldValue.increment(balanceDelta(source.data.cardType, 'expense', input.amount)),
+    tx.save(ref, doc);
+    tx.patch(source.ref, {
+      balance: patchValue.increment(balanceDelta(source.data.cardType, 'expense', input.amount)),
     });
     // Paying a credit card is "income" to it (reduces debt).
-    tx.update(credit.ref, { balance: FieldValue.increment(balanceDelta('credit', 'income', input.amount)) });
+    tx.patch(credit.ref, {
+      balance: patchValue.increment(balanceDelta('credit', 'income', input.amount)),
+    });
     return { id: ref.id, ...doc };
   });
 }

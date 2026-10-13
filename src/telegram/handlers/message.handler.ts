@@ -1,3 +1,4 @@
+import { documentKey, queryTable, readDocument } from '../../db/documents';
 import { env } from '../../config/env';
 import { getIsPremium } from '../../services/entitlement.service';
 import { logger } from '../../utils/logger';
@@ -6,11 +7,15 @@ import { resolveUserContext } from '../context';
 import { languageFromTelegram, t } from '../i18n';
 import { escapeHtml, loginKeyboard, openAppKeyboard } from '../render';
 import { consumeParse, refundParse } from '../usage.repository';
-import { formatDraftOperation, loadCatalog, processQuickEntry, TelegramChatError } from '../quickEntry.service';
+import {
+  formatDraftOperation,
+  loadCatalog,
+  processQuickEntry,
+  TelegramChatError,
+} from '../quickEntry.service';
 import { clearSession, getSession } from '../sessions.repository';
 import { resolveAmount } from '../resolve/amount';
 import { parseUserDate } from '../resolve/date';
-import { db } from '../../config/firebase';
 import { updateTransaction } from '../../services/transaction.service';
 import { getOwnedDraft, updateDraft } from '../drafts.repository';
 import type { DraftReason } from '../types';
@@ -22,7 +27,6 @@ import {
   startBudgetLoadingMessage,
   type BudgetLoadingMessage,
 } from '../loadingDraft.service';
-
 export async function handleTextMessage(input: {
   updateId: number;
   messageId: number;
@@ -34,7 +38,9 @@ export async function handleTextMessage(input: {
   const context = await resolveUserContext(input.telegramId, input.chatId);
   if (!context) {
     const language = languageFromTelegram(input.languageCode);
-    await sendMessage(input.chatId, t(language, 'not_linked'), { reply_markup: loginKeyboard(language) });
+    await sendMessage(input.chatId, t(language, 'not_linked'), {
+      reply_markup: loginKeyboard(language),
+    });
     return null;
   }
   if (context.profile.telegramQuickEntryEnabled === false) {
@@ -55,7 +61,11 @@ export async function handleTextMessage(input: {
     const transaction = { ...(draft.draft as Record<string, unknown>) };
     let reasons = [...(draft.reasons as DraftReason[])];
     if (session.field === 'amount') {
-      const amount = resolveAmount(input.text, Number(input.text), transaction.currency as Currency);
+      const amount = resolveAmount(
+        input.text,
+        Number(input.text),
+        transaction.currency as Currency,
+      );
       if (!Number.isFinite(amount.amount) || amount.amount <= 0 || amount.ambiguous) {
         await sendMessage(input.chatId, t(context.language, 'invalid_amount'));
         return context.uid;
@@ -64,16 +74,28 @@ export async function handleTextMessage(input: {
       if (transaction.currency !== 'UZS' && Number(transaction.fxRate) > 0) {
         transaction.baseAmount = Math.round(amount.amount * Number(transaction.fxRate));
       }
-      reasons = reasons.filter((reason) => !['AMBIGUOUS_SMALL_AMOUNT', 'AMOUNT_MISMATCH', 'LOW_AMOUNT_CONFIDENCE'].includes(reason));
+      reasons = reasons.filter(
+        (reason) =>
+          !['AMBIGUOUS_SMALL_AMOUNT', 'AMOUNT_MISMATCH', 'LOW_AMOUNT_CONFIDENCE'].includes(reason),
+      );
     } else if (session.field === 'toAmount') {
-      const amount = resolveAmount(input.text, Number(input.text), transaction.toCurrency as Currency);
+      const amount = resolveAmount(
+        input.text,
+        Number(input.text),
+        transaction.toCurrency as Currency,
+      );
       if (!Number.isFinite(amount.amount) || amount.amount <= 0 || amount.ambiguous) {
         await sendMessage(input.chatId, t(context.language, 'invalid_amount'));
         return context.uid;
       }
       transaction.toAmount = amount.amount;
       transaction.fxRateSource = 'manual';
-      reasons = reasons.filter((reason) => !['NO_TO_AMOUNT', 'FX_UNAVAILABLE', 'AMBIGUOUS_SMALL_AMOUNT', 'AMOUNT_MISMATCH'].includes(reason));
+      reasons = reasons.filter(
+        (reason) =>
+          !['NO_TO_AMOUNT', 'FX_UNAVAILABLE', 'AMBIGUOUS_SMALL_AMOUNT', 'AMOUNT_MISMATCH'].includes(
+            reason,
+          ),
+      );
     } else if (session.field === 'comment') {
       transaction.comment = input.text.trim().slice(0, 200);
     } else {
@@ -95,22 +117,32 @@ export async function handleTextMessage(input: {
     await deleteMessage(input.chatId, Number(session.promptMessageId)).catch(() => undefined);
     const catalog = await loadCatalog(context.uid, context.language);
     const operationType = draft.operationType ?? transaction.kind ?? 'transaction';
-    await editMessageText(input.chatId, Number(session.contextMessageId),
+    await editMessageText(
+      input.chatId,
+      Number(session.contextMessageId),
       waitingFx
         ? t(context.language, 'fx_waiting')
         : formatDraftOperation(operationType, transaction, catalog, context.language, reasons),
-      { reply_markup: { inline_keyboard: waitingFx ? [] : [[{ text: t(context.language, 'edit'), callback_data: 'v1:edit:0' }]] } },
+      {
+        reply_markup: {
+          inline_keyboard: waitingFx
+            ? []
+            : [[{ text: t(context.language, 'edit'), callback_data: 'v1:edit:0' }]],
+        },
+      },
     );
     return context.uid;
   }
   if (session && session.userId === context.uid && session.transactionId) {
-    const transactionSnap = await db.collection('transactions').doc(String(session.transactionId)).get();
-    if (!transactionSnap.exists || transactionSnap.data()!.userId !== context.uid) {
+    const transactionSnap = await readDocument(
+      documentKey(queryTable('transactions'), String(session.transactionId)),
+    );
+    if (!transactionSnap.exists || transactionSnap.data!.userId !== context.uid) {
       await clearSession(input.chatId);
       await sendMessage(input.chatId, t(context.language, 'error'));
       return context.uid;
     }
-    const transaction = transactionSnap.data()!;
+    const transaction = transactionSnap.data!;
     let patch: Record<string, unknown>;
     if (session.field === 'amount') {
       const amount = resolveAmount(input.text, Number(input.text), transaction.currency);
@@ -137,11 +169,22 @@ export async function handleTextMessage(input: {
     const updated = await updateTransaction(context.uid, String(session.transactionId), patch);
     await clearSession(input.chatId);
     await deleteMessage(input.chatId, Number(session.promptMessageId)).catch(() => undefined);
-    await editMessageText(input.chatId, Number(session.contextMessageId),
+    await editMessageText(
+      input.chatId,
+      Number(session.contextMessageId),
       `${t(context.language, 'updated')}\n\n${escapeHtml(updated.comment ?? t(context.language, 'operation'))} — ${escapeHtml(updated.amount)} ${escapeHtml(updated.currency)}`,
-      { reply_markup: { inline_keyboard: [[{
-        text: t(context.language, 'edit'), callback_data: `v1:edit:${Number(session.itemIndex ?? 0)}`,
-      }]] } },
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [
+              {
+                text: t(context.language, 'edit'),
+                callback_data: `v1:edit:${Number(session.itemIndex ?? 0)}`,
+              },
+            ],
+          ],
+        },
+      },
     );
     return context.uid;
   }
@@ -149,7 +192,6 @@ export async function handleTextMessage(input: {
     await sendMessage(input.chatId, t(context.language, 'too_long'));
     return context.uid;
   }
-
   let loadingMessage: BudgetLoadingMessage | undefined;
   try {
     loadingMessage = await startBudgetLoadingMessage({
@@ -174,14 +216,14 @@ export async function handleTextMessage(input: {
       reply_parameters: { message_id: input.messageId, allow_sending_without_reply: true },
     });
   };
-
   const parseOperationKey = String(input.updateId);
   let limit: 'minute' | 'day' | null;
   try {
     limit = await consumeParse(context.uid, parseOperationKey, isPremium);
   } catch (error) {
     await loadingMessage?.stop();
-    if (loadingMessage) await deleteMessage(input.chatId, loadingMessage.messageId).catch(() => undefined);
+    if (loadingMessage)
+      await deleteMessage(input.chatId, loadingMessage.messageId).catch(() => undefined);
     throw error;
   }
   if (limit) {
@@ -208,7 +250,10 @@ export async function handleTextMessage(input: {
       await replaceLoading(t(context.language, 'error'));
       return context.uid;
     }
-    if (error instanceof AppError && ['AI_FAIR_USE_LIMIT_REACHED', 'AI_LIMIT_REACHED'].includes(error.code)) {
+    if (
+      error instanceof AppError &&
+      ['AI_FAIR_USE_LIMIT_REACHED', 'AI_LIMIT_REACHED'].includes(error.code)
+    ) {
       await replaceLoading(t(context.language, 'ai_limit'));
       return context.uid;
     }
