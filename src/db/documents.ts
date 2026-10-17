@@ -157,7 +157,7 @@ function predicate(filter: Filter) {
   const value = sql`CAST(${encoded} AS JSON)`;
   const matchingType =
     typeof filter.value === 'number'
-      ? sql<boolean>`JSON_TYPE(${expr}) IN ('INTEGER', 'DOUBLE')`
+      ? sql<boolean>`JSON_TYPE(${expr}) IN ('INTEGER', 'UNSIGNED INTEGER', 'DOUBLE')`
       : typeof filter.value === 'string'
         ? sql<boolean>`JSON_TYPE(${expr}) = 'STRING'`
         : typeof filter.value === 'boolean'

@@ -195,6 +195,12 @@ Firebase UIDs allowed to receive queued Telegram messages (including campaigns).
 An empty value allows all recipients when `NOTIFICATIONS_ENABLED=true`. The allowlist
 limits planning, queue creation and delivery without changing other users’ settings.
 
+Before a full rollout, run `npm run backfill:notifications` to initialize older profiles.
+Use `npm run backfill:notifications -- --due-now` to also schedule enabled profiles
+for a planner pass now. Existing opt-outs remain disabled; daily deduplication and
+quiet hours still apply. Clear `NOTIFY_ALLOWED_UIDS` in both `.env` and the process
+manager environment, then restart API and the single worker with the updated environment.
+
 Run exactly one worker. `/health` and `/health/live` are liveness endpoints;
 `/health/ready` checks MySQL and the schema migration marker. Startup fails closed
 when SQL is unavailable; there is no Firestore fallback. Graceful shutdown drains

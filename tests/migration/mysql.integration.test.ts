@@ -96,6 +96,34 @@ describe.skipIf(!enabled)('MySQL migration integration', () => {
     expect((await readDocument(key('cards', 'rollback'))).data.balance).toBe(1000);
   });
 
+  it('selects due notification timestamps stored as unsigned JSON integers', async () => {
+    const now = 1792223000000;
+    await insertDocument(key('notifications', 'due'), {
+      userId: 'notify-user', status: 'pending', nextAttemptAt: now - 1000,
+    });
+    await insertDocument(key('notifications', 'future'), {
+      userId: 'notify-user', status: 'pending', nextAttemptAt: now + 1000,
+    });
+    await insertDocument(key('notifications', 'string-timestamp'), {
+      userId: 'notify-user', status: 'pending', nextAttemptAt: String(now - 1000),
+    });
+    const query = filterQuery(
+      filterQuery(queryTable('notifications'), 'userId', 'in', ['notify-user']),
+      'status', '==', 'pending',
+    );
+    expect((await readDocument(orderQuery(filterQuery(query, 'nextAttemptAt', '<=', now), 'nextAttemptAt')))
+      .rows.map((row) => row.id)).toEqual(['due']);
+    expect((await readDocument(filterQuery(query, 'nextAttemptAt', '==', now - 1000)))
+      .rows.map((row) => row.id)).toEqual(['due']);
+    await insertDocument(key('profiles', 'scheduled'), {
+      notifications: { nextDailyAt: now - 1000 },
+    });
+    expect((await readDocument(filterQuery(
+      filterQuery(queryTable('profiles'), 'notifications.nextDailyAt', '>', 0),
+      'notifications.nextDailyAt', '<=', now,
+    ))).rows.map((row) => row.id)).toEqual(['scheduled']);
+  });
+
   it('serializes concurrent balance increments without lost updates', async () => {
     await insertDocument(key('cards', 'parallel'), card);
     await Promise.all(

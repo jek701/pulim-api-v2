@@ -12,6 +12,9 @@ import { notificationDefaults } from '../src/notifications/settings';
 const BATCH_SIZE = 400;
 async function main(): Promise<void> {
   const reschedule = process.argv.includes('--reschedule');
+  // Explicit rollout option: plan today's digest instead of waiting for tomorrow.
+  const dueNow = process.argv.includes('--due-now');
+  const now = Date.now();
   let cursor: StoredDocument | undefined;
   let scanned = 0;
   let updated = 0;
@@ -27,9 +30,12 @@ async function main(): Promise<void> {
       const patch: Record<string, unknown> = {};
       if (typeof profile.createdAt !== 'number')
         patch.createdAt = Number(profile.updatedAt ?? Date.now());
-      if (!profile.notifications) patch.notifications = notificationDefaults(profile);
-      else if (reschedule && profile.notifications.enabled) {
-        patch['notifications.nextDailyAt'] = notificationDefaults(profile).nextDailyAt;
+      if (!profile.notifications) {
+        const defaults = notificationDefaults(profile, now);
+        if (dueNow) defaults.nextDailyAt = now;
+        patch.notifications = defaults;
+      } else if ((reschedule || dueNow) && profile.notifications.enabled) {
+        patch['notifications.nextDailyAt'] = dueNow ? now : notificationDefaults(profile, now).nextDailyAt;
       }
       if (Object.keys(patch).length) {
         patch.updatedAt = Date.now();
@@ -42,7 +48,7 @@ async function main(): Promise<void> {
     if (snapshot.size < BATCH_SIZE) break;
   }
   console.log(
-    `Notification backfill complete: scanned=${scanned}, updated=${updated}, reschedule=${reschedule}`,
+    `Notification backfill complete: scanned=${scanned}, updated=${updated}, reschedule=${reschedule}, dueNow=${dueNow}`,
   );
 }
 main()
