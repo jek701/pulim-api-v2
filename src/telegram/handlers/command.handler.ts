@@ -7,6 +7,8 @@ import { setNotificationsEnabled } from '../../notifications/settings';
 import { saveMessage } from '../messages.repository';
 import { devNotesUids } from '../../config/env';
 import { createDevNote } from '../../devNotes/devNotes.repository';
+import { LOGIN_START_PREFIX } from '../../services/telegramLogin.service';
+import { handleTelegramLogin } from './login.handler';
 
 export async function handleCommand(input: {
   command: string;
@@ -16,7 +18,19 @@ export async function handleCommand(input: {
   chatId: string;
   telegramId: string;
   languageCode?: string;
+  /** Telegram `message.from` (names, username) — needed to create an account on login. */
+  telegramUser?: Record<string, unknown>;
 }): Promise<string | null> {
+  // Native-app login works for linked and unknown users alike, so it runs before the context check.
+  if (input.command === '/start' && input.argument?.startsWith(LOGIN_START_PREFIX)) {
+    return handleTelegramLogin({
+      nonce: input.argument.slice(LOGIN_START_PREFIX.length),
+      chatId: input.chatId,
+      telegramId: input.telegramId,
+      telegramUser: input.telegramUser,
+      languageCode: input.languageCode,
+    });
+  }
   const context = await resolveUserContext(input.telegramId, input.chatId);
   if (!context) {
     const language = languageFromTelegram(input.languageCode);

@@ -15,6 +15,17 @@ export const telegramAuthSchema = z.object({
 });
 export type TelegramAuthBody = z.infer<typeof telegramAuthSchema>;
 
+/** Native-app login through the bot deep link (`/auth/telegram/login-request`). */
+export const telegramLoginRequestSchema = z
+  .object({ language: z.enum(['uz', 'ru', 'en']).optional() })
+  .default({});
+export const telegramLoginParamsSchema = z.object({
+  requestId: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+});
+export const telegramLoginExchangeSchema = z.object({
+  deviceSecret: z.string().min(1).max(128),
+});
+
 /** Phone sign-in over the Eskiz SMS gateway. */
 const phoneNumberSchema = z.string().min(9).max(20);
 const phonePurposeSchema = z.enum(['signin', 'link']).default('signin');

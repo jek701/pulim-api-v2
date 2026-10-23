@@ -16,6 +16,7 @@ export const tables = {
   householdInvites: 'household_invites',
   householdInvitePicks: 'household_invite_picks',
   telegramUsers: 'telegram_users',
+  telegramLoginRequests: 'telegram_login_requests',
   phoneVerifications: 'phone_verifications',
   shortcutTokens: 'shortcut_tokens',
   billingEvents: 'billing_events',

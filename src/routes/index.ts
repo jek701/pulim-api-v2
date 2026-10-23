@@ -3,6 +3,7 @@ import { authenticate } from '../middleware/authenticate';
 import { aiLimiter, phoneAuthLimiter, shortcutLimiter, telegramAuthLimiter, telegramWebhookLimiter } from '../middleware/rateLimit';
 import { healthRouter } from './health.routes';
 import { telegramAuthRouter } from './telegramAuth.routes';
+import { telegramLoginRouter } from './telegramLogin.routes';
 import { phoneAuthRouter } from './phoneAuth.routes';
 import { profileRouter } from './profile.routes';
 import { settingsRouter } from './settings.routes';
@@ -30,6 +31,7 @@ import { householdsRouter } from './households.routes';
 /** Mounts every router. Public routes first, then the authenticated `/v1` tree. */
 export function mountRoutes(app: Express): void {
   app.use('/health', healthRouter);
+  app.use('/auth/telegram', telegramLoginRouter);
   app.use('/auth/telegram', telegramAuthLimiter, telegramAuthRouter);
   app.use('/auth/phone', phoneAuthLimiter, phoneAuthRouter);
   app.use('/internal/v1/billing/events', billingInternalRouter);

@@ -86,6 +86,7 @@ export async function dispatchUpdate(update: TelegramUpdate): Promise<string | n
       chatId,
       telegramId,
       languageCode: message.from.language_code,
+      telegramUser: message.from,
     });
   }
   if (message.text) {

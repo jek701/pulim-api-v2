@@ -55,6 +55,10 @@ const EnvSchema = z
     TELEGRAM_FX_RETRY_BATCH_SIZE: z.coerce.number().int().positive().max(100).default(20),
     TELEGRAM_FX_MAX_RETRY_HOURS: z.coerce.number().positive().default(168),
     WEB_APP_URL: z.string().default(''),
+    /** Where the bot's "back to the app" button points after a deep-link login (https only — Telegram rejects custom schemes). Defaults to `<TELEGRAM_WEBHOOK_URL origin>/auth/telegram/app-return`. */
+    TELEGRAM_LOGIN_RETURN_URL: z.string().default(''),
+    /** The native app URL the return page opens. */
+    TELEGRAM_LOGIN_APP_URL: z.string().default('pulim://'),
     PREMIUM_CHECKOUT_URL: z.string().default(''),
 
     // Notifications are dark-launched: deploy infrastructure and backfill first,
@@ -170,6 +174,17 @@ const EnvSchema = z
           code: 'custom',
           path: ['WEB_APP_URL'],
           message: 'A valid URL is required when notifications are enabled.',
+        });
+      }
+    }
+    if (value.TELEGRAM_LOGIN_RETURN_URL) {
+      try {
+        if (new URL(value.TELEGRAM_LOGIN_RETURN_URL).protocol !== 'https:') throw new Error();
+      } catch {
+        context.addIssue({
+          code: 'custom',
+          path: ['TELEGRAM_LOGIN_RETURN_URL'],
+          message: 'Must be an https URL.',
         });
       }
     }

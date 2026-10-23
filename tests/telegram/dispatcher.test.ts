@@ -3,12 +3,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   handleFamilyInvitePick: vi.fn(),
   handleTextMessage: vi.fn(),
+  handleCommand: vi.fn(),
 }));
 
 vi.mock('../../src/telegram/handlers/familyInvite.handler', () => ({ handleFamilyInvitePick: mocks.handleFamilyInvitePick }));
 vi.mock('../../src/telegram/handlers/message.handler', () => ({ handleTextMessage: mocks.handleTextMessage }));
 vi.mock('../../src/telegram/handlers/callback.handler', () => ({ handleCallbackQuery: vi.fn() }));
-vi.mock('../../src/telegram/handlers/command.handler', () => ({ handleCommand: vi.fn() }));
+vi.mock('../../src/telegram/handlers/command.handler', () => ({ handleCommand: mocks.handleCommand }));
 vi.mock('../../src/telegram/handlers/media.handler', () => ({ handleReceiptPhoto: vi.fn(), handleVoiceMessage: vi.fn() }));
 vi.mock('../../src/telegram/context', () => ({ resolveUserContext: vi.fn() }));
 vi.mock('../../src/telegram/client', () => ({ sendMessage: vi.fn() }));
@@ -41,5 +42,24 @@ describe('dispatchUpdate users_shared', () => {
       users: [{ user_id: 200, first_name: 'Malika' }],
     });
     expect(mocks.handleTextMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe('dispatchUpdate commands', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('passes the sender profile with /start so a bot login can create the account', async () => {
+    const from = { id: 100, first_name: 'Ali', username: 'ali', language_code: 'ru' };
+    await dispatchUpdate(telegramUpdateSchema.parse({
+      update_id: 2,
+      message: { message_id: 6, chat: { id: 100, type: 'private' }, from, text: '/start login_abc' },
+    }));
+
+    expect(mocks.handleCommand).toHaveBeenCalledWith(expect.objectContaining({
+      command: '/start',
+      argument: 'login_abc',
+      telegramId: '100',
+      telegramUser: from,
+    }));
   });
 });

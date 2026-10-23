@@ -38,15 +38,16 @@ Extra: `schema_migrations`, `migration_*`, `legacy_documents`, `household_member
 - No SQL FKs; relations live in JSON. Business timestamps = epoch ms numbers. No TTL cleanup job for `expires_at_ms` (retention undecided).
 - Adding a queryable field = add a projection in `db/documents.ts` (affects all tables). Don't add relational columns/joins casually.
 
-Key tables (`src/db/tables.ts`, 39): profiles (id = uid; Telegram users `tg_<telegramId>`), user_settings, categories (defaults `${uid}__default__${type}_${slug}`), subcategories,
+Key tables (`src/db/tables.ts`, 40): profiles (id = uid; Telegram users `tg_<telegramId>`), user_settings, categories (defaults `${uid}__default__${type}_${slug}`), subcategories,
 cards, transactions (Telegram ids `telegram_<sha>`), budgets (`${uid}_${categoryId}`), savings_goals, debts, deposits, subscriptions, planned_expenses,
-households, household_invites (7-day token), household_invite_picks, telegram_users, phone_verifications (HMAC of code), shortcut_tokens (sha256), billing_events, fx_rates,
+households, household_invites (7-day token), household_invite_picks, telegram_users, telegram_login_requests (bot login, 5-min, hashes only), phone_verifications (HMAC of code), shortcut_tokens (sha256), billing_events, fx_rates,
 ai_chats, ai_usage, ai_feedback, ai_forecast_cache, telegram_updates/operations/drafts/sessions/messages/usage, notifications, notification_tasks/state/stats,
 communication_campaigns, in_app_messages, communication_deliveries, dev_notes, dev_note_screenshots.
 
 ## Auth
 All `/v1/*`: `Authorization: Bearer <Firebase ID token>` → `req.uid`. Ownership via `readOwned`/`userScopedRepo` (403 wrong owner, 404 missing).
 - **Telegram Mini App** `POST /auth/telegram {telegramInitData, chatId, language?, firebaseIdToken?}`: HMAC check with bot token (Ed25519 fallback); creates `tg_<id>` account + profile + default categories or resolves mapping; custom claims `{provider:'telegram', telegramId}`; returns customToken. With firebaseIdToken = link to existing account.
+- **Native app via bot deep link** `POST /auth/telegram/login-request` → `t.me/<bot>?start=login_<nonce>` → bot `/start login_…` approves (same `signInTelegramUser` as the Mini App) → app polls `POST /auth/telegram/login-request/:requestId/exchange {deviceSecret}` for a one-time customToken. Contract: [docs/telegram-bot-login.md](../telegram-bot-login.md).
 - **Phone (Eskiz SMS)** `POST /auth/phone/send-code`, `/auth/phone/verify`: +998 only, 6-digit code, HMAC with `PHONE_CODE_PEPPER`, TTL/cooldown/attempt limits; `purpose:'link'` attaches phone to current uid. Replaced Firebase phone auth.
 - Email/Google/Apple: native Firebase client; API only records metadata on `POST /v1/profile/bootstrap`.
 - Owner-only: `DEV_NOTES_UIDS` gates dev notes + communications admin (others get 404). `NOTIFY_ALLOWED_UIDS` = notification rollout allowlist.
@@ -54,7 +55,7 @@ All `/v1/*`: `Authorization: Bearer <Firebase ID token>` → `req.uid`. Ownershi
 
 ## Endpoints
 Errors `{error:{code,message,details?}}`; zod → 400 `VALIDATION_ERROR`; free-plan → 403 `LIMIT_REACHED` / `PREMIUM_REQUIRED`.
-Public: `GET /health`, `/health/live`, `/health/ready`; `POST /auth/telegram`; `POST /auth/phone/send-code|verify`; `POST /telegram/webhook`; `POST /internal/v1/billing/events`;
+Public: `GET /health`, `/health/live`, `/health/ready`; `POST /auth/telegram`; `POST /auth/telegram/login-request`, `POST /auth/telegram/login-request/:requestId/exchange`, `GET /auth/telegram/app-return`; `POST /auth/phone/send-code|verify`; `POST /telegram/webhook`; `POST /internal/v1/billing/events`;
 `GET /shortcut/v1/cards`, `GET /shortcut/v1/categories`, `POST /shortcut/v1/expenses` (plain-text replies).
 `/v1` (auth):
 - profile: `POST /profile/bootstrap`, `POST /profile/trial/start`, `GET|PATCH /profile`, `PATCH /profile/home-widgets`, `POST /profile/telegram-link-dismissed`, `PATCH /profile/notifications {enabled}`; `GET|PATCH /settings`

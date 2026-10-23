@@ -7,7 +7,7 @@ import { profileRef, profileExists } from '../repositories/profile.repository';
 import { seedDefaultCategories } from './profile.service';
 import { AppError } from '../utils/AppError';
 import { ensureNotificationDefaults, markTelegramReachable } from '../notifications/settings';
-interface TelegramUser {
+export interface TelegramUser {
   id: number | string;
   first_name?: string;
   last_name?: string;
@@ -53,6 +53,83 @@ async function ensureFirebaseAuthUser(uid: string, tgUser: TelegramUser, telegra
   }
 }
 /**
+ * Resolve the account behind a Telegram user, creating a brand-new `tg_<telegramId>`
+ * account (+ default categories) when there is no telegramUsers mapping yet. Shared
+ * by the Mini App (`POST /auth/telegram`) and the bot deep-link login, so both land
+ * on the same uid with the same custom claims. Returns the claims to mint a token with.
+ */
+export async function signInTelegramUser(input: {
+  tgUser: TelegramUser;
+  chatId: string;
+  /** Overrides the profile language (the Mini App sends the UI language). */
+  language?: 'uz' | 'ru' | 'en';
+  /** Language for a profile created here when `language` is not given. */
+  defaultLanguage?: 'uz' | 'ru' | 'en';
+}) {
+  const { tgUser } = input;
+  const telegramId = String(tgUser.id);
+  const record = await findTelegramUser(telegramId, input.chatId);
+  let uid: string;
+  let isNewUser = false;
+  if (record) {
+    uid = (record.data.profileUid ?? record.data.uid) as string;
+  } else {
+    uid = `tg_${telegramId}`;
+    isNewUser = true;
+    await saveDocument(
+      profileRef(uid),
+      {
+        uid,
+        name: displayNameOf(tgUser, telegramId),
+        onboardingComplete: false,
+        salarySources: [],
+        familyMembers: [],
+        financialGoals: [],
+        language: input.language ?? input.defaultLanguage ?? 'uz',
+        isTelegramUser: true,
+        photoURL: tgUser.photo_url || null,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      },
+      { merge: true },
+    );
+    await seedDefaultCategories(uid);
+  }
+  await attachTelegramChat({ uid, tgUser, chatId: input.chatId, language: input.language, linkedExistingAccount: false });
+  await ensureFirebaseAuthUser(uid, tgUser, telegramId);
+  const claims = buildClaims(tgUser);
+  await auth.setCustomUserClaims(uid, claims);
+  return { uid, telegramId, isNewUser, claims };
+}
+// Persist the chatId↔uid mapping and append the chat id to the profile.
+async function attachTelegramChat(input: {
+  uid: string;
+  tgUser: TelegramUser;
+  chatId: string;
+  language?: 'uz' | 'ru' | 'en';
+  linkedExistingAccount: boolean;
+}) {
+  const telegramId = String(input.tgUser.id);
+  await saveTelegramUser({
+    chatId: input.chatId,
+    telegramId,
+    telegramUser: input.tgUser,
+    profileUid: input.uid,
+  });
+  await saveDocument(
+    profileRef(input.uid),
+    {
+      telegramChatIds: patchValue.arrayUnion(Number(telegramId)),
+      ...(input.language ? { language: input.language } : {}),
+      ...(input.linkedExistingAccount ? {} : { isTelegramUser: true }),
+      updatedAt: Date.now(),
+    },
+    { merge: true },
+  );
+  await ensureNotificationDefaults(input.uid);
+  await markTelegramReachable(input.uid, input.chatId);
+}
+/**
  * Telegram Mini App sign-in / link.
  *  - No `firebaseIdToken`: resolve an existing telegramUsers mapping, or create a
  *    brand-new `tg_<telegramId>` account (+ default categories). Returns a
@@ -77,6 +154,7 @@ export async function authenticateTelegram(input: TelegramAuthInput) {
   let uid: string;
   let isNewUser = false;
   let linkedExistingAccount = false;
+  let customToken: string | undefined;
   if (input.firebaseIdToken) {
     // Linking flow — prove ownership of the target account by verifying its ID token.
     const decoded = await auth.verifyIdToken(input.firebaseIdToken);
@@ -85,57 +163,12 @@ export async function authenticateTelegram(input: TelegramAuthInput) {
       throw AppError.notFound(`Profile "${uid}" was not found.`);
     }
     linkedExistingAccount = true;
+    await attachTelegramChat({ uid, tgUser, chatId: input.chatId, language: input.language, linkedExistingAccount });
   } else {
-    const record = await findTelegramUser(telegramId, input.chatId);
-    if (record) {
-      uid = (record.data.profileUid ?? record.data.uid) as string;
-    } else {
-      uid = `tg_${telegramId}`;
-      isNewUser = true;
-      await saveDocument(
-        profileRef(uid),
-        {
-          uid,
-          name: displayNameOf(tgUser, telegramId),
-          onboardingComplete: false,
-          salarySources: [],
-          familyMembers: [],
-          financialGoals: [],
-          language: input.language ?? 'uz',
-          isTelegramUser: true,
-          photoURL: tgUser.photo_url || null,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        },
-        { merge: true },
-      );
-      await seedDefaultCategories(uid);
-    }
-  }
-  // Persist the chatId↔uid mapping and append the chat id to the profile.
-  await saveTelegramUser({
-    chatId: input.chatId,
-    telegramId,
-    telegramUser: tgUser,
-    profileUid: uid,
-  });
-  await saveDocument(
-    profileRef(uid),
-    {
-      telegramChatIds: patchValue.arrayUnion(Number(telegramId)),
-      ...(input.language ? { language: input.language } : {}),
-      ...(linkedExistingAccount ? {} : { isTelegramUser: true }),
-      updatedAt: Date.now(),
-    },
-    { merge: true },
-  );
-  await ensureNotificationDefaults(uid);
-  await markTelegramReachable(uid, input.chatId);
-  let customToken: string | undefined;
-  if (!linkedExistingAccount) {
-    await ensureFirebaseAuthUser(uid, tgUser, telegramId);
-    await auth.setCustomUserClaims(uid, buildClaims(tgUser));
-    customToken = await auth.createCustomToken(uid, buildClaims(tgUser));
+    const signedIn = await signInTelegramUser({ tgUser, chatId: input.chatId, language: input.language });
+    uid = signedIn.uid;
+    isNewUser = signedIn.isNewUser;
+    customToken = await auth.createCustomToken(uid, signedIn.claims);
   }
   return {
     success: true,

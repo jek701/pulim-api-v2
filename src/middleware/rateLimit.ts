@@ -25,6 +25,24 @@ export const telegramAuthLimiter = rateLimit({
   handler: json429('Too many auth attempts. Please try again shortly.'),
 });
 
+/** Per-IP limit on starting a bot deep-link login (each call creates a stored request). */
+export const telegramLoginRequestLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 10,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  handler: json429('Too many login attempts. Please try again shortly.'),
+});
+
+/** Per-IP limit on polling a bot login; the app polls every ~1.5 s (40/min). */
+export const telegramLoginExchangeLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 120,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  handler: json429('Too many login checks. Please slow down.'),
+});
+
 /**
  * Per-IP guard on phone sign-in. With reCAPTCHA gone this is the only limit that
  * does not depend on the submitted number; per-number cooldowns and attempt caps

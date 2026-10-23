@@ -97,11 +97,14 @@ export async function migrateDatabase(): Promise<void> {
             .on('household_members')
             .column('user_id')
             .execute();
-        await db
-          .insertInto('schema_migrations')
-          .values({ version: '001_document_tables', applied_at: new Date() })
-          .onDuplicateKeyUpdate({ version: '001_document_tables' })
-          .execute();
+        // Document tables added after 001 come from `tables` above; the marker records the rollout.
+        for (const version of ['001_document_tables', '002_telegram_login_requests']) {
+          await db
+            .insertInto('schema_migrations')
+            .values({ version, applied_at: new Date() })
+            .onDuplicateKeyUpdate({ version })
+            .execute();
+        }
       } finally {
         await sql`SELECT RELEASE_LOCK(CONCAT(DATABASE(), ':pulim_schema'))`.execute(db);
       }
