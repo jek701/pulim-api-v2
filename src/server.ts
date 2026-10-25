@@ -1,6 +1,8 @@
 import { env } from './config/env';
 import { createApp } from './app';
-import { checkDatabase, closeDatabase } from './db/database';
+import { checkDatabase, closeDatabase, database } from './db/database';
+import { initOfflineSync } from './db/syncIndex';
+import { startSyncMaintenance } from './db/syncMaintenance';
 import { admin } from './config/firebaseAuth';
 import { logger } from './utils/logger';
 import { setMyCommands, setWebhook } from './telegram/client';
@@ -10,6 +12,7 @@ import { startNotificationLoops } from './notifications/loops';
 
 async function main(): Promise<void> {
   await checkDatabase();
+  logger.info({ offlineSync: await initOfflineSync(database()) }, 'offline-sync.state');
   const app = createApp();
   const jobsEnabled = env.BACKGROUND_JOBS_ENABLED && !env.MAINTENANCE_MODE;
   const server = app.listen(env.PORT, env.BIND_HOST, () => {
@@ -27,6 +30,7 @@ async function main(): Promise<void> {
     }
   });
   const fxQueue = jobsEnabled ? startFxQueue() : null;
+  const syncMaintenance = jobsEnabled ? startSyncMaintenance() : null;
   let stopping = false;
   let recoveryRun: Promise<void> | undefined;
   const recover = () => {
@@ -50,6 +54,7 @@ async function main(): Promise<void> {
     stopping = true;
     logger.info({ signal }, 'pulim-api.stopping');
     if (recoveryTimer) clearInterval(recoveryTimer);
+    syncMaintenance?.stop();
     const deadline = setTimeout(() => {
       logger.error('Graceful shutdown timed out; durable jobs will recover on restart');
       process.exit(1);

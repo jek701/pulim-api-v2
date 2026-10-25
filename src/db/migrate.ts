@@ -97,8 +97,40 @@ export async function migrateDatabase(): Promise<void> {
             .on('household_members')
             .column('user_id')
             .execute();
+        // 003: delta-sync change index (one row per document) + per-user sequence counter.
+        await db.schema
+          .createTable('sync_state')
+          .ifNotExists()
+          .addColumn('scope', sql`VARBINARY(512)`, (column) => column.primaryKey())
+          .addColumn('seq', 'bigint', (column) => column.notNull().defaultTo(0))
+          .addColumn('floor_seq', 'bigint', (column) => column.notNull().defaultTo(0))
+          .addColumn('updated_at_ms', 'bigint', (column) => column.notNull())
+          .execute();
+        await db.schema
+          .createTable('sync_entries')
+          .ifNotExists()
+          .addColumn('scope', sql`VARBINARY(512)`, (column) => column.notNull())
+          .addColumn('key_hash', sql`BINARY(32)`, (column) => column.notNull())
+          .addColumn('entity', 'varchar(32)', (column) => column.notNull())
+          .addColumn('doc_id', sql`VARBINARY(2048)`, (column) => column.notNull())
+          .addColumn('seq', 'bigint', (column) => column.notNull())
+          .addColumn('deleted', 'boolean', (column) => column.notNull().defaultTo(false))
+          .addColumn('updated_at_ms', 'bigint', (column) => column.notNull())
+          .addPrimaryKeyConstraint('sync_entries_pk', ['scope', 'key_hash'])
+          .execute();
+        const syncIndexes = await sql<{
+          INDEX_NAME: string;
+        }>`SELECT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'sync_entries' AND INDEX_NAME = 'sync_scope_seq'`.execute(
+          db,
+        );
+        if (!syncIndexes.rows.length)
+          await db.schema
+            .createIndex('sync_scope_seq')
+            .on('sync_entries')
+            .columns(['scope', 'seq'])
+            .execute();
         // Document tables added after 001 come from `tables` above; the marker records the rollout.
-        for (const version of ['001_document_tables', '002_telegram_login_requests']) {
+        for (const version of ['001_document_tables', '002_telegram_login_requests', '003_offline_sync']) {
           await db
             .insertInto('schema_migrations')
             .values({ version, applied_at: new Date() })

@@ -1,5 +1,6 @@
 import { env } from './config/env';
-import { checkDatabase, closeDatabase } from './db/database';
+import { checkDatabase, closeDatabase, database } from './db/database';
+import { initOfflineSync } from './db/syncIndex';
 import { startNotificationLoops, type NotificationLoops } from './notifications/loops';
 import { logger } from './utils/logger';
 import { runCommunicationDispatch } from './communications/repository';
@@ -12,6 +13,8 @@ async function main(): Promise<void> {
   if (env.NOTIFY_EMBEDDED)
     throw new Error('Standalone worker cannot run with NOTIFY_EMBEDDED=true');
   await checkDatabase();
+  const syncOn = await initOfflineSync(database());
+  logger.info({ offlineSync: syncOn }, 'offline-sync.state');
   let loops: NotificationLoops | null = null;
   let timer: NodeJS.Timeout | null = null;
   let communicationRun: Promise<unknown> | undefined;

@@ -27,6 +27,7 @@ export const tables = {
   fxRates: 'fx_rates',
   telegramUpdates: 'telegram_updates',
   telegramOperations: 'telegram_operations',
+  idempotencyKeys: 'idempotency_keys',
   telegramDrafts: 'telegram_drafts',
   telegramSessions: 'telegram_sessions',
   telegramMessages: 'telegram_messages',
