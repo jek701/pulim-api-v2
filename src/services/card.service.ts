@@ -1,6 +1,7 @@
 import { documentKey, patchValue, runSqlTransaction } from '../db/documents';
 import { AppError } from '../utils/AppError';
 import { balanceDelta } from '../domain/balance';
+import { clientNow } from '../domain/clientTime';
 import {
   cardsCol,
   readOwned,
@@ -18,6 +19,8 @@ export async function refillCreditCard(
     amount: number;
     /** Optional offline client id of the created transfer transaction. */
     id?: string;
+    /** Optional operation time of the offline client (clamped to a plausible window). */
+    date?: number;
   },
 ): Promise<Row> {
   if (input.creditCardId === input.sourceCardId) {
@@ -42,6 +45,7 @@ export async function refillCreditCard(
       throw AppError.badRequest('Target card must be a credit card.');
     }
     const ref = target.ref;
+    const operationTime = clientNow(input.date);
     const doc = {
       type: 'expense',
       amount: input.amount,
@@ -53,9 +57,9 @@ export async function refillCreditCard(
       source: 'transfer',
       sourceLabel: `Refill: ${source.data.name} -> ${credit.data.name}`,
       cardId: input.sourceCardId,
-      date: Date.now(),
+      date: operationTime,
       userId: uid,
-      createdAt: Date.now(),
+      createdAt: operationTime,
     };
     writeCreated(tx, target, doc);
     tx.patch(source.ref, {

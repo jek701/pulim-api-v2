@@ -1,5 +1,6 @@
 import { documentKey, patchValue, runSqlTransaction } from '../db/documents';
 import { balanceDelta } from '../domain/balance';
+import { clientNow } from '../domain/clientTime';
 import {
   cardsCol,
   savingsGoalsCol,
@@ -15,8 +16,9 @@ export async function contribute(
   amount: number,
   accountId?: string,
   transactionId?: string,
+  date?: number,
 ): Promise<Row> {
-  const now = Date.now();
+  const now = clientNow(date);
   return runSqlTransaction(async (tx) => {
     // Replay of an applied contribution (offline client id): no second effect.
     const target = await resolveOperationTx(tx, uid, transactionId, 'savings');

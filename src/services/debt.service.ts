@@ -2,6 +2,7 @@ import { Timestamp, documentKey, patchValue, queryTable, runSqlTransaction } fro
 import { createHash } from 'node:crypto';
 import { balanceDelta } from '../domain/balance';
 import { calcDebtTotal } from '../domain/debt';
+import { clientNow } from '../domain/clientTime';
 import {
   cardsCol,
   debtsCol,
@@ -35,9 +36,11 @@ export async function createDebt(
     id?: string;
     /** Optional offline client id of the initial cash transaction (needs accountId). */
     transactionId?: string;
+    /** Optional operation time of the offline client (clamped). */
+    date?: number;
   },
 ): Promise<Row> {
-  const now = Date.now();
+  const now = clientNow(input.date);
   return runSqlTransaction(async (tx) => {
     // Replay of an existing own debt: no second debt and no second cash movement.
     const target = await resolveCreateTarget(tx, debtsCol(), uid, input.id);
@@ -180,8 +183,9 @@ export async function payDebt(
   amount: number,
   accountId?: string,
   transactionId?: string,
+  date?: number,
 ): Promise<Row> {
-  const now = Date.now();
+  const now = clientNow(date);
   return runSqlTransaction(async (tx) => {
     // Replay of an applied payment (offline client id): no second effect.
     const target = await resolveOperationTx(tx, uid, transactionId, 'debt_payment');

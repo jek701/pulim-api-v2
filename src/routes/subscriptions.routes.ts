@@ -18,7 +18,7 @@ router.post(
   '/:id/pay',
   validate(accountOnlySchema),
   asyncHandler(async (req, res) => {
-    res.json(await paySubscription(req.uid, String(req.params.id), req.body.accountId, req.body.transactionId));
+    res.json(await paySubscription(req.uid, String(req.params.id), req.body.accountId, req.body.transactionId, req.body.date));
   }),
 );
 router.patch('/:id', validate(subscriptionUpdateSchema), subscriptions.update);

@@ -76,6 +76,7 @@ describe.skipIf(!enabled)('offline sync: change feed + idempotency (real MySQL)'
     const { transactionsRouter } = await import('../../src/routes/transactions.routes');
     const { cardsRouter } = await import('../../src/routes/cards.routes');
     const { categoriesRouter } = await import('../../src/routes/categories.routes');
+    const { subcategoriesRouter } = await import('../../src/routes/subcategories.routes');
     const { savingsGoalsRouter } = await import('../../src/routes/savingsGoals.routes');
     const { subscriptionsRouter } = await import('../../src/routes/subscriptions.routes');
     const { debtsRouter } = await import('../../src/routes/debts.routes');
@@ -94,6 +95,7 @@ describe.skipIf(!enabled)('offline sync: change feed + idempotency (real MySQL)'
     v1.use('/transactions', transactionsRouter);
     v1.use('/cards', cardsRouter);
     v1.use('/categories', categoriesRouter);
+    v1.use('/subcategories', subcategoriesRouter);
     v1.use('/savings-goals', savingsGoalsRouter);
     v1.use('/subscriptions', subscriptionsRouter);
     v1.use('/debts', debtsRouter);
@@ -140,7 +142,7 @@ describe.skipIf(!enabled)('offline sync: change feed + idempotency (real MySQL)'
     const text = await response.text();
     return {
       status: response.status,
-      body: text ? JSON.parse(text) : undefined,
+      body: text ? (() => { try { return JSON.parse(text); } catch { throw new Error(`${method} ${path} -> ${response.status} ${text.slice(0, 300)}`); } })() : undefined,
       replayed: response.headers.get('idempotent-replayed') === 'true',
     };
   }
@@ -622,6 +624,96 @@ describe.skipIf(!enabled)('offline sync: change feed + idempotency (real MySQL)'
       await replica.pull();
       for (const collection of ['categories', 'savingsGoals', 'debts', 'deposits', 'subscriptions', 'plannedExpenses'])
         expect([...replica.rows.keys()].filter((k) => k.startsWith(`${collection}/`)), collection).toHaveLength(1);
+    });
+  });
+
+  describe('operation time and category edits', () => {
+    const rawTx = async (id: string) => (await readDocument(key('transactions', id))).data;
+
+    it('uses a plausible client date for the created transaction and clamps a bad clock', async () => {
+      const uid = newUid();
+      await premium(uid);
+      await insertDocument(key('cards', `${uid}-a`), cardDoc(uid, 1000));
+      await insertDocument(key('cards', `${uid}-b`), cardDoc(uid, 0));
+      const day = Date.now() - 3 * 86_400_000;
+      const transfer = (id: string, date?: number) =>
+        call(uid, 'POST', '/transactions/transfer', { id, fromCardId: `${uid}-a`, toCardId: `${uid}-b`, amount: 1, ...(date !== undefined ? { date } : {}) });
+      const ok = randomUUID();
+      await transfer(ok, day);
+      expect((await rawTx(ok)).date).toBe(day);
+      expect((await rawTx(ok)).createdAt).toBe(day);
+      const tooOld = randomUUID();
+      const tooNew = randomUUID();
+      const absent = randomUUID();
+      const before = Date.now();
+      await transfer(tooOld, Date.now() - 100 * 86_400_000);
+      await transfer(tooNew, Date.now() + 3_600_000);
+      await transfer(absent);
+      for (const id of [tooOld, tooNew, absent]) {
+        const date = (await rawTx(id)).date;
+        expect(date).toBeGreaterThanOrEqual(before);
+        expect(date).toBeLessThanOrEqual(Date.now());
+      }
+      // Operation endpoints too: subscription pay and goal contribute.
+      await insertDocument(key('subscriptions', `${uid}-sub`), {
+        userId: uid, name: 'S', icon: 'x', amount: 5, currency: 'UZS', cycle: 'monthly', nextBillingDate: Date.now(), isActive: true, createdAt: 1,
+      });
+      await insertDocument(key('savingsGoals', `${uid}-goal`), {
+        userId: uid, name: 'T', icon: 'x', targetAmount: 99, savedAmount: 0, currency: 'UZS', deadline: 1, createdAt: 1,
+      });
+      const subTx = randomUUID();
+      const goalTx = randomUUID();
+      await call(uid, 'POST', `/subscriptions/${uid}-sub/pay`, { accountId: `${uid}-a`, transactionId: subTx, date: day });
+      await call(uid, 'POST', `/savings-goals/${uid}-goal/contribute`, { amount: 1, accountId: `${uid}-a`, transactionId: goalTx, date: day });
+      expect((await rawTx(subTx)).date).toBe(day);
+      expect((await rawTx(goalTx)).date).toBe(day);
+    });
+
+    it('computes deposit operations as of the client date', async () => {
+      const uid = newUid();
+      await premium(uid);
+      await insertDocument(key('cards', `${uid}-a`), cardDoc(uid, 1000));
+      const day = Date.now() - 2 * 86_400_000;
+      await insertDocument(key('deposits', `${uid}-dep`), {
+        userId: uid, bank: 'B', amount: 100, currency: 'UZS', interestRate: 0, startDate: day - 86_400_000,
+        endDate: Date.now() + 86_400_000, capitalization: 'at_end', interestPaidOut: 0, isReplenishable: true, isClosed: false,
+      });
+      const txId = randomUUID();
+      const closed = await call(uid, 'POST', `/deposits/${uid}-dep/close`, { accountId: `${uid}-a`, transactionId: txId, date: day });
+      expect(closed.status).toBe(200);
+      expect((await rawTx(txId)).date).toBe(day);
+      expect((await readDocument(key('deposits', `${uid}-dep`))).data.closedAt).toBe(day);
+    });
+
+    it('edits categories and subcategories (PATCH) with Premium only for custom ones, type stays immutable, and syncs the change', async () => {
+      const uid = newUid();
+      const defaultId = `${uid}__default__expense_food`;
+      await insertDocument(key('categories', defaultId), { userId: uid, name: 'Food', icon: 'a', color: 'red', type: 'expense', createdAt: 1 });
+      await insertDocument(key('categories', `${uid}-custom`), { userId: uid, name: 'Mine', icon: 'a', color: 'red', type: 'expense', createdAt: 1 });
+      await insertDocument(key('subcategories', `${uid}-sub`), { userId: uid, name: 'Cafe', categoryId: defaultId, createdAt: 1 });
+      const replica = new LocalReplica(uid);
+      await replica.pull();
+      const renamed = await call(uid, 'PATCH', `/categories/${defaultId}`, { name: 'Groceries', color: 'blue', type: 'income' });
+      expect(renamed.status).toBe(200);
+      expect(renamed.body).toMatchObject({ name: 'Groceries', color: 'blue', type: 'expense' });
+      const denied = await call(uid, 'PATCH', `/categories/${uid}-custom`, { name: 'X' });
+      expect(denied.status).toBe(403);
+      expect(denied.body.error.code).toBe('PREMIUM_REQUIRED');
+      expect((await call(uid, 'PATCH', `/subcategories/${uid}-sub`, { name: 'Coffee', categoryId: 'other' })).body).toMatchObject({ name: 'Coffee', categoryId: defaultId });
+      await premium(uid);
+      const key1 = randomUUID();
+      const one = await call(uid, 'PATCH', `/categories/${uid}-custom`, { name: 'Renamed' }, key1);
+      const two = await call(uid, 'PATCH', `/categories/${uid}-custom`, { name: 'Renamed' }, key1);
+      expect(one.status).toBe(200);
+      expect(two.replayed).toBe(true);
+      expect((await call(uid, 'PATCH', `/categories/${uid}-nope`, { name: 'X' })).status).toBe(404);
+      const intruder = newUid();
+      await premium(intruder);
+      expect((await call(intruder, 'PATCH', `/categories/${uid}-custom`, { name: 'Hack' })).status).toBe(403);
+      await replica.pull();
+      expect(replica.get('categories', defaultId)?.name).toBe('Groceries');
+      expect(replica.get('categories', `${uid}-custom`)?.name).toBe('Renamed');
+      expect(replica.get('subcategories', `${uid}-sub`)?.name).toBe('Coffee');
     });
   });
 

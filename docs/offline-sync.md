@@ -55,6 +55,14 @@ Operation endpoints that create a transaction of their own accept an optional cl
 
 Semantics: if an own transaction with that id and the same kind (`source`) already exists, the operation counts as already applied: **no writes, no second balance effect**, and a best-effort response of the usual shape is returned (`Idempotency-Key` replays are exact). An id owned by someone else or created by a different kind of operation → `409 ID_CONFLICT`. Server-made transactions without `transactionId` keep a server id (old clients).
 
+### 1c. Operation time: `date`
+
+Optional `date` (epoch ms, the moment the user acted) is accepted on `POST /transactions/transfer`, `/cards/refill`, `/subscriptions/:id/pay`, `/debts` (initial cash tx), `/debts/:id/pay`, `/savings-goals/:id/contribute`, `/deposits/:id/(collect-interest|close|replenish|withdraw)`; `POST /transactions/:id/return` already had `date`, and `POST /transactions` has always taken it. It becomes the transaction `date` and `createdAt` (for deposits also the `now` of the interest/principal computation, `closedAt`, tranche date). The server accepts it only within **[serverNow − 90 days, serverNow + 5 minutes]**; outside that window, or when absent, it silently uses its own now (today's behaviour).
+
+### 1d. Category edits
+
+`PATCH /v1/categories/:id` (`name`, `icon`, `color`; `type` is immutable and ignored) and `PATCH /v1/subcategories/:id` (`name`; `categoryId` immutable). Owner only (403 otherwise, 404 missing). Built-in categories (`${uid}__default__…`) are editable on the free plan; custom categories need Premium (`403 PREMIUM_REQUIRED`). Both honour `Idempotency-Key` and appear in the delta feed.
+
 Rules
 - Format `^[A-Za-z0-9_-]{8,64}$`. Use UUIDv4 (36 chars) or ULID (26). Rejected with `400 VALIDATION_ERROR`:
   exactly 20 alphanumerics (reserved for server ids), any id containing `__` (default categories `${uid}__default__…`, `__income__` style specials), ids starting with `telegram_`.
@@ -69,7 +77,7 @@ Rules
 Send `Idempotency-Key: <uuid>` (pattern `^[A-Za-z0-9_-]{16,128}$`) on the outbox mutations below; one key per outbox operation, reused verbatim on each retry.
 
 **Honoured (each is exactly ONE SQL transaction on the server):**
-`POST /transactions`, `/transactions/transfer`, `/transactions/:id/return`, `PATCH /transactions/:id`, `/transactions/:id/transfer`, `/transactions/:id/return`, `DELETE /transactions/:id`; `POST /cards`, `/cards/refill`, `PATCH|DELETE /cards/:id`; `POST /categories|/subcategories|/savings-goals|/debts|/deposits|/subscriptions|/planned-expenses`; `PATCH /savings-goals|/debts|/subscriptions|/planned-expenses/:id`; `DELETE` of any of those collections; `POST /savings-goals/:id/contribute`, `/debts/:id/pay`, `/subscriptions/:id/pay`, `/deposits/:id/(collect-interest|close|replenish|withdraw)`; `PUT|DELETE /budgets/:categoryId`; `PATCH /settings`.
+`POST /transactions`, `/transactions/transfer`, `/transactions/:id/return`, `PATCH /transactions/:id`, `/transactions/:id/transfer`, `/transactions/:id/return`, `DELETE /transactions/:id`; `POST /cards`, `/cards/refill`, `PATCH|DELETE /cards/:id`; `POST /categories|/subcategories|/savings-goals|/debts|/deposits|/subscriptions|/planned-expenses`; `PATCH /categories|/subcategories|/savings-goals|/debts|/subscriptions|/planned-expenses/:id`; `DELETE` of any of those collections; `POST /savings-goals/:id/contribute`, `/debts/:id/pay`, `/subscriptions/:id/pay`, `/deposits/:id/(collect-interest|close|replenish|withdraw)`; `PUT|DELETE /budgets/:categoryId`; `PATCH /settings`.
 
 **Ignored (header has no effect, response carries `Idempotency-Ignored: true`):** everything else — `PATCH /profile` and other profile routes, `DELETE /transactions` (clear all), households, AI, dev notes, communications. Those are multi-step on the server; retry them as naturally idempotent set-style operations (replaying `PATCH /profile` with the same fields is harmless).
 

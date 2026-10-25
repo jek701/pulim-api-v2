@@ -9,6 +9,7 @@ import {
   resolveOperationTx,
   writeCreated,
 } from '../repositories/sql.helpers';
+import { clientNow } from '../domain/clientTime';
 import type { Deposit } from '../domain/types';
 type Row = Record<string, any>;
 const asDeposit = (id: string, data: DocumentData): Deposit => ({
@@ -20,8 +21,9 @@ export async function collectInterest(
   uid: string,
   depositId: string,
   transactionId?: string,
+  date?: number,
 ): Promise<Row> {
-  const now = Date.now();
+  const now = clientNow(date);
   return runSqlTransaction(async (tx) => {
     // Replay of an applied collection (offline client id): no second effect.
     const target = await resolveOperationTx(tx, uid, transactionId, 'deposit_interest');
@@ -71,8 +73,9 @@ export async function closeDeposit(
   depositId: string,
   accountId: string,
   transactionId?: string,
+  date?: number,
 ): Promise<Row> {
-  const now = Date.now();
+  const now = clientNow(date);
   return runSqlTransaction(async (tx) => {
     const target = await resolveOperationTx(tx, uid, transactionId, 'deposit_close');
     if (target.existing) return { total: target.existing.amount, transaction: target.existing };
@@ -119,8 +122,9 @@ export async function replenishDeposit(
   accountId: string,
   amount: number,
   transactionId?: string,
+  date?: number,
 ): Promise<Row> {
-  const now = Date.now();
+  const now = clientNow(date);
   return runSqlTransaction(async (tx) => {
     const target = await resolveOperationTx(tx, uid, transactionId, 'deposit_replenish');
     if (target.existing) return { transaction: target.existing };
@@ -169,8 +173,9 @@ export async function withdrawDeposit(
   accountId: string,
   amount: number,
   transactionId?: string,
+  date?: number,
 ): Promise<Row> {
-  const now = Date.now();
+  const now = clientNow(date);
   return runSqlTransaction(async (tx) => {
     const target = await resolveOperationTx(tx, uid, transactionId, 'deposit_withdraw');
     if (target.existing) return { transaction: target.existing };

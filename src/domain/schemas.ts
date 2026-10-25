@@ -7,7 +7,11 @@ export const currencySchema = z.enum(CURRENCIES as [string, ...string[]]);
 const positive = z.number().finite();
 const dayOfMonth = z.number().int().min(1).max(31);
 /** `transactionId`: optional offline client id of the transaction an operation endpoint creates. */
-const opTransactionId = { transactionId: clientIdSchema.optional() };
+const opTransactionId = {
+  transactionId: clientIdSchema.optional(),
+  /** Operation time of the offline client (epoch ms); the server clamps it or ignores it. */
+  date: z.number().finite().optional(),
+};
 /**
  * Optional client-generated document id, accepted ONLY by personal create endpoints
  * (offline sync, docs/offline-sync.md section 1). Update (PATCH) and household schemas
@@ -114,6 +118,15 @@ export const categoryCreateSchema = z.object({
   ...clientId,
 });
 
+/** Editable fields only: `type` (drives statistics) is immutable. */
+export const categoryUpdateSchema = z
+  .object({
+    name: z.string().min(1).optional(),
+    icon: z.string().optional(),
+    color: z.string().optional(),
+  })
+  .strip();
+export const subcategoryUpdateSchema = z.object({ name: z.string().min(1).optional() }).strip();
 export const subcategoryCreateSchema = z.object({
   name: z.string().min(1),
   categoryId: z.string().min(1),
@@ -251,6 +264,8 @@ export const transferSchema = z.object({
   fxRate: z.number().optional(),
   fxRateSource: z.enum(['NBU', 'manual']).optional(),
   ...clientId,
+  /** Operation time of the offline client (epoch ms); clamped by the server. */
+  date: z.number().finite().optional(),
 });
 
 /** Full editable shape for an existing transfer. Financial fields are required so
@@ -280,6 +295,8 @@ export const refillSchema = z.object({
   amount: positive,
   /** Client id of the created transfer transaction. */
   ...clientId,
+  /** Operation time of the offline client (epoch ms); clamped by the server. */
+  date: z.number().finite().optional(),
 });
 
 // --- Debts (atomic) ---

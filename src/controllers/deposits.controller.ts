@@ -18,17 +18,17 @@ export const deleteDeposit = asyncHandler(async (req, res) => {
 });
 
 export const collectInterest = asyncHandler(async (req, res) => {
-  res.json(await depositService.collectInterest(req.uid, String(req.params.id), req.body?.transactionId));
+  res.json(await depositService.collectInterest(req.uid, String(req.params.id), req.body?.transactionId, req.body?.date));
 });
 
 export const closeDeposit = asyncHandler(async (req, res) => {
-  res.json(await depositService.closeDeposit(req.uid, String(req.params.id), req.body.accountId, req.body.transactionId));
+  res.json(await depositService.closeDeposit(req.uid, String(req.params.id), req.body.accountId, req.body.transactionId, req.body.date));
 });
 
 export const replenishDeposit = asyncHandler(async (req, res) => {
-  res.json(await depositService.replenishDeposit(req.uid, String(req.params.id), req.body.accountId, req.body.amount, req.body.transactionId));
+  res.json(await depositService.replenishDeposit(req.uid, String(req.params.id), req.body.accountId, req.body.amount, req.body.transactionId, req.body.date));
 });
 
 export const withdrawDeposit = asyncHandler(async (req, res) => {
-  res.json(await depositService.withdrawDeposit(req.uid, String(req.params.id), req.body.accountId, req.body.amount, req.body.transactionId));
+  res.json(await depositService.withdrawDeposit(req.uid, String(req.params.id), req.body.accountId, req.body.amount, req.body.transactionId, req.body.date));
 });

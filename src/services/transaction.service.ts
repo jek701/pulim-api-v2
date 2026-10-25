@@ -11,6 +11,7 @@ import {
 import { createHash } from 'node:crypto';
 import { AppError } from '../utils/AppError';
 import { balanceDelta } from '../domain/balance';
+import { clientNow } from '../domain/clientTime';
 import {
   cardsCol,
   txnsCol,
@@ -538,6 +539,8 @@ export async function transfer(
     fxRateSource?: 'NBU' | 'manual';
     /** Optional offline client id of the new transfer transaction. */
     id?: string;
+    /** Optional operation time of the offline client (clamped to a plausible window). */
+    date?: number;
   },
 ): Promise<Row> {
   if (input.fromCardId === input.toCardId) {
@@ -564,6 +567,7 @@ export async function transfer(
       throw AppError.badRequest('toAmount is required (and > 0) for cross-currency transfers.');
     }
     const ref = target.ref;
+    const operationTime = clientNow(input.date);
     const doc = {
       type: 'expense',
       amount: input.amount,
@@ -578,9 +582,9 @@ export async function transfer(
       baseAmount: input.baseAmount,
       fxRate: input.fxRate,
       fxRateSource: input.fxRateSource,
-      date: Date.now(),
+      date: operationTime,
       userId: uid,
-      createdAt: Date.now(),
+      createdAt: operationTime,
     };
     writeCreated(tx, target, doc);
     tx.patch(from.ref, {

@@ -31,6 +31,7 @@ export const payDebt = asyncHandler(async (req, res) => {
       req.body.amount,
       req.body.accountId,
       req.body.transactionId,
+      req.body.date,
     ),
   );
 });

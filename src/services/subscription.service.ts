@@ -1,5 +1,6 @@
 import { Timestamp, documentKey, patchValue, runSqlTransaction } from '../db/documents';
 import { balanceDelta } from '../domain/balance';
+import { clientNow } from '../domain/clientTime';
 import { advanceBillingDate } from '../domain/billing';
 import {
   cardsCol,
@@ -16,8 +17,9 @@ export async function paySubscription(
   subscriptionId: string,
   accountId?: string,
   transactionId?: string,
+  date?: number,
 ): Promise<Row> {
-  const now = Date.now();
+  const now = clientNow(date);
   return runSqlTransaction(async (tx) => {
     // Replay of an applied payment (offline client id): no second effect.
     const target = await resolveOperationTx(tx, uid, transactionId, 'subscription');

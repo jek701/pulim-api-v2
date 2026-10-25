@@ -25,6 +25,7 @@ router.post(
         req.body.amount,
         req.body.accountId,
         req.body.transactionId,
+        req.body.date,
       ));
   }),
 );
