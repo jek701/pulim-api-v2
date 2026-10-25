@@ -13,8 +13,8 @@ export interface IdempotencyContext {
   method: string;
   path: string;
   requestHash: string;
-  /** An expired marker still occupies the row: overwrite instead of insert. */
-  overwrite: boolean;
+  /** HTTP status of a successful response of this endpoint (used when only the effect survived). */
+  successStatus: number;
   /** Set once a committed transaction carried the marker. */
   claimed: boolean;
 }

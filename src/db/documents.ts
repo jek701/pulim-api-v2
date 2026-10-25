@@ -3,7 +3,13 @@ import { sql, type Kysely, type Transaction } from 'kysely';
 import { database } from './database';
 import { tables, entity, type Entity } from './tables';
 import { IdempotencyConflict, idempotencyStorage, type IdempotencyContext } from './idempotencyContext';
-import { isSyncEnabled, recordSyncChanges, syncScopeOf, type SyncChange } from './syncIndex';
+import {
+  collectionOf,
+  isSyncEnabled,
+  recordSyncChanges,
+  syncScopeOf,
+  type SyncChange,
+} from './syncIndex';
 import {
   decodeData,
   encodeData,
@@ -382,39 +388,42 @@ export class SqlTransaction {
   hasEffectWrites(): boolean {
     return this.writes.some((write) => write.key.table !== 'idempotencyKeys');
   }
-  /** Buffered write of the request's idempotency marker (committed with the effect). */
-  writeMarker(context: IdempotencyContext, effect: unknown): void {
-    const key = documentKey('idempotencyKeys', context.markerId);
-    const now = Date.now();
-    const data: DocumentData = {
-      userId: context.uid,
-      key: context.key,
-      method: context.method,
-      path: context.path,
-      requestHash: context.requestHash,
-      createdAt: now,
-      expiresAt: Timestamp.fromMillis(now + 30 * 86_400_000),
-    };
-    const snapshot = jsonSnapshot(effect);
-    if (snapshot !== undefined) data.effect = snapshot;
-    if (context.overwrite) this.writes.push({ kind: 'save', key, data });
-    else this.writes.push({ kind: 'insert', key, data });
-  }
   async flush(executor: Executor): Promise<void> {
     const changes = new Map<string, SyncChange>();
-    const track = (key: DocumentKey, data: DocumentData | undefined, deleted: boolean) => {
+    const track = (
+      key: DocumentKey,
+      data: DocumentData | undefined,
+      deleted: boolean,
+      previous?: DocumentData,
+    ) => {
       if (!isSyncEnabled()) return;
       const scope = syncScopeOf(key.table, key.id, data);
-      if (scope) changes.set(`${key.table}\0${key.id}`, { scope, entity: key.table, id: key.id, deleted });
+      const before = previous ? syncScopeOf(key.table, key.id, previous) : null;
+      // A document that moved to another owner is a delete for the old owner's feed.
+      if (before && before !== scope)
+        changes.set(`${before}\0${key.table}\0${key.id}`, {
+          scope: before,
+          entity: key.table,
+          id: key.id,
+          deleted: true,
+        });
+      if (scope)
+        changes.set(`${scope}\0${key.table}\0${key.id}`, {
+          scope,
+          entity: key.table,
+          id: key.id,
+          deleted,
+        });
     };
     for (const write of this.writes) {
       const table = tables[write.key.table];
       const id = Buffer.from(write.key.id);
       if (write.kind === 'remove') {
         // The owner is only known from the stored document (needed for the tombstone scope).
-        const old = isSyncEnabled()
-          ? ((await readUsing(write.key, executor, true)) as StoredDocument)
-          : undefined;
+        const old =
+          isSyncEnabled() && collectionOf(write.key.table)
+            ? ((await readUsing(write.key, executor, true)) as StoredDocument)
+            : undefined;
         await syncHouseholdMembers(executor, write.key);
         await executor.deleteFrom(table).where('id', '=', id).execute();
         if (old?.exists) track(write.key, old.data, true);
@@ -436,7 +445,7 @@ export class SqlTransaction {
       if (old.exists) await executor.updateTable(table).set(values).where('id', '=', id).execute();
       else await executor.insertInto(table).values(values).execute();
       await syncHouseholdMembers(executor, write.key, data);
-      track(write.key, data, false);
+      track(write.key, data, false, old.exists ? old.data : undefined);
     }
     // Last: the per-user counter lock must be taken after every document lock.
     await recordSyncChanges(executor, [...changes.values()]);
@@ -450,6 +459,42 @@ export class SqlTransaction {
 }
 export function writeBatch(): SqlTransaction {
   return new SqlTransaction();
+}
+/**
+ * Insert the request's idempotency marker. A duplicate primary key means another request
+ * (or an earlier attempt) already holds this key: reported as IdempotencyConflict.
+ */
+export async function insertIdempotencyMarker(
+  executor: Executor,
+  context: IdempotencyContext,
+  extra: { effect?: unknown; status?: number; body?: unknown },
+): Promise<void> {
+  const now = Date.now();
+  const data: DocumentData = {
+    userId: context.uid,
+    key: context.key,
+    method: context.method,
+    path: context.path,
+    requestHash: context.requestHash,
+    successStatus: context.successStatus,
+    createdAt: now,
+    expiresAt: Timestamp.fromMillis(now + 30 * 86_400_000),
+  };
+  const effect = jsonSnapshot(extra.effect);
+  if (effect !== undefined) data.effect = effect;
+  if (extra.status !== undefined) {
+    data.status = extra.status;
+    data.completedAt = now;
+    const body = jsonSnapshot(extra.body);
+    if (body !== undefined) data.body = body;
+  }
+  const values = { id: Buffer.from(context.markerId), ...encodeData(data), ...projected(data) };
+  try {
+    await executor.insertInto(tables.idempotencyKeys).values(values).execute();
+  } catch (error) {
+    if ((error as { code?: string }).code === 'ER_DUP_ENTRY') throw new IdempotencyConflict();
+    throw error;
+  }
 }
 /** Plain-JSON copy of an effect result for the idempotency marker; undefined when unusable. */
 function jsonSnapshot(value: unknown): unknown {
@@ -480,7 +525,8 @@ export async function runSqlTransaction<T>(
           carriesMarker = Boolean(
             idempotency && !idempotency.claimed && isSyncEnabled() && context.hasEffectWrites(),
           );
-          if (carriesMarker) context.writeMarker(idempotency!, result);
+          // Plain INSERT first: no pre-read, so no gap locks shared with other users' markers.
+          if (carriesMarker) await insertIdempotencyMarker(trx, idempotency!, { effect: result });
           await context.flush(trx);
           return result;
         });
@@ -488,12 +534,7 @@ export async function runSqlTransaction<T>(
       return result;
     } catch (error) {
       const code = (error as { code?: string }).code;
-      if (
-        carriesMarker &&
-        code === 'already-exists' &&
-        (error as { key?: DocumentKey }).key?.table === 'idempotencyKeys'
-      )
-        throw new IdempotencyConflict();
+      if (error instanceof IdempotencyConflict) throw error;
       if (attempt >= 4 || !['ER_LOCK_DEADLOCK', 'ER_LOCK_WAIT_TIMEOUT'].includes(code ?? ''))
         throw storageError(error);
       await new Promise((resolve) => setTimeout(resolve, randomInt(10, 50) * (attempt + 1)));

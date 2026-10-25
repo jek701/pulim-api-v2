@@ -129,6 +129,18 @@ export async function migrateDatabase(): Promise<void> {
             .on('sync_entries')
             .columns(['scope', 'seq'])
             .execute();
+        for (const [table, name, columns] of [
+          ['sync_entries', 'sync_tombstones', ['deleted', 'updated_at_ms']],
+          ['idempotency_keys', 'expiry', ['expires_at_ms']],
+        ] as const) {
+          const found = await sql<{
+            INDEX_NAME: string;
+          }>`SELECT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ${table} AND INDEX_NAME = ${name}`.execute(
+            db,
+          );
+          if (!found.rows.length)
+            await db.schema.createIndex(name).on(table).columns([...columns]).execute();
+        }
         // Document tables added after 001 come from `tables` above; the marker records the rollout.
         for (const version of ['001_document_tables', '002_telegram_login_requests', '003_offline_sync']) {
           await db

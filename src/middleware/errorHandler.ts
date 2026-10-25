@@ -14,7 +14,9 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, next) => {
 
   // The key marker already exists: replay the stored response instead of an error.
   if (err instanceof IdempotencyConflict) {
-    handleIdempotencyConflict(req, res).catch(next);
+    handleIdempotencyConflict(req, res).catch((replayError) =>
+      errorHandler(replayError, req, res, next),
+    );
     return;
   }
 

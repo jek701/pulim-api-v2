@@ -1,15 +1,20 @@
 import { createHash } from 'node:crypto';
 import type { Request, RequestHandler, Response } from 'express';
+import { sql } from 'kysely';
+import { database } from '../db/database';
 import {
   Timestamp,
   documentKey,
-  insertDocument,
+  insertIdempotencyMarker,
   patchDocument,
   readDocument,
-  saveDocument,
   type DocumentData,
 } from '../db/documents';
-import { idempotencyStorage, type IdempotencyContext } from '../db/idempotencyContext';
+import {
+  IdempotencyConflict,
+  idempotencyStorage,
+  type IdempotencyContext,
+} from '../db/idempotencyContext';
 import { isSyncEnabled } from '../db/syncIndex';
 import { AppError } from '../utils/AppError';
 import { asyncHandler } from '../utils/asyncHandler';
@@ -18,7 +23,36 @@ import { logger } from '../utils/logger';
 export const IDEMPOTENCY_HEADER = 'Idempotency-Key';
 export const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9_-]{16,128}$/;
 export const IDEMPOTENCY_TTL_MS = 30 * 86_400_000;
-const MUTATIONS = new Set(['POST', 'PATCH', 'PUT', 'DELETE']);
+/**
+ * Endpoints whose whole effect is ONE SQL transaction. Only these honour the key: the marker
+ * commits atomically with the effect, so a stored marker always means a complete effect.
+ * Everything else (multi-step handlers such as PATCH /profile, bootstrap, clear-all, household
+ * invites, AI) ignores the header; their clients must retry them as naturally idempotent.
+ * Tuple: [method, path relative to /v1, status of a successful response].
+ */
+const SEG = '[^/]+';
+const HONOURED: Array<[string, RegExp, number]> = [
+  ['POST', /^\/transactions\/?$/, 201],
+  ['POST', /^\/transactions\/transfer\/?$/, 201],
+  ['POST', new RegExp(`^/transactions/${SEG}/return/?$`), 201],
+  ['PATCH', new RegExp(`^/transactions/${SEG}(/transfer|/return)?/?$`), 200],
+  ['DELETE', new RegExp(`^/transactions/${SEG}/?$`), 204],
+  ['POST', /^\/cards\/?$/, 201],
+  ['POST', /^\/cards\/refill\/?$/, 201],
+  ['PATCH', new RegExp(`^/cards/${SEG}/?$`), 200],
+  ['DELETE', new RegExp(`^/cards/${SEG}/?$`), 204],
+  ['POST', /^\/(categories|subcategories|savings-goals|debts|deposits|subscriptions|planned-expenses)\/?$/, 201],
+  ['PATCH', new RegExp(`^/(savings-goals|debts|subscriptions|planned-expenses)/${SEG}/?$`), 200],
+  ['DELETE', new RegExp(`^/(categories|subcategories|savings-goals|debts|deposits|subscriptions|planned-expenses)/${SEG}/?$`), 204],
+  ['POST', new RegExp(`^/(savings-goals/${SEG}/contribute|debts/${SEG}/pay|subscriptions/${SEG}/pay)/?$`), 200],
+  ['POST', new RegExp(`^/deposits/${SEG}/(collect-interest|close|replenish|withdraw)/?$`), 200],
+  ['PUT', new RegExp(`^/budgets/${SEG}/?$`), 200],
+  ['DELETE', new RegExp(`^/budgets/${SEG}/?$`), 204],
+  ['PATCH', /^\/settings\/?$/, 200],
+];
+export function honouredStatus(method: string, path: string): number | undefined {
+  return HONOURED.find(([m, pattern]) => m === method && pattern.test(path))?.[2];
+}
 const MAX_STORED_BODY = 200_000;
 const REPLAY_WAIT_STEPS = 6;
 const REPLAY_WAIT_MS = 500;
@@ -88,9 +122,15 @@ async function replay(res: Response, ctx: IdempotencyContext, first: DocumentDat
     send(res, marker.status, marker.body);
     return;
   }
-  // Crash window: the effect committed but the response was never stored. Answer with the
-  // transaction result (same body in practice for every endpoint).
-  send(res, fallbackStatus(ctx.method), marker.effect);
+  // The effect committed but the final response was never stored (crash, oversized body).
+  // Answer success with whatever the transaction returned (possibly nothing: the client
+  // then relies on the delta feed) and flag it.
+  res.setHeader('Idempotent-Replay-Partial', 'true');
+  send(
+    res,
+    typeof marker.successStatus === 'number' ? marker.successStatus : fallbackStatus(ctx.method),
+    marker.effect,
+  );
 }
 
 /** Called by the error handler when the transaction runner reports an existing marker. */
@@ -111,30 +151,21 @@ const reused = () =>
   );
 
 async function persistResponse(ctx: IdempotencyContext, status: number, body: unknown): Promise<void> {
-  const copy = snapshot(body);
-  if (!copy.ok) return; // keep the effect fallback rather than a truncated body
-  const completed: DocumentData = { status, completedAt: Date.now() };
-  if (copy.value !== undefined) completed.body = copy.value;
   try {
     if (ctx.claimed) {
+      const copy = snapshot(body);
+      if (!copy.ok) return; // keep the effect fallback rather than a truncated body
+      const completed: DocumentData = { status, completedAt: Date.now() };
+      if (copy.value !== undefined) completed.body = copy.value;
       await patchDocument(markerRef(ctx), completed);
       return;
     }
-    // No transaction carried the marker (read-style endpoint): store the response itself.
-    const now = Date.now();
-    const data: DocumentData = {
-      userId: ctx.uid,
-      key: ctx.key,
-      method: ctx.method,
-      path: ctx.path,
-      requestHash: ctx.requestHash,
-      createdAt: now,
-      expiresAt: Timestamp.fromMillis(now + IDEMPOTENCY_TTL_MS),
-      ...completed,
-    };
-    if (ctx.overwrite) await saveDocument(markerRef(ctx), data);
-    else await insertDocument(markerRef(ctx), data);
+    // No transaction carried the marker (a replayed own-id create, a no-op): store the response.
+    const copy = snapshot(body);
+    if (!copy.ok) return;
+    await insertIdempotencyMarker(database(), ctx, { status, body: copy.value });
   } catch (error) {
+    if (error instanceof IdempotencyConflict) return;
     // The effect is already committed; never fail the response because of bookkeeping.
     logger.warn({ err: error }, 'idempotency.persist.failed');
   }
@@ -146,12 +177,14 @@ async function persistResponse(ctx: IdempotencyContext, status: number, body: un
  */
 export const idempotency: RequestHandler = asyncHandler(async (req, res, next) => {
   const header = req.header(IDEMPOTENCY_HEADER);
-  if (header === undefined || !MUTATIONS.has(req.method) || !isSyncEnabled()) {
+  if (header === undefined || !isSyncEnabled()) {
     next();
     return;
   }
-  // SSE chat is not replayable.
-  if (/^\/ai\/chat\/?$/.test(req.path)) {
+  const successStatus = honouredStatus(req.method, req.path);
+  if (successStatus === undefined) {
+    // Not a single-transaction mutation (or not a mutation): the key is ignored, visibly.
+    if (req.method !== 'GET' && req.method !== 'HEAD') res.setHeader('Idempotency-Ignored', 'true');
     next();
     return;
   }
@@ -169,7 +202,7 @@ export const idempotency: RequestHandler = asyncHandler(async (req, res, next) =
     method: req.method,
     path: req.originalUrl.split('?')[0],
     requestHash: requestHashOf(req.method, req.originalUrl, req.body),
-    overwrite: false,
+    successStatus,
     claimed: false,
   };
   const existing = await readDocument(markerRef(ctx));
@@ -177,7 +210,10 @@ export const idempotency: RequestHandler = asyncHandler(async (req, res, next) =
     const expiresAt = existing.data.expiresAt;
     const expired = expiresAt instanceof Timestamp && expiresAt.toMillis() < Date.now();
     if (expired) {
-      ctx.overwrite = true;
+      // Free the key atomically; a concurrent reuse then loses on the primary key.
+      await sql`DELETE FROM idempotency_keys WHERE id = ${Buffer.from(ctx.markerId)} AND expires_at_ms < ${Date.now()}`.execute(
+        database(),
+      );
     } else {
       if (existing.data.requestHash !== ctx.requestHash) throw reused();
       await replay(res, ctx, existing.data);

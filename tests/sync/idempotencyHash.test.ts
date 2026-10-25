@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('../../src/utils/logger', () => ({ logger: { warn() {}, error() {}, info() {} } }));
 import {
   IDEMPOTENCY_KEY_PATTERN,
+  honouredStatus,
   markerIdFor,
   requestHashOf,
 } from '../../src/middleware/idempotency';
@@ -31,5 +32,22 @@ describe('idempotency helpers', () => {
     expect(IDEMPOTENCY_KEY_PATTERN.test('short')).toBe(false);
     expect(IDEMPOTENCY_KEY_PATTERN.test('a'.repeat(129))).toBe(false);
     expect(IDEMPOTENCY_KEY_PATTERN.test('bad key with spaces!!')).toBe(false);
+  });
+  it('honours the key only on single-transaction mutations, with their success status', () => {
+    expect(honouredStatus('POST', '/transactions')).toBe(201);
+    expect(honouredStatus('POST', '/transactions/transfer')).toBe(201);
+    expect(honouredStatus('POST', '/transactions/abc/return')).toBe(201);
+    expect(honouredStatus('PATCH', '/transactions/abc/transfer')).toBe(200);
+    expect(honouredStatus('DELETE', '/transactions/abc')).toBe(204);
+    expect(honouredStatus('POST', '/debts/abc/pay')).toBe(200);
+    expect(honouredStatus('POST', '/deposits/abc/collect-interest')).toBe(200);
+    expect(honouredStatus('PUT', '/budgets/cat1')).toBe(200);
+    // multi-step or non-transactional endpoints ignore the header
+    expect(honouredStatus('DELETE', '/transactions')).toBeUndefined();
+    expect(honouredStatus('PATCH', '/profile')).toBeUndefined();
+    expect(honouredStatus('POST', '/profile/bootstrap')).toBeUndefined();
+    expect(honouredStatus('POST', '/ai/chat')).toBeUndefined();
+    expect(honouredStatus('GET', '/transactions')).toBeUndefined();
+    expect(honouredStatus('POST', '/households/current/invites')).toBeUndefined();
   });
 });

@@ -367,6 +367,19 @@ describe.skipIf(!enabled)('offline sync: change feed + idempotency (real MySQL)'
       expect(seqs).toEqual([...seqs].sort((a, b) => a - b));
     }, 30000);
 
+    it('tombstones a document that moved to another owner for the previous owner', async () => {
+      const uid = newUid();
+      await insertDocument(key('transactions', `${uid}-t`), {
+        userId: uid, type: 'expense', amount: 1, currency: 'UZS', categoryId: 'x', date: 1, createdAt: 1,
+      });
+      const replica = new LocalReplica(uid);
+      await replica.pull();
+      expect(replica.get('transactions', `${uid}-t`)).toBeTruthy();
+      await patchDocument(key('transactions', `${uid}-t`), { userId: `household:${uid}`, scope: 'household' });
+      await replica.pull();
+      expect(replica.get('transactions', `${uid}-t`)).toBeUndefined();
+    });
+
     it('answers 410 for a cursor behind pruned tombstones and 400 for a malformed one', async () => {
       const uid = newUid();
       await insertDocument(key('cards', `${uid}-c`), cardDoc(uid));
@@ -806,21 +819,62 @@ describe.skipIf(!enabled)('offline sync: change feed + idempotency (real MySQL)'
       expect(await balanceOf(`${uid}-a`)).toBe(480 + 300 - 40);
     });
 
-    it('replays the effect when the process failed after commit but before storing the response', async () => {
+    it('replays the effect (with the real success status) when the response was never stored', async () => {
       const uid = newUid();
       await insertDocument(key('cards', `${uid}-c`), cardDoc(uid));
       const k = randomUUID();
       const body = txBody(`${uid}-c`);
-      const crashed = await call(uid, 'POST', '/boom', body, k);
-      expect(crashed.status).toBe(500);
-      expect(await balanceOf(`${uid}-c`)).toBe(900);
-      const retry = await call(uid, 'POST', '/boom', body, k);
+      const first = await call(uid, 'POST', '/transactions', body, k);
+      // Simulate a crash after commit: the marker carries the effect but no stored response.
+      const { markerIdFor } = await import('../../src/middleware/idempotency');
+      await patchDocument(key('idempotencyKeys', markerIdFor(uid, k)), {
+        status: patchValue.delete(),
+        body: patchValue.delete(),
+      });
+      const retry = await call(uid, 'POST', '/transactions', body, k);
       expect(retry.replayed).toBe(true);
       expect(retry.status).toBe(201);
-      expect(retry.body).toMatchObject({ amount: 100, cardId: `${uid}-c` });
+      expect(retry.body).toMatchObject({ id: first.body.id, amount: 100, cardId: `${uid}-c` });
       expect(await balanceOf(`${uid}-c`)).toBe(900);
       expect(await txCount(uid)).toBe(1);
     }, 15000);
+
+    it('survives a launch-time burst: many users flush keyed writes at once without errors', async () => {
+      const users = Array.from({ length: 30 }, () => newUid());
+      for (const uid of users) await insertDocument(key('cards', `${uid}-c`), cardDoc(uid));
+      const results = await Promise.all(
+        users.flatMap((uid) =>
+          [1, 2].map((n) =>
+            call(uid, 'POST', '/transactions', txBody(`${uid}-c`, { amount: n }), randomUUID()),
+          ),
+        ),
+      );
+      expect(results.map((r) => r.status)).toEqual(Array(60).fill(201));
+      for (const uid of users) expect(await balanceOf(`${uid}-c`)).toBe(997);
+    }, 30000);
+
+    it('ignores the key (visibly) on multi-step endpoints instead of faking a replay', async () => {
+      const uid = newUid();
+      await insertDocument(key('cards', `${uid}-c`), cardDoc(uid));
+      const k = randomUUID();
+      const body = txBody(`${uid}-c`);
+      const first = await call(uid, 'POST', '/boom', body, k);
+      expect(first.status).toBe(500);
+      const raw = await fetch(`${base}/boom`, {
+        method: 'POST',
+        headers: { 'x-test-uid': uid, 'content-type': 'application/json', 'Idempotency-Key': k },
+        body: JSON.stringify(body),
+      });
+      expect(raw.headers.get('idempotency-ignored')).toBe('true');
+      expect(raw.headers.get('idempotent-replayed')).toBeNull();
+      // Nothing was stored for the key.
+      const markers = await database()
+        .selectFrom('idempotency_keys')
+        .select(database().fn.countAll().as('n'))
+        .where('user_id', '=', Buffer.from(uid))
+        .executeTakeFirstOrThrow();
+      expect(Number(markers.n)).toBe(0);
+    });
 
     it('treats an expired marker as free and lets the key be used again', async () => {
       const uid = newUid();

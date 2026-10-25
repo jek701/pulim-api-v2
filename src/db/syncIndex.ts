@@ -70,7 +70,10 @@ export async function initOfflineSync(db: Executor): Promise<boolean> {
       version: string;
     }>`SELECT version FROM schema_migrations WHERE version = ${SYNC_MIGRATION}`.execute(db);
     enabled = result.rows.length === 1;
-  } catch {
+  } catch (error) {
+    // Only "tables are not there yet" means off; a transient DB error must fail the boot
+    // loudly instead of silently dropping changes for the life of the process.
+    if ((error as { code?: string }).code !== 'ER_NO_SUCH_TABLE') throw error;
     enabled = false;
   }
   return enabled;
@@ -132,30 +135,38 @@ export async function pruneSyncTombstones(
   now = Date.now(),
 ): Promise<number> {
   const cutoff = now - retentionMs;
-  const scopes = await sql<{
-    scope: Buffer;
-  }>`SELECT DISTINCT scope FROM sync_entries WHERE deleted = 1 AND updated_at_ms < ${cutoff} LIMIT 200`.execute(
-    db,
-  );
   let removed = 0;
-  for (const row of scopes.rows) {
-    await db.transaction().execute(async (trx) => {
-      await sql`SELECT seq FROM sync_state WHERE scope = ${row.scope} FOR UPDATE`.execute(trx);
-      const max = await sql<{
-        seq: string | number | null;
-      }>`SELECT MAX(seq) AS seq FROM sync_entries WHERE scope = ${row.scope} AND deleted = 1 AND updated_at_ms < ${cutoff}`.execute(
-        trx,
-      );
-      const floor = max.rows[0]?.seq;
-      if (floor === null || floor === undefined) return;
-      const result = await sql`DELETE FROM sync_entries WHERE scope = ${row.scope} AND deleted = 1 AND updated_at_ms < ${cutoff}`.execute(
-        trx,
-      );
-      removed += Number(result.numAffectedRows ?? 0);
-      await sql`UPDATE sync_state SET floor_seq = GREATEST(floor_seq, ${Number(floor)}) WHERE scope = ${row.scope}`.execute(
-        trx,
-      );
-    });
+  for (let round = 0; round < 10; round++) {
+    const scopes = await sql<{
+      scope: Buffer;
+    }>`SELECT DISTINCT scope FROM sync_entries WHERE deleted = 1 AND updated_at_ms < ${cutoff} LIMIT 200`.execute(
+      db,
+    );
+    if (!scopes.rows.length) break;
+    for (const row of scopes.rows) {
+      removed += await pruneScope(db, row.scope, cutoff);
+    }
   }
+  return removed;
+}
+async function pruneScope(db: Kysely<any>, scope: Buffer, cutoff: number): Promise<number> {
+  let removed = 0;
+  await db.transaction().execute(async (trx) => {
+    await sql`SELECT seq FROM sync_state WHERE scope = ${scope} FOR UPDATE`.execute(trx);
+    const max = await sql<{
+      seq: string | number | null;
+    }>`SELECT MAX(seq) AS seq FROM sync_entries WHERE scope = ${scope} AND deleted = 1 AND updated_at_ms < ${cutoff}`.execute(
+      trx,
+    );
+    const floor = max.rows[0]?.seq;
+    if (floor === null || floor === undefined) return;
+    const result = await sql`DELETE FROM sync_entries WHERE scope = ${scope} AND deleted = 1 AND updated_at_ms < ${cutoff}`.execute(
+      trx,
+    );
+    removed = Number(result.numAffectedRows ?? 0);
+    await sql`UPDATE sync_state SET floor_seq = GREATEST(floor_seq, ${Number(floor)}) WHERE scope = ${scope}`.execute(
+      trx,
+    );
+  });
   return removed;
 }

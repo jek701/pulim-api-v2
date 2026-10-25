@@ -7,10 +7,13 @@ import {
   readDocument,
   writeBatch,
 } from '../src/db/documents';
-import { closeDatabase } from '../src/db/database';
+import { closeDatabase, database } from '../src/db/database';
+import { initOfflineSync } from '../src/db/syncIndex';
 import { notificationDefaults } from '../src/notifications/settings';
 const BATCH_SIZE = 400;
 async function main(): Promise<void> {
+  // Profile writes must reach the offline-sync change feed too.
+  await initOfflineSync(database());
   const reschedule = process.argv.includes('--reschedule');
   // Explicit rollout option: plan today's digest instead of waiting for tomorrow.
   const dueNow = process.argv.includes('--due-now');

@@ -66,14 +66,18 @@ Rules
 
 ## 2. `Idempotency-Key`
 
-Send on **every** `/v1` POST/PATCH/PUT/DELETE the outbox replays: header `Idempotency-Key: <uuid>` (pattern `^[A-Za-z0-9_-]{16,128}$`). One key per outbox operation, reused verbatim on each retry. Ignored on GET and on `POST /v1/ai/chat` (SSE).
+Send `Idempotency-Key: <uuid>` (pattern `^[A-Za-z0-9_-]{16,128}$`) on the outbox mutations below; one key per outbox operation, reused verbatim on each retry.
+
+**Honoured (each is exactly ONE SQL transaction on the server):**
+`POST /transactions`, `/transactions/transfer`, `/transactions/:id/return`, `PATCH /transactions/:id`, `/transactions/:id/transfer`, `/transactions/:id/return`, `DELETE /transactions/:id`; `POST /cards`, `/cards/refill`, `PATCH|DELETE /cards/:id`; `POST /categories|/subcategories|/savings-goals|/debts|/deposits|/subscriptions|/planned-expenses`; `PATCH /savings-goals|/debts|/subscriptions|/planned-expenses/:id`; `DELETE` of any of those collections; `POST /savings-goals/:id/contribute`, `/debts/:id/pay`, `/subscriptions/:id/pay`, `/deposits/:id/(collect-interest|close|replenish|withdraw)`; `PUT|DELETE /budgets/:categoryId`; `PATCH /settings`.
+
+**Ignored (header has no effect, response carries `Idempotency-Ignored: true`):** everything else — `PATCH /profile` and other profile routes, `DELETE /transactions` (clear all), households, AI, dev notes, communications. Those are multi-step on the server; retry them as naturally idempotent set-style operations (replaying `PATCH /profile` with the same fields is harmless).
 
 - Server stores `(uid, key) → status + body` for 30 days. A replay returns the **original status and body** with header `Idempotent-Replayed: true` and has **no new effect**.
-- Reusing a key with a different method/URL/body → `422 IDEMPOTENCY_KEY_REUSED`.
-- Invalid key format → `400 INVALID_IDEMPOTENCY_KEY`.
-- Only successful (2xx) responses are stored. 4xx/5xx are not: they mean nothing was committed, and a retry re-runs the request (a later retry may legitimately succeed, e.g. after the card it needs was created).
-- Atomicity: for every endpoint whose effect is a SQL transaction (all money operations and all CRUD) the key marker is committed **in the same transaction** as the effect, so there is no window where the effect exists without the marker. Two concurrent requests with the same key: exactly one effect, the other replays.
-- Endpoints without an own transaction (read-style POSTs) store the response afterwards (best effort).
+- Reusing a key with a different method/URL/body → `422 IDEMPOTENCY_KEY_REUSED`. Invalid key format → `400 INVALID_IDEMPOTENCY_KEY`.
+- Only successful (2xx) responses are stored. 4xx/5xx are not: the transaction rolled back, nothing was committed, a retry re-runs the request (it may legitimately succeed later, e.g. after the card it needs was created).
+- Atomicity: the key marker is inserted in the **same SQL transaction** as the effect, so a stored marker always means a complete effect. Two concurrent requests with the same key: exactly one effect, the other replays.
+- Rare crash window: the effect committed but the server died before storing the final response. The replay then answers with the success status of that endpoint and the transaction's result (empty body for PATCH/DELETE and plain CRUD creates) plus header `Idempotent-Replay-Partial: true`. Treat it as success and rely on the next delta pull for the data.
 - `DELETE` of a missing doc is `404` without a key. Treat `404` on DELETE as success in the app.
 
 ## 3. Delta sync: `GET /v1/sync/changes`
@@ -93,7 +97,7 @@ Query: `cursor` (opaque string, optional), `limit` (1..500, default 200 — coun
 ```
 
 - No `cursor` = start of a **full snapshot**, paged. `mode: "snapshot"` pages never contain `deleted`. When a snapshot finishes (`hasMore:false`) the returned `cursor` is a delta cursor. **Sweep rule:** after a completed snapshot delete local synced rows (without pending outbox ops) that the snapshot did not mention.
-- With a delta cursor: `mode: "delta"`: documents created/changed since the cursor and ids deleted (tombstones, including cascades: refunds removed with their purchase, `clear data`, debt/deposit/goal deletions, household-driven deletions of own docs).
+- With a delta cursor: `mode: "delta"`: documents created/changed since the cursor and ids deleted (tombstones, also for a document that moved to another owner (e.g. an own transaction turned into a family-space one), including cascades: refunds removed with their purchase, `clear data`, debt/deposit/goal deletions, household-driven deletions of own docs).
 - `upserted` documents have exactly the shape of the corresponding `GET` endpoint (`{id, ...fields}`), `profile` = `GET /v1/profile`, `settings` = `GET /v1/settings` (only present once the user has a settings document).
 - Persist `cursor` only after the page is applied locally. Apply upserts as idempotent full-row replace. The same document may appear again in a later page (idempotent). Repeat while `hasMore`.
 - The feed contains exactly the documents the personal GET endpoints return for the user (docs whose `userId` is the caller; includes family-space transactions made from the user's own cards, with `scope:"household"`). **Household-owned data (shared cards, shared goals, budgets of the family space) is not in v1 of the feed** — keep using `/v1/households/*` online.
