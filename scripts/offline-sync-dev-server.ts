@@ -71,6 +71,21 @@ async function main(): Promise<void> {
   const app = express();
   app.use(express.json({ limit: '1mb' }));
   app.use('/v1', v1);
+  // Local convenience: Premium-only creates (debts, deposits, goals, ...) need Premium.
+  app.post('/dev/grant-premium', async (req, res) => {
+    const uid = req.header('x-test-uid');
+    if (!uid) {
+      res.status(401).end();
+      return;
+    }
+    const { documentKey, saveDocument } = await import('../src/db/documents');
+    await saveDocument(
+      documentKey('profiles', uid),
+      { isPremium: true, subscription: { tier: 'premium', premiumUntil: Date.now() + 30 * 86_400_000 } },
+      { merge: true },
+    );
+    res.status(204).end();
+  });
   app.use(errorHandler);
   const port = Number(process.env.PORT || 3112);
   const server = app.listen(port, '127.0.0.1', () =>
