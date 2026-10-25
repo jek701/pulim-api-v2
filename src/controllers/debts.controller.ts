@@ -25,6 +25,12 @@ export const deleteDebt = asyncHandler(async (req, res) => {
 });
 export const payDebt = asyncHandler(async (req, res) => {
   res.json(
-    await debtService.payDebt(req.uid, String(req.params.id), req.body.amount, req.body.accountId),
+    await debtService.payDebt(
+      req.uid,
+      String(req.params.id),
+      req.body.amount,
+      req.body.accountId,
+      req.body.transactionId,
+    ),
   );
 });

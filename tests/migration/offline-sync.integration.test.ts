@@ -507,6 +507,86 @@ describe.skipIf(!enabled)('offline sync: change feed + idempotency (real MySQL)'
       expect(await balanceOf(`${uid}-c`)).toBe(990);
     });
 
+    it('lets operation endpoints name the transaction they create (transactionId) and replays without a second effect', async () => {
+      const uid = newUid();
+      await premium(uid);
+      const a = `${uid}-a`;
+      await insertDocument(key('cards', a), cardDoc(uid, 1000));
+      await insertDocument(key('subscriptions', `${uid}-sub`), {
+        userId: uid, name: 'Music', icon: 'x', amount: 20, currency: 'UZS', cycle: 'monthly',
+        nextBillingDate: Date.now(), isActive: true, createdAt: 1,
+      });
+      await insertDocument(key('savingsGoals', `${uid}-goal`), {
+        userId: uid, name: 'Trip', icon: 'x', targetAmount: 1000, savedAmount: 0, currency: 'UZS', deadline: 1, createdAt: 1,
+      });
+      await insertDocument(key('deposits', `${uid}-dep`), {
+        userId: uid, bank: 'B', amount: 100, currency: 'UZS', interestRate: 12, startDate: Date.now() - 90 * 86400000,
+        endDate: Date.now() + 86400000, capitalization: 'at_end', interestPaidOut: 0, isReplenishable: true,
+        isClosed: false, interestToAccountId: a,
+      });
+      const debtId = randomUUID();
+      const debtTx = randomUUID();
+      const debtBody = { id: debtId, transactionId: debtTx, direction: 'owe_me', person: 'Ali', amount: 50, currency: 'UZS', accountId: a };
+      const debt = await call(uid, 'POST', '/debts', debtBody);
+      expect(debt.status).toBe(201);
+      expect((await call(uid, 'POST', '/debts', debtBody)).body.id).toBe(debtId);
+      expect(await balanceOf(a)).toBe(950);
+      expect((await rawDoc('transactions', debtTx)).debtId).toBe(debtId);
+
+      const ops: Array<[string, string, Record<string, unknown>, number]> = [
+        ['/debts/' + debtId + '/pay', 'pay', { amount: 10, accountId: a }, 960],
+        [`/subscriptions/${uid}-sub/pay`, 'sub', { accountId: a }, 940],
+        [`/savings-goals/${uid}-goal/contribute`, 'goal', { amount: 30, accountId: a }, 910],
+        [`/deposits/${uid}-dep/replenish`, 'rep', { accountId: a, amount: 10 }, 900],
+        [`/deposits/${uid}-dep/withdraw`, 'wd', { accountId: a, amount: 5 }, 905],
+        [`/deposits/${uid}-dep/collect-interest`, 'int', {}, -1],
+        [`/deposits/${uid}-dep/close`, 'close', { accountId: a }, -1],
+      ];
+      const ids: string[] = [debtTx];
+      for (const [path, , extra, expected] of ops) {
+        const transactionId = randomUUID();
+        ids.push(transactionId);
+        const body = { ...extra, transactionId };
+        const before = await balanceOf(a);
+        const one = await call(uid, 'POST', path, body);
+        expect([path, one.status]).toEqual([path, 200]);
+        const afterFirst = await balanceOf(a);
+        const two = await call(uid, 'POST', path, body);
+        expect([path, two.status]).toEqual([path, 200]);
+        expect(await balanceOf(a)).toBe(afterFirst);
+        if (expected >= 0) expect(afterFirst).toBe(expected);
+        else expect(afterFirst).toBeGreaterThan(before);
+        expect((await rawDoc('transactions', transactionId)).userId).toBe(uid);
+      }
+      // The local row and the server row are the same row: the feed has exactly these ids.
+      const replica = new LocalReplica(uid);
+      await replica.pull();
+      const txRows = [...replica.rows.keys()].filter((k) => k.startsWith('transactions/'));
+      expect(txRows.sort()).toEqual(ids.map((id) => `transactions/${id}`).sort());
+    });
+
+    it('rejects a transactionId owned by someone else or created by another kind of operation (409)', async () => {
+      const owner = newUid();
+      const other = newUid();
+      await premium(owner);
+      await premium(other);
+      await insertDocument(key('cards', `${owner}-a`), cardDoc(owner));
+      await insertDocument(key('cards', `${other}-a`), cardDoc(other));
+      await insertDocument(key('savingsGoals', `${owner}-goal`), { userId: owner, name: 'T', icon: 'x', targetAmount: 9, savedAmount: 0, currency: 'UZS', deadline: 1, createdAt: 1 });
+      await insertDocument(key('savingsGoals', `${other}-goal`), { userId: other, name: 'T', icon: 'x', targetAmount: 9, savedAmount: 0, currency: 'UZS', deadline: 1, createdAt: 1 });
+      const transactionId = randomUUID();
+      expect((await call(owner, 'POST', `/savings-goals/${owner}-goal/contribute`, { amount: 5, accountId: `${owner}-a`, transactionId })).status).toBe(200);
+      const stolen = await call(other, 'POST', `/savings-goals/${other}-goal/contribute`, { amount: 5, accountId: `${other}-a`, transactionId });
+      expect(stolen.status).toBe(409);
+      expect(stolen.body.error.code).toBe('ID_CONFLICT');
+      // Same owner, but the id belongs to a savings transaction, not a subscription payment.
+      await insertDocument(key('subscriptions', `${owner}-sub`), { userId: owner, name: 'S', icon: 'x', amount: 1, currency: 'UZS', cycle: 'monthly', nextBillingDate: Date.now(), isActive: true, createdAt: 1 });
+      const wrongKind = await call(owner, 'POST', `/subscriptions/${owner}-sub/pay`, { accountId: `${owner}-a`, transactionId });
+      expect(wrongKind.status).toBe(409);
+      expect(await balanceOf(`${owner}-a`)).toBe(995);
+      expect((await call(owner, 'POST', `/subscriptions/${owner}-sub/pay`, { accountId: `${owner}-a`, transactionId: 'telegram_abcdefg' })).status).toBe(400);
+    });
+
     it('creates every collection by id: categories, savings goals, debts, deposits, subscriptions, planned expenses', async () => {
       const uid = newUid();
       await premium(uid);

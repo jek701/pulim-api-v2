@@ -35,10 +35,25 @@ Accepted as an optional `id` in the JSON body of:
 | `POST /v1/cards` | card |
 | `POST /v1/categories`, `POST /v1/subcategories` | category / subcategory |
 | `POST /v1/savings-goals` | goal |
-| `POST /v1/debts` | debt (its optional initial cash transaction gets a server id; you get it through sync) |
+| `POST /v1/debts` | debt (initial cash tx: see §1b) |
 | `POST /v1/deposits` | deposit |
 | `POST /v1/subscriptions` | subscription |
 | `POST /v1/planned-expenses` | planned expense |
+
+### 1b. Operation endpoints: `transactionId`
+
+Operation endpoints that create a transaction of their own accept an optional client **`transactionId`** (same format and rules as `id`) so the local row and the server row are the same row (no duplicate on the first pull):
+
+| Endpoint | Body field | Notes |
+|---|---|---|
+| `POST /v1/debts` | `id` (debt) + `transactionId` (initial cash tx, only used when `accountId` is given) | both ids come from the client |
+| `POST /v1/debts/:id/pay` | `transactionId` | |
+| `POST /v1/subscriptions/:id/pay` | `transactionId` | |
+| `POST /v1/savings-goals/:id/contribute` | `transactionId` | |
+| `POST /v1/deposits/:id/collect-interest` | `transactionId` (body optional otherwise) | |
+| `POST /v1/deposits/:id/close`, `/replenish`, `/withdraw` | `transactionId` | |
+
+Semantics: if an own transaction with that id and the same kind (`source`) already exists, the operation counts as already applied: **no writes, no second balance effect**, and a best-effort response of the usual shape is returned (`Idempotency-Key` replays are exact). An id owned by someone else or created by a different kind of operation → `409 ID_CONFLICT`. Server-made transactions without `transactionId` keep a server id (old clients).
 
 Rules
 - Format `^[A-Za-z0-9_-]{8,64}$`. Use UUIDv4 (36 chars) or ULID (26). Rejected with `400 VALIDATION_ERROR`:
@@ -108,3 +123,15 @@ Order matters: replay ops in creation order per user (create card → create tx 
 - Kill switch: `OFFLINE_SYNC_ENABLED=false` in the server `.env` + restart. If sync was off for a period after clients already synced, set `SYNC_EPOCH=<n+1>` so all old cursors answer 410 and clients resnapshot.
 - Retention: tombstones 90 days, idempotency markers 30 days; pruned by `db/syncMaintenance.ts` in the API process (first run 5 min after boot, then every 6 h).
 - Cost: every write transaction that touches user documents adds one counter upsert and one index upsert per changed document (inside the same transaction).
+
+## 6. Running the API locally for client development
+
+Real Firebase auth cannot be used locally, so there is a **local-only** dev server with the real routers/services and a fake auth header:
+
+```bash
+docker compose -f compose.migration.yaml up -d      # MySQL 8.4 on 127.0.0.1:3308 (rehearsal DB only)
+cp <path>/.env.mysql-test .env.mysql-test            # local rehearsal DB creds (gitignored; ask the owner's checkout)
+npm run dev:offline-sync                             # http://127.0.0.1:3112/v1 , runs migrations incl. 003 on the rehearsal DB
+```
+
+Send `x-test-uid: <any string>` instead of `Authorization`. Supported: profile (incl. `POST /v1/profile/bootstrap` for default categories), settings, categories, subcategories, cards, budgets, savings goals, subscriptions, planned expenses, transactions, debts, deposits, `/v1/sync/*`. The script refuses to start unless `MYSQL_HOST=127.0.0.1`, `MYSQL_PORT=3308`, `MYSQL_DATABASE=pulim_app_rehearsal`. Premium-gated creates need a profile with `isPremium:true` and `subscription.premiumUntil` in the future (`PATCH` is not allowed for these fields; insert the profile row directly or call the service in a test).

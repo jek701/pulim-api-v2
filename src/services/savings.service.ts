@@ -1,6 +1,12 @@
 import { documentKey, patchValue, runSqlTransaction } from '../db/documents';
 import { balanceDelta } from '../domain/balance';
-import { cardsCol, savingsGoalsCol, newTxnRef, readOwned } from '../repositories/sql.helpers';
+import {
+  cardsCol,
+  savingsGoalsCol,
+  readOwned,
+  resolveOperationTx,
+  writeCreated,
+} from '../repositories/sql.helpers';
 type Row = Record<string, any>;
 /** Contribute to a savings goal: increment savedAmount + optional account debit + expense transaction. */
 export async function contribute(
@@ -8,9 +14,13 @@ export async function contribute(
   goalId: string,
   amount: number,
   accountId?: string,
+  transactionId?: string,
 ): Promise<Row> {
   const now = Date.now();
   return runSqlTransaction(async (tx) => {
+    // Replay of an applied contribution (offline client id): no second effect.
+    const target = await resolveOperationTx(tx, uid, transactionId, 'savings');
+    if (target.existing) return { id: goalId, contributed: target.existing.amount };
     const goal = await readOwned(
       tx,
       documentKey(savingsGoalsCol(), goalId),
@@ -21,8 +31,7 @@ export async function contribute(
       ? await readOwned(tx, documentKey(cardsCol(), accountId), uid, 'Account not found.')
       : null;
     tx.patch(goal.ref, { savedAmount: patchValue.increment(amount) });
-    const ref = newTxnRef();
-    tx.save(ref, {
+    writeCreated(tx, target, {
       type: 'expense',
       amount,
       currency: goal.data.currency,

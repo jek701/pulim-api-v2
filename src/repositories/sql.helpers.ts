@@ -82,6 +82,23 @@ export async function resolveCreateTarget(
   return { ref, clientSupplied: true, existing: { id: ref.id, ...snap.data } };
 }
 
+/**
+ * Resolve the optional client id (`transactionId`) of the transaction an operation
+ * (pay, contribute, close, ...) creates. An own transaction with that id and the same
+ * `source` means the operation was already applied: the caller returns without writes.
+ */
+export async function resolveOperationTx(
+  tx: SqlTransaction,
+  uid: string,
+  transactionId: unknown,
+  expectedSource: string,
+): Promise<CreateTarget> {
+  const target = await resolveCreateTarget(tx, txnsCol(), uid, transactionId);
+  if (target.existing && target.existing.source !== expectedSource)
+    throw AppError.conflict('ID_CONFLICT', 'This id cannot be used.');
+  return target;
+}
+
 /** Write a brand-new document at a resolved target (client ids must not overwrite). */
 export function writeCreated(tx: SqlTransaction, target: CreateTarget, data: DocumentData): void {
   if (target.clientSupplied) tx.insert(target.ref, data);

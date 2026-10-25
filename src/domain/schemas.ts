@@ -6,6 +6,8 @@ import { clientIdSchema } from './clientId';
 export const currencySchema = z.enum(CURRENCIES as [string, ...string[]]);
 const positive = z.number().finite();
 const dayOfMonth = z.number().int().min(1).max(31);
+/** `transactionId`: optional offline client id of the transaction an operation endpoint creates. */
+const opTransactionId = { transactionId: clientIdSchema.optional() };
 /**
  * Optional client-generated document id, accepted ONLY by personal create endpoints
  * (offline sync, docs/offline-sync.md section 1). Update (PATCH) and household schemas
@@ -283,6 +285,7 @@ export const refillSchema = z.object({
 // --- Debts (atomic) ---
 const commissionSchema = z.object({ type: z.enum(['percent', 'fixed']), value: z.number() });
 export const debtCreateSchema = z.object({
+  ...opTransactionId,
   direction: z.enum(['i_owe', 'owe_me']),
   person: z.string().min(1),
   amount: positive,
@@ -302,7 +305,7 @@ export const debtUpdateSchema = z
     dueDate: z.number().nullable().optional(),
   })
   .strip();
-export const payDebtSchema = z.object({ amount: positive, accountId: z.string().optional() });
+export const payDebtSchema = z.object({ amount: positive, accountId: z.string().optional(), ...opTransactionId });
 
 // --- Deposits (atomic) ---
 export const depositCreateSchema = z.object({
@@ -319,12 +322,13 @@ export const depositCreateSchema = z.object({
   isReplenishable: z.boolean(),
   ...clientId,
 });
-export const depositCloseSchema = z.object({ accountId: z.string().min(1) });
-export const depositAccountAmountSchema = z.object({ accountId: z.string().min(1), amount: positive });
+export const depositCloseSchema = z.object({ accountId: z.string().min(1), ...opTransactionId });
+export const depositCollectSchema = z.object({ ...opTransactionId }).default({});
+export const depositAccountAmountSchema = z.object({ accountId: z.string().min(1), amount: positive, ...opTransactionId });
 
 // --- Subscription pay / savings contribute ---
-export const accountOnlySchema = z.object({ accountId: z.string().optional() });
-export const contributeSchema = z.object({ amount: positive, accountId: z.string().optional() });
+export const accountOnlySchema = z.object({ accountId: z.string().optional(), ...opTransactionId });
+export const contributeSchema = z.object({ amount: positive, accountId: z.string().optional(), ...opTransactionId });
 
 // --- AI ---
 const aiLanguageSchema = z.enum(['en', 'ru', 'uz']).default('en');

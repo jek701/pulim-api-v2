@@ -1,7 +1,13 @@
 import { Timestamp, documentKey, patchValue, runSqlTransaction } from '../db/documents';
 import { balanceDelta } from '../domain/balance';
 import { advanceBillingDate } from '../domain/billing';
-import { cardsCol, subscriptionsCol, newTxnRef, readOwned } from '../repositories/sql.helpers';
+import {
+  cardsCol,
+  subscriptionsCol,
+  readOwned,
+  resolveOperationTx,
+  writeCreated,
+} from '../repositories/sql.helpers';
 import { telegramOperationMarkerRef, telegramTransactionRef } from './transaction.service';
 type Row = Record<string, any>;
 /** Record a subscription payment: expense transaction + optional balance + advance nextBillingDate. */
@@ -9,9 +15,25 @@ export async function paySubscription(
   uid: string,
   subscriptionId: string,
   accountId?: string,
+  transactionId?: string,
 ): Promise<Row> {
   const now = Date.now();
   return runSqlTransaction(async (tx) => {
+    // Replay of an applied payment (offline client id): no second effect.
+    const target = await resolveOperationTx(tx, uid, transactionId, 'subscription');
+    if (target.existing) {
+      const current = await readOwned(
+        tx,
+        documentKey(subscriptionsCol(), subscriptionId),
+        uid,
+        'Subscription not found.',
+      );
+      return {
+        id: subscriptionId,
+        nextBillingDate: current.data.nextBillingDate,
+        transaction: { id: target.ref.id },
+      };
+    }
     const sub = await readOwned(
       tx,
       documentKey(subscriptionsCol(), subscriptionId),
@@ -23,8 +45,8 @@ export async function paySubscription(
       : null;
     const amount = sub.data.amount as number;
     const nextBillingDate = advanceBillingDate(sub.data.nextBillingDate, sub.data.cycle);
-    const ref = newTxnRef();
-    tx.save(ref, {
+    const ref = target.ref;
+    writeCreated(tx, target, {
       type: 'expense',
       amount,
       currency: sub.data.currency,

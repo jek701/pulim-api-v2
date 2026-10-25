@@ -2,7 +2,13 @@ import { DocumentData, documentKey, patchValue, runSqlTransaction } from '../db/
 import { AppError } from '../utils/AppError';
 import { balanceDelta } from '../domain/balance';
 import { calcCurrentPrincipal, calcRemainingInterest } from '../domain/deposit';
-import { cardsCol, depositsCol, newTxnRef, readOwned } from '../repositories/sql.helpers';
+import {
+  cardsCol,
+  depositsCol,
+  readOwned,
+  resolveOperationTx,
+  writeCreated,
+} from '../repositories/sql.helpers';
 import type { Deposit } from '../domain/types';
 type Row = Record<string, any>;
 const asDeposit = (id: string, data: DocumentData): Deposit => ({
@@ -10,9 +16,17 @@ const asDeposit = (id: string, data: DocumentData): Deposit => ({
   ...(data as Omit<Deposit, 'id'>),
 });
 /** Collect accrued (uncollected) interest into the configured destination account. */
-export async function collectInterest(uid: string, depositId: string): Promise<Row> {
+export async function collectInterest(
+  uid: string,
+  depositId: string,
+  transactionId?: string,
+): Promise<Row> {
   const now = Date.now();
   return runSqlTransaction(async (tx) => {
+    // Replay of an applied collection (offline client id): no second effect.
+    const target = await resolveOperationTx(tx, uid, transactionId, 'deposit_interest');
+    if (target.existing)
+      return { collected: target.existing.amount, transaction: target.existing };
     const dep = await readOwned(
       tx,
       documentKey(depositsCol(), depositId),
@@ -30,7 +44,7 @@ export async function collectInterest(uid: string, depositId: string): Promise<R
     );
     const amount = calcRemainingInterest(asDeposit(depositId, dep.data), now);
     if (amount <= 0) throw AppError.badRequest('No interest available to collect.');
-    const ref = newTxnRef();
+    const ref = target.ref;
     const doc = {
       type: 'income',
       amount,
@@ -43,7 +57,7 @@ export async function collectInterest(uid: string, depositId: string): Promise<R
       userId: uid,
       createdAt: now,
     };
-    tx.save(ref, doc);
+    writeCreated(tx, target, doc);
     tx.patch(account.ref, {
       balance: patchValue.increment(balanceDelta(account.data.cardType, 'income', amount)),
     });
@@ -56,9 +70,12 @@ export async function closeDeposit(
   uid: string,
   depositId: string,
   accountId: string,
+  transactionId?: string,
 ): Promise<Row> {
   const now = Date.now();
   return runSqlTransaction(async (tx) => {
+    const target = await resolveOperationTx(tx, uid, transactionId, 'deposit_close');
+    if (target.existing) return { total: target.existing.amount, transaction: target.existing };
     const dep = await readOwned(
       tx,
       documentKey(depositsCol(), depositId),
@@ -74,7 +91,7 @@ export async function closeDeposit(
     );
     const d = asDeposit(depositId, dep.data);
     const total = calcCurrentPrincipal(d) + calcRemainingInterest(d, now);
-    const ref = newTxnRef();
+    const ref = target.ref;
     const doc = {
       type: 'income',
       amount: total,
@@ -87,7 +104,7 @@ export async function closeDeposit(
       userId: uid,
       createdAt: now,
     };
-    tx.save(ref, doc);
+    writeCreated(tx, target, doc);
     tx.patch(account.ref, {
       balance: patchValue.increment(balanceDelta(account.data.cardType, 'income', total)),
     });
@@ -101,9 +118,12 @@ export async function replenishDeposit(
   depositId: string,
   accountId: string,
   amount: number,
+  transactionId?: string,
 ): Promise<Row> {
   const now = Date.now();
   return runSqlTransaction(async (tx) => {
+    const target = await resolveOperationTx(tx, uid, transactionId, 'deposit_replenish');
+    if (target.existing) return { transaction: target.existing };
     const dep = await readOwned(
       tx,
       documentKey(depositsCol(), depositId),
@@ -121,7 +141,7 @@ export async function replenishDeposit(
     if (account.data.cardType !== 'credit' && amount > account.data.balance) {
       throw AppError.badRequest('Insufficient balance on the source account.');
     }
-    const ref = newTxnRef();
+    const ref = target.ref;
     const doc = {
       type: 'expense',
       amount,
@@ -134,7 +154,7 @@ export async function replenishDeposit(
       userId: uid,
       createdAt: now,
     };
-    tx.save(ref, doc);
+    writeCreated(tx, target, doc);
     tx.patch(account.ref, {
       balance: patchValue.increment(balanceDelta(account.data.cardType, 'expense', amount)),
     });
@@ -148,9 +168,12 @@ export async function withdrawDeposit(
   depositId: string,
   accountId: string,
   amount: number,
+  transactionId?: string,
 ): Promise<Row> {
   const now = Date.now();
   return runSqlTransaction(async (tx) => {
+    const target = await resolveOperationTx(tx, uid, transactionId, 'deposit_withdraw');
+    if (target.existing) return { transaction: target.existing };
     const dep = await readOwned(
       tx,
       documentKey(depositsCol(), depositId),
@@ -167,7 +190,7 @@ export async function withdrawDeposit(
     const principal = calcCurrentPrincipal(asDeposit(depositId, dep.data));
     if (amount > principal)
       throw AppError.badRequest('Withdrawal exceeds current principal.', { principal });
-    const ref = newTxnRef();
+    const ref = target.ref;
     const doc = {
       type: 'income',
       amount,
@@ -180,7 +203,7 @@ export async function withdrawDeposit(
       userId: uid,
       createdAt: now,
     };
-    tx.save(ref, doc);
+    writeCreated(tx, target, doc);
     tx.patch(account.ref, {
       balance: patchValue.increment(balanceDelta(account.data.cardType, 'income', amount)),
     });

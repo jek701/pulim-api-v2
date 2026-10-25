@@ -5,11 +5,12 @@ import { calcDebtTotal } from '../domain/debt';
 import {
   cardsCol,
   debtsCol,
-  newTxnRef,
   readOwned,
   resolveCreateTarget,
+  resolveOperationTx,
   writeCreated,
 } from '../repositories/sql.helpers';
+import { AppError } from '../utils/AppError';
 import { telegramOperationMarkerRef, telegramTransactionRef } from './transaction.service';
 import type { Commission } from '../domain/types';
 type Row = Record<string, any>;
@@ -29,13 +30,23 @@ export interface TelegramDebtInput extends CreateDebtInput {
 /** Create a debt and, if an account is chosen, record the initial cash movement atomically. */
 export async function createDebt(
   uid: string,
-  input: CreateDebtInput & { /** Optional offline client id of the debt. */ id?: string },
+  input: CreateDebtInput & {
+    /** Optional offline client id of the debt. */
+    id?: string;
+    /** Optional offline client id of the initial cash transaction (needs accountId). */
+    transactionId?: string;
+  },
 ): Promise<Row> {
   const now = Date.now();
   return runSqlTransaction(async (tx) => {
     // Replay of an existing own debt: no second debt and no second cash movement.
     const target = await resolveCreateTarget(tx, debtsCol(), uid, input.id);
     if (target.existing) return target.existing;
+    const cashTarget = input.accountId
+      ? await resolveOperationTx(tx, uid, input.transactionId, 'debt_payment')
+      : null;
+    // A cash transaction that exists without its debt is not ours to overwrite.
+    if (cashTarget?.existing) throw AppError.conflict('ID_CONFLICT', 'This id cannot be used.');
     const account = input.accountId
       ? await readOwned(tx, documentKey(cardsCol(), input.accountId), uid, 'Account not found.')
       : null;
@@ -58,8 +69,7 @@ export async function createDebt(
     if (account) {
       // i_owe: you receive money now (income). owe_me: you hand money out (expense).
       const txType = input.direction === 'i_owe' ? 'income' : 'expense';
-      const ref = newTxnRef();
-      tx.save(ref, {
+      const cashDoc = {
         type: txType,
         amount: input.amount,
         currency: input.currency,
@@ -71,7 +81,8 @@ export async function createDebt(
         date: now,
         userId: uid,
         createdAt: now,
-      });
+      };
+      writeCreated(tx, cashTarget!, cashDoc);
       tx.patch(account.ref, {
         balance: patchValue.increment(balanceDelta(account.data.cardType, txType, input.amount)),
       });
@@ -168,10 +179,18 @@ export async function payDebt(
   debtId: string,
   amount: number,
   accountId?: string,
+  transactionId?: string,
 ): Promise<Row> {
   const now = Date.now();
   return runSqlTransaction(async (tx) => {
+    // Replay of an applied payment (offline client id): no second effect.
+    const target = await resolveOperationTx(tx, uid, transactionId, 'debt_payment');
     const debt = await readOwned(tx, documentKey(debtsCol(), debtId), uid, 'Debt not found.');
+    if (target.existing) {
+      const paid = debt.data.paidAmount || 0;
+      const total = calcDebtTotal(debt.data.amount, debt.data.commission);
+      return { id: debtId, paidAmount: paid, isPaid: paid >= total, total };
+    }
     const account = accountId
       ? await readOwned(tx, documentKey(cardsCol(), accountId), uid, 'Account not found.')
       : null;
@@ -182,8 +201,7 @@ export async function payDebt(
     const patch: Record<string, unknown> = { paidAmount: patchValue.increment(amount) };
     if (newPaid >= total) patch.isPaid = true;
     tx.patch(debt.ref, patch);
-    const ref = newTxnRef();
-    tx.save(ref, {
+    writeCreated(tx, target, {
       type: txType,
       amount,
       currency: debt.data.currency,

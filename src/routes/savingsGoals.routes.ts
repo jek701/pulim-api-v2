@@ -19,7 +19,13 @@ router.post(
   '/:id/contribute',
   validate(contributeSchema),
   asyncHandler(async (req, res) => {
-    res.json(await contribute(req.uid, String(req.params.id), req.body.amount, req.body.accountId));
+    res.json(await contribute(
+        req.uid,
+        String(req.params.id),
+        req.body.amount,
+        req.body.accountId,
+        req.body.transactionId,
+      ));
   }),
 );
 router.patch('/:id', validate(savingsGoalUpdateSchema), goals.update);
