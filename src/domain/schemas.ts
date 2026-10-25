@@ -1,10 +1,17 @@
 import { z } from 'zod';
 import { CURRENCIES } from './types';
+import { clientIdSchema } from './clientId';
 
 // --- Primitives ---
 export const currencySchema = z.enum(CURRENCIES as [string, ...string[]]);
 const positive = z.number().finite();
 const dayOfMonth = z.number().int().min(1).max(31);
+/**
+ * Optional client-generated document id, accepted ONLY by personal create endpoints
+ * (offline sync, docs/offline-sync.md section 1). Update (PATCH) and household schemas
+ * derived from a create schema must `.omit({ id: true })`.
+ */
+const clientId = { id: clientIdSchema.optional() };
 
 // --- Auth ---
 export const telegramAuthSchema = z.object({
@@ -102,11 +109,13 @@ export const categoryCreateSchema = z.object({
   icon: z.string(),
   color: z.string(),
   type: z.enum(['income', 'expense', 'both']),
+  ...clientId,
 });
 
 export const subcategoryCreateSchema = z.object({
   name: z.string().min(1),
   categoryId: z.string().min(1),
+  ...clientId,
 });
 
 // --- Cards ---
@@ -121,8 +130,11 @@ export const cardCreateSchema = z.object({
   dueDay: dayOfMonth.optional(),
   /** Palette key for the card's gradient in the UI (e.g. 'violet'); unset = auto by bank. */
   color: z.string().regex(/^[a-z]{2,16}$/).optional(),
+  ...clientId,
 });
-export const cardUpdateSchema = cardCreateSchema.partial();
+export const cardUpdateSchema = cardCreateSchema.omit({ id: true }).partial();
+/** Household cards are created by the server only (no client ids). */
+export const householdCardCreateSchema = cardCreateSchema.omit({ id: true });
 
 // --- Household budget ---
 export const householdCreateSchema = z.object({
@@ -159,13 +171,14 @@ export const savingsGoalCreateSchema = z.object({
   deadline: z.number(),
   /** Palette key for the goal's gradient in the UI; unset = auto by name. */
   color: colorKey.optional(),
+  ...clientId,
 });
 /** savedAmount and currency are deliberately absent: they only move via contributions. */
 export const savingsGoalUpdateSchema = savingsGoalCreateSchema
   .pick({ name: true, icon: true, deadline: true, color: true })
   .extend({ targetAmount: z.number().finite().positive() })
   .partial();
-export const householdGoalCreateSchema = savingsGoalCreateSchema.extend({
+export const householdGoalCreateSchema = savingsGoalCreateSchema.omit({ id: true }).extend({
   targetAmount: z.number().finite().positive(),
 });
 export const householdGoalContributionSchema = z.object({
@@ -184,8 +197,9 @@ export const subscriptionCreateSchema = z.object({
   categoryId: z.string().optional(),
   note: z.string().optional(),
   isActive: z.boolean().default(true),
+  ...clientId,
 });
-export const subscriptionUpdateSchema = subscriptionCreateSchema.partial();
+export const subscriptionUpdateSchema = subscriptionCreateSchema.omit({ id: true }).partial();
 
 // --- Planned expenses ---
 export const plannedExpenseCreateSchema = z.object({
@@ -202,8 +216,9 @@ export const plannedExpenseCreateSchema = z.object({
   customUnit: z.enum(['day', 'week', 'month', 'year']).optional(),
   endDate: z.number().optional(),
   kind: z.enum(['income', 'expense']).optional(),
+  ...clientId,
 });
-export const plannedExpenseUpdateSchema = plannedExpenseCreateSchema.partial();
+export const plannedExpenseUpdateSchema = plannedExpenseCreateSchema.omit({ id: true }).partial();
 
 // --- Transactions (atomic) ---
 export const transactionCreateSchema = z.object({
@@ -218,8 +233,11 @@ export const transactionCreateSchema = z.object({
   fxRate: z.number().optional(),
   fxRateSource: z.enum(['NBU', 'manual']).optional(),
   date: z.number(),
+  ...clientId,
 });
-export const transactionUpdateSchema = transactionCreateSchema.partial();
+export const transactionUpdateSchema = transactionCreateSchema.omit({ id: true }).partial();
+/** Household transactions are created by the server only (no client ids). */
+export const householdTransactionCreateSchema = transactionCreateSchema.omit({ id: true });
 
 export const transferSchema = z.object({
   fromCardId: z.string().min(1),
@@ -230,11 +248,12 @@ export const transferSchema = z.object({
   baseAmount: z.number().optional(),
   fxRate: z.number().optional(),
   fxRateSource: z.enum(['NBU', 'manual']).optional(),
+  ...clientId,
 });
 
 /** Full editable shape for an existing transfer. Financial fields are required so
  * the service can rebuild both legs from one authoritative payload. */
-export const transferUpdateSchema = transferSchema.extend({
+export const transferUpdateSchema = transferSchema.omit({ id: true }).extend({
   date: z.number(),
   comment: z.string().trim().max(500).optional(),
 });
@@ -245,9 +264,11 @@ export const returnSchema = z.object({
   date: z.number().optional(),
   /** Free-text note, e.g. who refunded the money. */
   comment: z.string().trim().max(500).optional(),
+  /** Client id of the new refund transaction (not of the original). */
+  ...clientId,
 });
 
-export const returnUpdateSchema = returnSchema.extend({
+export const returnUpdateSchema = returnSchema.omit({ id: true }).extend({
   date: z.number(),
 });
 
@@ -255,6 +276,8 @@ export const refillSchema = z.object({
   creditCardId: z.string().min(1),
   sourceCardId: z.string().min(1),
   amount: positive,
+  /** Client id of the created transfer transaction. */
+  ...clientId,
 });
 
 // --- Debts (atomic) ---
@@ -268,6 +291,7 @@ export const debtCreateSchema = z.object({
   dueDate: z.number().optional(),
   comment: z.string().optional(),
   accountId: z.string().optional(),
+  ...clientId,
 });
 export const debtUpdateSchema = z
   .object({
@@ -293,6 +317,7 @@ export const depositCreateSchema = z.object({
   showInterest: z.boolean(),
   interestToAccountId: z.string().optional(),
   isReplenishable: z.boolean(),
+  ...clientId,
 });
 export const depositCloseSchema = z.object({ accountId: z.string().min(1) });
 export const depositAccountAmountSchema = z.object({ accountId: z.string().min(1), amount: positive });

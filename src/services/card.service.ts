@@ -1,7 +1,13 @@
 import { documentKey, patchValue, runSqlTransaction } from '../db/documents';
 import { AppError } from '../utils/AppError';
 import { balanceDelta } from '../domain/balance';
-import { cardsCol, newTxnRef, readOwned } from '../repositories/sql.helpers';
+import {
+  cardsCol,
+  readOwned,
+  resolveCreateTarget,
+  txnsCol,
+  writeCreated,
+} from '../repositories/sql.helpers';
 type Row = Record<string, any>;
 /** Pay down a credit card's debt from a debit/cash card. Recorded as one transfer transaction. */
 export async function refillCreditCard(
@@ -10,12 +16,16 @@ export async function refillCreditCard(
     creditCardId: string;
     sourceCardId: string;
     amount: number;
+    /** Optional offline client id of the created transfer transaction. */
+    id?: string;
   },
 ): Promise<Row> {
   if (input.creditCardId === input.sourceCardId) {
     throw AppError.badRequest('Source and credit card must differ.');
   }
   return runSqlTransaction(async (tx) => {
+    const target = await resolveCreateTarget(tx, txnsCol(), uid, input.id);
+    if (target.existing) return target.existing;
     const credit = await readOwned(
       tx,
       documentKey(cardsCol(), input.creditCardId),
@@ -31,7 +41,7 @@ export async function refillCreditCard(
     if (credit.data.cardType !== 'credit') {
       throw AppError.badRequest('Target card must be a credit card.');
     }
-    const ref = newTxnRef();
+    const ref = target.ref;
     const doc = {
       type: 'expense',
       amount: input.amount,
@@ -47,7 +57,7 @@ export async function refillCreditCard(
       userId: uid,
       createdAt: Date.now(),
     };
-    tx.save(ref, doc);
+    writeCreated(tx, target, doc);
     tx.patch(source.ref, {
       balance: patchValue.increment(balanceDelta(source.data.cardType, 'expense', input.amount)),
     });

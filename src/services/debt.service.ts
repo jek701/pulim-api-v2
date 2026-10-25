@@ -2,7 +2,14 @@ import { Timestamp, documentKey, patchValue, queryTable, runSqlTransaction } fro
 import { createHash } from 'node:crypto';
 import { balanceDelta } from '../domain/balance';
 import { calcDebtTotal } from '../domain/debt';
-import { cardsCol, debtsCol, newTxnRef, readOwned } from '../repositories/sql.helpers';
+import {
+  cardsCol,
+  debtsCol,
+  newTxnRef,
+  readOwned,
+  resolveCreateTarget,
+  writeCreated,
+} from '../repositories/sql.helpers';
 import { telegramOperationMarkerRef, telegramTransactionRef } from './transaction.service';
 import type { Commission } from '../domain/types';
 type Row = Record<string, any>;
@@ -20,13 +27,19 @@ export interface TelegramDebtInput extends CreateDebtInput {
   date?: number;
 }
 /** Create a debt and, if an account is chosen, record the initial cash movement atomically. */
-export async function createDebt(uid: string, input: CreateDebtInput): Promise<Row> {
+export async function createDebt(
+  uid: string,
+  input: CreateDebtInput & { /** Optional offline client id of the debt. */ id?: string },
+): Promise<Row> {
   const now = Date.now();
   return runSqlTransaction(async (tx) => {
+    // Replay of an existing own debt: no second debt and no second cash movement.
+    const target = await resolveCreateTarget(tx, debtsCol(), uid, input.id);
+    if (target.existing) return target.existing;
     const account = input.accountId
       ? await readOwned(tx, documentKey(cardsCol(), input.accountId), uid, 'Account not found.')
       : null;
-    const debtRef = documentKey(debtsCol());
+    const debtRef = target.ref;
     const debtDoc = {
       direction: input.direction,
       person: input.person,
@@ -41,7 +54,7 @@ export async function createDebt(uid: string, input: CreateDebtInput): Promise<R
       userId: uid,
       createdAt: now,
     };
-    tx.save(debtRef, debtDoc);
+    writeCreated(tx, target, debtDoc);
     if (account) {
       // i_owe: you receive money now (income). owe_me: you hand money out (expense).
       const txType = input.direction === 'i_owe' ? 'income' : 'expense';

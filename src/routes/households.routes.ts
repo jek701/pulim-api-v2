@@ -3,15 +3,15 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { validate } from '../middleware/validate';
 import {
   budgetSetSchema,
-  cardCreateSchema,
   householdCardAccessSchema,
+  householdCardCreateSchema,
   householdCreateSchema,
   householdGoalContributionSchema,
   householdGoalCreateSchema,
   householdTelegramSchema,
+  householdTransactionCreateSchema,
   householdUpdateSchema,
   savingsGoalUpdateSchema,
-  transactionCreateSchema,
   transactionUpdateSchema,
 } from '../domain/schemas';
 import * as household from '../services/household.service';
@@ -59,7 +59,7 @@ router.put('/current/budgets/:categoryId', validate(budgetSetSchema), asyncHandl
 router.get('/current/cards', asyncHandler(async (req, res) => {
   res.json(await household.listHouseholdCards(req.uid));
 }));
-router.post('/current/cards', validate(cardCreateSchema), asyncHandler(async (req, res) => {
+router.post('/current/cards', validate(householdCardCreateSchema), asyncHandler(async (req, res) => {
   res.status(201).json(await household.createHouseholdCard(req.uid, req.body));
 }));
 router.patch('/current/cards/:id/access', validate(householdCardAccessSchema), asyncHandler(async (req, res) => {
@@ -86,7 +86,7 @@ router.delete('/current/goals/:id', asyncHandler(async (req, res) => {
 router.get('/current/transactions', asyncHandler(async (req, res) => {
   res.json(await household.listHouseholdTransactions(req.uid));
 }));
-router.post('/current/transactions', validate(transactionCreateSchema), asyncHandler(async (req, res) => {
+router.post('/current/transactions', validate(householdTransactionCreateSchema), asyncHandler(async (req, res) => {
   res.status(201).json(await household.createHouseholdTransaction(req.uid, req.body));
 }));
 router.patch('/current/transactions/:id', validate(transactionUpdateSchema), asyncHandler(async (req, res) => {

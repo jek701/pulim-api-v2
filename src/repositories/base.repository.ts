@@ -8,6 +8,7 @@ import {
   runSqlTransaction,
 } from '../db/documents';
 import { AppError } from '../utils/AppError';
+import { resolveCreateTarget, takeClientId, writeCreated } from './sql.helpers';
 export interface SortOption {
   field: string;
   dir: 'asc' | 'desc';
@@ -44,15 +45,30 @@ export function userScopedRepo(collectionName: string) {
     const { data } = await requireOwned(uid, id);
     return { id, ...data };
   }
+  /**
+   * Create a document. An optional client `id` in `data` (offline clients) makes the
+   * create idempotent: an existing own document with that id is returned unchanged,
+   * someone else's is a 409. The id itself is never stored in the document body.
+   */
   async function create(uid: string, data: Row, defaults: Row = {}): Promise<Row> {
-    const ref = await addDocument(col(), {
-      ...defaults,
-      ...data,
-      userId: uid,
-      createdAt: Date.now(),
+    const { clientId, fields } = takeClientId(data);
+    if (clientId === undefined) {
+      const ref = await addDocument(col(), {
+        ...defaults,
+        ...fields,
+        userId: uid,
+        createdAt: Date.now(),
+      });
+      const snap = await readDocument(ref);
+      return { id: ref.id, ...snap.data };
+    }
+    return runSqlTransaction(async (tx) => {
+      const target = await resolveCreateTarget(tx, col(), uid, clientId);
+      if (target.existing) return target.existing;
+      const doc = { ...defaults, ...fields, userId: uid, createdAt: Date.now() };
+      writeCreated(tx, target, doc);
+      return { id: target.ref.id, ...doc };
     });
-    const snap = await readDocument(ref);
-    return { id: ref.id, ...snap.data };
   }
   async function update(uid: string, id: string, patch: Row): Promise<Row> {
     const key = documentKey(col(), id);

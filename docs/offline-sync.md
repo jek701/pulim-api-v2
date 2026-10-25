@@ -45,7 +45,7 @@ Rules
   exactly 20 alphanumerics (reserved for server ids), any id containing `__` (default categories `${uid}__default__…`, `__income__` style specials), ids starting with `telegram_`.
 - Create with an id that **already exists and belongs to the same user** → the existing document is returned (status 201, same shape), **no second write, no second balance effect**. The payload is *not* compared (stored doc wins); use `Idempotency-Key` for strict mismatch detection.
 - Id exists but belongs to someone else (or to a household) → `409 ID_CONFLICT` (no information about the owner).
-- Free-plan limit / Premium gates are skipped for a replayed create of an existing own document, but still apply to a real first create (403 `LIMIT_REACHED` / `PREMIUM_REQUIRED` are terminal for that op — drop it and tell the user).
+- Free-plan **count limits** (`LIMIT_REACHED` for cards/subscriptions) are skipped for a replayed create of an existing own document, but still apply to a real first create. **Premium-only creates** (custom categories, goals, debts, deposits, planned expenses) re-check Premium on every request without an `Idempotency-Key`: if Premium lapsed between the original create and a replay that lost its response, the replay gets `403 PREMIUM_REQUIRED`. Always send `Idempotency-Key` too — its replay is answered before any gate. `403 LIMIT_REACHED` / `PREMIUM_REQUIRED` on a first create are terminal for that op (drop it and tell the user).
 - Without `id` the server generates one as before.
 - Documents never contain an `id` field in storage; responses are `{ id, ...fields }` as always.
 
@@ -99,6 +99,12 @@ Per user there is a server-assigned, gapless-per-commit **sequence** (`sync_stat
 
 Order matters: replay ops in creation order per user (create card → create tx on that card).
 
-## 5. Deploy / migration notes
+## 5. Server notes (for the owner / deploy)
 
-See "Migrations" at the end of this file (filled in at the end of the implementation).
+- **Migration `003_offline_sync` (additive, never drops):** creates `sync_state`, `sync_entries`, and (through the generic document-table loop) `idempotency_keys`; records `003_offline_sync` in `schema_migrations`. Apply BEFORE deploying the new code, with the migrator DB user:
+  `cd /root/pulim-api-v2 && git pull --ff-only && npm ci && npm run build && npm run db:migrate:prod` (old running code is unaffected by the new tables), then `pm2 restart pulim-api pulim-worker --update-env`.
+- Safe order of operations: code deployed without the migration = feature off (`offlineSync:false`), web app unaffected. Migration without the new code = harmless.
+- After the migration is applied the processes must be **restarted** once (they detect `003_offline_sync` at boot).
+- Kill switch: `OFFLINE_SYNC_ENABLED=false` in the server `.env` + restart. If sync was off for a period after clients already synced, set `SYNC_EPOCH=<n+1>` so all old cursors answer 410 and clients resnapshot.
+- Retention: tombstones 90 days, idempotency markers 30 days; pruned by `db/syncMaintenance.ts` in the API process (first run 5 min after boot, then every 6 h).
+- Cost: every write transaction that touches user documents adds one counter upsert and one index upsert per changed document (inside the same transaction).

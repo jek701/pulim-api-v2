@@ -14,9 +14,11 @@ import { balanceDelta } from '../domain/balance';
 import {
   cardsCol,
   txnsCol,
-  newTxnRef,
   readOwned,
+  resolveCreateTarget,
+  takeClientId,
   tryReadOwned,
+  writeCreated,
   type OwnedDoc,
 } from '../repositories/sql.helpers';
 import { scheduleBudgetCheck } from '../notifications/queue.repository';
@@ -127,14 +129,18 @@ export async function createTelegramTransactionOnce(
   return result;
 }
 /** Create a transaction and, if it references a card, adjust that card's balance atomically. */
-export async function createTransaction(uid: string, input: Row): Promise<Row> {
+export async function createTransaction(uid: string, payload: Row): Promise<Row> {
+  const { clientId, fields: input } = takeClientId(payload);
   const result = await runSqlTransaction(async (tx) => {
+    // Offline replay of an existing own transaction: return it, no second balance effect.
+    const target = await resolveCreateTarget(tx, txnsCol(), uid, clientId);
+    if (target.existing) return target.existing;
     const card = input.cardId
       ? await readOwned(tx, documentKey(cardsCol(), input.cardId), uid, 'Card not found.')
       : null;
-    const ref = newTxnRef();
+    const ref = target.ref;
     const doc = { ...input, userId: uid, createdAt: Date.now() };
-    tx.save(ref, doc);
+    writeCreated(tx, target, doc);
     if (card) {
       const delta = balanceDelta(card.data.cardType, input.type, input.amount);
       tx.patch(card.ref, { balance: patchValue.increment(delta) });
@@ -530,12 +536,16 @@ export async function transfer(
     baseAmount?: number;
     fxRate?: number;
     fxRateSource?: 'NBU' | 'manual';
+    /** Optional offline client id of the new transfer transaction. */
+    id?: string;
   },
 ): Promise<Row> {
   if (input.fromCardId === input.toCardId) {
     throw AppError.badRequest('Cannot transfer to the same card.');
   }
   return runSqlTransaction(async (tx) => {
+    const target = await resolveCreateTarget(tx, txnsCol(), uid, input.id);
+    if (target.existing) return target.existing;
     const from = await readOwned(
       tx,
       documentKey(cardsCol(), input.fromCardId),
@@ -553,7 +563,7 @@ export async function transfer(
     if (!toAmt || toAmt <= 0) {
       throw AppError.badRequest('toAmount is required (and > 0) for cross-currency transfers.');
     }
-    const ref = newTxnRef();
+    const ref = target.ref;
     const doc = {
       type: 'expense',
       amount: input.amount,
@@ -572,7 +582,7 @@ export async function transfer(
       userId: uid,
       createdAt: Date.now(),
     };
-    tx.save(ref, doc);
+    writeCreated(tx, target, doc);
     tx.patch(from.ref, {
       balance: patchValue.increment(balanceDelta(from.data.cardType, 'expense', input.amount)),
     });
@@ -682,9 +692,14 @@ export async function returnTransaction(
     accountId?: string;
     date?: number;
     comment?: string;
+    /** Optional offline client id of the new refund transaction. */
+    id?: string;
   },
 ): Promise<Row> {
   const result = await runSqlTransaction(async (tx) => {
+    // Checked first: a replayed full refund must not fail the "remaining" check.
+    const target = await resolveCreateTarget(tx, txnsCol(), uid, input.id);
+    if (target.existing) return target.existing;
     const original = await readOwned(
       tx,
       documentKey(txnsCol(), originalId),
@@ -709,7 +724,7 @@ export async function returnTransaction(
         'Return account currency must match the original transaction currency.',
       );
     }
-    const ref = newTxnRef();
+    const ref = target.ref;
     const doc = {
       type: 'income',
       amount: input.returnAmount,
@@ -726,7 +741,7 @@ export async function returnTransaction(
       userId: uid,
       createdAt: Date.now(),
     };
-    tx.save(ref, doc);
+    writeCreated(tx, target, doc);
     tx.patch(original.ref, { returnedAmount: patchValue.increment(input.returnAmount) });
     if (account) {
       tx.patch(account.ref, {

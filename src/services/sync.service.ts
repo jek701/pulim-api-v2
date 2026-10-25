@@ -50,16 +50,16 @@ export type SyncPage = {
   collections: Partial<Record<SyncCollection, { upserted: Doc[]; deleted: string[] }>>;
 };
 
-type Cursor =
+export type Cursor =
   | { kind: 'delta'; seq: number }
   | { kind: 'snapshot'; head: number; index: number; after: string | null };
 
-const encodeCursor = (cursor: Cursor): string =>
+export const encodeCursor = (cursor: Cursor): string =>
   cursor.kind === 'delta'
     ? `d1.${syncEpoch()}.${cursor.seq}`
     : `s1.${Buffer.from(JSON.stringify([syncEpoch(), cursor.head, cursor.index, cursor.after])).toString('base64url')}`;
 
-function decodeCursor(text: string): Cursor {
+export function decodeCursor(text: string): Cursor {
   const invalid = () => new AppError(400, 'INVALID_CURSOR', 'The sync cursor is malformed.');
   const expired = () =>
     new AppError(410, 'CURSOR_EXPIRED', 'The sync cursor is no longer valid; start a new snapshot.');

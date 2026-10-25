@@ -112,6 +112,14 @@ Spec: `docs/TZ-notifications.md`.
 Chat model `AI_MODEL_FREE` (`gpt-5.4-mini`) / `AI_MODEL_PREMIUM` (`gpt-5.6-terra`), `store:false`, uid-hash safety_identifier. Server builds financial snapshot (12 months) in `prompts/buildContext.ts`.
 Quota reserved before call, refunded on failure/empty/truncated; token/cost metadata (no content) in `ai_usage`.
 
+## Offline sync (additive, contract v1) — full contract: [docs/offline-sync.md](../offline-sync.md)
+For the native app (SQLite + outbox). Branch `claude/api-offline-sync-f3399a`; needs **migration `003_offline_sync` applied by the owner before it is active** (code is safe without it: `isSyncEnabled()` false → no change index, no idempotency markers, `/v1/sync/changes` 503, everything else as before).
+- **Choke point:** every document write goes through `SqlTransaction.flush` (`db/documents.ts`). It records one row per changed doc in `sync_entries` (upsert or tombstone, per-user scope `u:<uid>` from `data.userId`; profile/settings by doc id; household-owned rows excluded) and allocates `seq` from `sync_state` **last in the transaction** (counter row lock held to commit ⇒ seq follows commit order, no timestamp overlap windows). Do not write entity tables outside `documents.ts`. `updatedAt` is NOT relied on for sync.
+- **Idempotency:** `middleware/idempotency.ts` (after `authenticate`) + AsyncLocalStorage context (`db/idempotencyContext.ts`). `runSqlTransaction` adds the marker (`idempotency_keys` document table, id sha256(`uid:key`)) to the first transaction with effect writes, so marker + effect commit atomically; a duplicate marker aborts the transaction (`IdempotencyConflict`) and the error handler replays the stored response. Final 2xx response is stored before it is sent (`res.json`/`res.end` wrapper). Errors are never stored. Because services open their own transactions, **never run non-idempotent side effects before the effect transaction inside a mutating handler**.
+- **Client ids:** optional `id` on create schemas (`domain/clientId.ts`); create-or-get inside the same tx; PATCH/household schemas must not accept `id`.
+- Endpoints: `GET /v1/sync/capabilities`, `GET /v1/sync/changes?cursor&limit`. Maintenance (`db/syncMaintenance.ts`, in the API process): prune tombstones > 90 d (sets `floor_seq` ⇒ 410 `CURSOR_EXPIRED`) and expired idempotency markers.
+- Env: `OFFLINE_SYNC_ENABLED` (kill switch), `SYNC_EPOCH`. Tests: `npm run test:mysql` (`tests/migration/offline-sync.integration.test.ts`), unit tests in `tests/sync`, `tests/clientId`.
+
 ## Other
 - iPhone Shortcut: keys `pulim_sc_<base64url>`, sha256 stored; `scripts/build-shortcut.py` builds the file pointing at `https://api.m-pulim.uz/shortcut/v1`.
 - Communications: campaigns ru/uz/en, channels in_app/telegram, presentation inbox/banner/modal, audience tier/lang/telegram-linked; draft→scheduled→sending→completed (+paused/failed); marketing prefs inApp:true, telegram:false.

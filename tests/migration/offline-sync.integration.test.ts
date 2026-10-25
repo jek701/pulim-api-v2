@@ -394,6 +394,144 @@ describe.skipIf(!enabled)('offline sync: change feed + idempotency (real MySQL)'
     });
   });
 
+  describe('client-generated ids', () => {
+    const cardBody = (extra: Record<string, unknown> = {}) => ({
+      cardType: 'debit',
+      name: 'Visa',
+      bank: 'B',
+      currency: 'UZS',
+      balance: 500,
+      ...extra,
+    });
+    const rawDoc = async (table: 'cards' | 'transactions', id: string) =>
+      (await readDocument(key(table, id))).data;
+
+    it('creates with the client id, returns the existing document on replay and never stores the id field', async () => {
+      const uid = newUid();
+      const id = randomUUID();
+      const first = await call(uid, 'POST', '/cards', cardBody({ id }));
+      const second = await call(uid, 'POST', '/cards', cardBody({ id, name: 'Different payload' }));
+      expect(first.status).toBe(201);
+      expect(first.body.id).toBe(id);
+      expect(second.status).toBe(201);
+      expect(second.body).toEqual(first.body);
+      expect(Object.hasOwn(await rawDoc('cards', id), 'id')).toBe(false);
+      expect((await rawDoc('cards', id)).name).toBe('Visa');
+    });
+
+    it('old clients without an id still get a server-generated 20-char id', async () => {
+      const uid = newUid();
+      const created = await call(uid, 'POST', '/cards', cardBody());
+      expect(created.body.id).toMatch(/^[A-Za-z0-9]{20}$/);
+      const patched = await call(uid, 'PATCH', `/cards/${created.body.id}`, { name: 'Renamed', id: 'ignored-id-1234' });
+      expect(patched.body.id).toBe(created.body.id);
+      expect(Object.hasOwn(await rawDoc('cards', created.body.id), 'id')).toBe(false);
+    });
+
+    it('applies a transaction exactly once under concurrent double-submit of the same id (no 5xx)', async () => {
+      const uid = newUid();
+      await insertDocument(key('cards', `${uid}-c`), cardDoc(uid));
+      const id = randomUUID();
+      const body = { type: 'expense', amount: 100, currency: 'UZS', categoryId: 'f', cardId: `${uid}-c`, date: 1, id };
+      const results = await Promise.all(Array.from({ length: 8 }, () => call(uid, 'POST', '/transactions', body)));
+      expect(results.map((r) => r.status)).toEqual(Array(8).fill(201));
+      expect(new Set(results.map((r) => r.body.id))).toEqual(new Set([id]));
+      expect(await balanceOf(`${uid}-c`)).toBe(900);
+      expect(await txCount(uid)).toBe(1);
+    });
+
+    it('replays transfer, return and refill creates by id without a second effect', async () => {
+      const uid = newUid();
+      await insertDocument(key('cards', `${uid}-a`), cardDoc(uid, 1000));
+      await insertDocument(key('cards', `${uid}-b`), cardDoc(uid, 100));
+      await insertDocument(key('cards', `${uid}-credit`), cardDoc(uid, 300, { cardType: 'credit' }));
+      const twice = async (path: string, body: Record<string, unknown>) => {
+        const one = await call(uid, 'POST', path, body);
+        const two = await call(uid, 'POST', path, body);
+        expect(one.status).toBe(201);
+        expect(two.status).toBe(201);
+        expect(two.body).toEqual(one.body);
+        expect(one.body.id).toBe(body.id);
+      };
+      await twice('/transactions/transfer', { id: randomUUID(), fromCardId: `${uid}-a`, toCardId: `${uid}-b`, amount: 100 });
+      expect(await balanceOf(`${uid}-a`)).toBe(900);
+      expect(await balanceOf(`${uid}-b`)).toBe(200);
+      const purchaseId = randomUUID();
+      await twice('/transactions', { id: purchaseId, type: 'expense', amount: 200, currency: 'UZS', categoryId: 'f', cardId: `${uid}-a`, date: 1 });
+      await twice(`/transactions/${purchaseId}/return`, { id: randomUUID(), returnAmount: 200, accountId: `${uid}-a` });
+      expect(await balanceOf(`${uid}-a`)).toBe(900);
+      await twice('/cards/refill', { id: randomUUID(), creditCardId: `${uid}-credit`, sourceCardId: `${uid}-a`, amount: 50 });
+      expect(await balanceOf(`${uid}-a`)).toBe(850);
+      expect(await balanceOf(`${uid}-credit`)).toBe(250);
+    });
+
+    it('answers 409 ID_CONFLICT for someone else\'s or a household id and 400 for reserved formats', async () => {
+      const owner = newUid();
+      const intruder = newUid();
+      const id = randomUUID();
+      await call(owner, 'POST', '/cards', cardBody({ id }));
+      const stolen = await call(intruder, 'POST', '/cards', cardBody({ id }));
+      expect(stolen.status).toBe(409);
+      expect(stolen.body.error).toMatchObject({ code: 'ID_CONFLICT', message: 'This id cannot be used.' });
+      expect(JSON.stringify(stolen.body)).not.toContain(owner);
+      const householdId = randomUUID();
+      await insertDocument(key('cards', householdId), cardDoc(`household:${owner}`, 1, { scope: 'household' }));
+      expect((await call(intruder, 'POST', '/cards', cardBody({ id: householdId }))).status).toBe(409);
+      expect((await rawDoc('cards', id)).userId).toBe(owner);
+      for (const bad of ['short', 'a'.repeat(20), 'abc__defgh', 'telegram_abcdefg', `${intruder}__default__x`, 'has space id', 'x'.repeat(65)]) {
+        expect((await call(intruder, 'POST', '/cards', cardBody({ id: bad }))).status).toBe(400);
+      }
+    });
+
+    it('does not apply the free-plan limit to a replayed own create, but still limits a new id', async () => {
+      const uid = newUid(); // no profile => free plan: one debit card
+      const id = randomUUID();
+      expect((await call(uid, 'POST', '/cards', cardBody({ id }))).status).toBe(201);
+      expect((await call(uid, 'POST', '/cards', cardBody({ id }))).status).toBe(201);
+      const second = await call(uid, 'POST', '/cards', cardBody({ id: randomUUID() }));
+      expect(second.status).toBe(403);
+      expect(second.body.error.code).toBe('LIMIT_REACHED');
+    });
+
+    it('combines id and Idempotency-Key: key replay wins, mismatching body with the same key is 422', async () => {
+      const uid = newUid();
+      await insertDocument(key('cards', `${uid}-c`), cardDoc(uid));
+      const id = randomUUID();
+      const k = randomUUID();
+      const body = { id, type: 'expense', amount: 10, currency: 'UZS', categoryId: 'f', cardId: `${uid}-c`, date: 1 };
+      const first = await call(uid, 'POST', '/transactions', body, k);
+      const second = await call(uid, 'POST', '/transactions', body, k);
+      expect(second.replayed).toBe(true);
+      expect(second.body).toEqual(first.body);
+      expect((await call(uid, 'POST', '/transactions', { ...body, amount: 11 }, k)).status).toBe(422);
+      expect(await balanceOf(`${uid}-c`)).toBe(990);
+    });
+
+    it('creates every collection by id: categories, savings goals, debts, deposits, subscriptions, planned expenses', async () => {
+      const uid = newUid();
+      await premium(uid);
+      const cases: Array<[string, Record<string, unknown>]> = [
+        ['/categories', { name: 'C', icon: 'i', color: 'red', type: 'expense' }],
+        ['/savings-goals', { name: 'G', icon: 'i', targetAmount: 100, currency: 'UZS', deadline: 1 }],
+        ['/debts', { direction: 'i_owe', person: 'P', amount: 10, currency: 'UZS' }],
+        ['/deposits', { bank: 'B', amount: 10, currency: 'UZS', interestRate: 1, startDate: 1, endDate: 2, capitalization: 'at_end', showInterest: false, isReplenishable: true }],
+        ['/subscriptions', { name: 'S', icon: 'i', amount: 1, currency: 'UZS', cycle: 'monthly', nextBillingDate: 1 }],
+        ['/planned-expenses', { name: 'P', amount: 1, currency: 'UZS', icon: 'i', recurrence: 'once' }],
+      ];
+      for (const [path, body] of cases) {
+        const id = randomUUID();
+        const one = await call(uid, 'POST', path, { ...body, id });
+        const two = await call(uid, 'POST', path, { ...body, id });
+        expect([path, one.status, one.body.id]).toEqual([path, 201, id]);
+        expect([path, two.status, two.body.id]).toEqual([path, 201, id]);
+      }
+      const replica = new LocalReplica(uid);
+      await replica.pull();
+      for (const collection of ['categories', 'savingsGoals', 'debts', 'deposits', 'subscriptions', 'plannedExpenses'])
+        expect([...replica.rows.keys()].filter((k) => k.startsWith(`${collection}/`)), collection).toHaveLength(1);
+    });
+  });
+
   describe('Idempotency-Key', () => {
     const txBody = (cardId: string, extra: Record<string, unknown> = {}) => ({
       type: 'expense',
