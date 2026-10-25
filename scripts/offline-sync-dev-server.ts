@@ -29,6 +29,7 @@ async function main(): Promise<void> {
   const enabled = await initOfflineSync(database());
   const { idempotency } = await import('../src/middleware/idempotency');
   const { errorHandler } = await import('../src/middleware/errorHandler');
+  const { notFound } = await import('../src/middleware/notFound');
   const { profileRouter } = await import('../src/routes/profile.routes');
   const { settingsRouter } = await import('../src/routes/settings.routes');
   const { categoriesRouter } = await import('../src/routes/categories.routes');
@@ -86,6 +87,7 @@ async function main(): Promise<void> {
     );
     res.status(204).end();
   });
+  app.use(notFound);
   app.use(errorHandler);
   const port = Number(process.env.PORT || 3112);
   const server = app.listen(port, '127.0.0.1', () =>
