@@ -25,6 +25,7 @@ vi.mock('../../src/notifications/queue.repository', () => ({
 }));
 vi.mock('../../src/config/env', () => ({
   isProd: true,
+  notificationAllowedUids: new Set<string>(),
   env: {
     LOG_LEVEL: 'silent',
     NOTIFY_DIGEST_HOUR: 10,

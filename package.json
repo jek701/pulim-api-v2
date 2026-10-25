@@ -24,7 +24,7 @@
     "data:export-mysql": "node --import tsx scripts/migration/cli.ts export-mysql",
     "data:restore-plan": "node --import tsx scripts/migration/cli.ts restore-plan",
     "data:restore-firestore": "node --import tsx scripts/migration/cli.ts restore-firestore",
-    "test:mysql": "node --env-file=.env.mysql-test node_modules/vitest/vitest.mjs run tests/migration/mysql.integration.test.ts tests/migration/transfer.integration.test.ts --no-file-parallelism",
+    "test:mysql": "node --env-file=.env.mysql-test node_modules/vitest/vitest.mjs run tests/migration/mysql.integration.test.ts tests/migration/transfer.integration.test.ts tests/migration/offline-sync.integration.test.ts --no-file-parallelism",
     "prebuild": "node scripts/clean-dist.cjs",
     "data:verify-source-frozen": "node --import tsx scripts/migration/cli.ts verify-source-frozen"
   },

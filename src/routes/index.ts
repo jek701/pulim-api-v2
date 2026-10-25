@@ -1,5 +1,6 @@
 import { Router, type Express } from 'express';
 import { authenticate } from '../middleware/authenticate';
+import { idempotency } from '../middleware/idempotency';
 import { aiLimiter, phoneAuthLimiter, shortcutLimiter, telegramAuthLimiter, telegramWebhookLimiter } from '../middleware/rateLimit';
 import { healthRouter } from './health.routes';
 import { telegramAuthRouter } from './telegramAuth.routes';
@@ -27,6 +28,7 @@ import { shortcutRouter } from './shortcut.routes';
 import { shortcutTokenRouter } from './shortcutToken.routes';
 import { communicationsRouter } from './communications.routes';
 import { householdsRouter } from './households.routes';
+import { syncRouter } from './sync.routes';
 
 /** Mounts every router. Public routes first, then the authenticated `/v1` tree. */
 export function mountRoutes(app: Express): void {
@@ -40,6 +42,7 @@ export function mountRoutes(app: Express): void {
 
   const v1 = Router();
   v1.use(authenticate);
+  v1.use(idempotency);
 
   v1.use('/profile', profileRouter);
   v1.use('/profile/notifications', notificationSettingsRouter);
@@ -60,6 +63,7 @@ export function mountRoutes(app: Express): void {
   v1.use('/communications', communicationsRouter);
   v1.use('/households', householdsRouter);
   v1.use('/shortcut-token', shortcutTokenRouter);
+  v1.use('/sync', syncRouter);
 
   app.use('/v1', v1);
 }

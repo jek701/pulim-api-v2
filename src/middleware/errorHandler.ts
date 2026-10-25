@@ -2,11 +2,19 @@ import type { ErrorRequestHandler } from 'express';
 import { ZodError } from 'zod';
 import { AppError } from '../utils/AppError';
 import { logger } from '../utils/logger';
+import { IdempotencyConflict } from '../db/idempotencyContext';
+import { handleIdempotencyConflict } from './idempotency';
 
-export const errorHandler: ErrorRequestHandler = (err, _req, res, next) => {
+export const errorHandler: ErrorRequestHandler = (err, req, res, next) => {
   // Response already started (e.g. an SSE stream) — let Express tear it down.
   if (res.headersSent) {
     next(err);
+    return;
+  }
+
+  // The key marker already exists: replay the stored response instead of an error.
+  if (err instanceof IdempotencyConflict) {
+    handleIdempotencyConflict(req, res).catch(next);
     return;
   }
 
