@@ -1,10 +1,12 @@
 import { z } from 'zod';
 import { CURRENCIES } from './types';
 import { clientIdSchema } from './clientId';
+import { DAY_KEY_PATTERN, MAX_SKIPPED_DAYS } from './plannedPaid';
 
 // --- Primitives ---
 export const currencySchema = z.enum(CURRENCIES as [string, ...string[]]);
 const positive = z.number().finite();
+const dayKeySchema = z.string().regex(DAY_KEY_PATTERN);
 const dayOfMonth = z.number().int().min(1).max(31);
 /** `transactionId`: optional offline client id of the transaction an operation endpoint creates. */
 const opTransactionId = {
@@ -231,9 +233,21 @@ export const plannedExpenseCreateSchema = z.object({
   customUnit: z.enum(['day', 'week', 'month', 'year']).optional(),
   endDate: z.number().optional(),
   kind: z.enum(['income', 'expense']).optional(),
+  /** Default account for "Mark paid". */
+  accountId: z.string().min(1).optional(),
+  /** Skipped occurrence days (local calendar). `paid` is server-managed (settle) and never accepted. */
+  skipped: z.array(dayKeySchema).max(MAX_SKIPPED_DAYS).optional(),
   ...clientId,
 });
 export const plannedExpenseUpdateSchema = plannedExpenseCreateSchema.omit({ id: true }).partial();
+
+export const plannedExpenseSettleSchema = z.object({
+  day: dayKeySchema,
+  accountId: z.string().min(1).optional(),
+  categoryId: z.string().min(1).optional(),
+  amount: z.number().finite().positive().optional(),
+  ...opTransactionId,
+});
 
 // --- Transactions (atomic) ---
 export const transactionCreateSchema = z.object({

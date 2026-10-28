@@ -44,7 +44,7 @@ const HONOURED: Array<[string, RegExp, number]> = [
   ['POST', /^\/(categories|subcategories|savings-goals|debts|deposits|subscriptions|planned-expenses)\/?$/, 201],
   ['PATCH', new RegExp(`^/(categories|subcategories|savings-goals|debts|subscriptions|planned-expenses)/${SEG}/?$`), 200],
   ['DELETE', new RegExp(`^/(categories|subcategories|savings-goals|debts|deposits|subscriptions|planned-expenses)/${SEG}/?$`), 204],
-  ['POST', new RegExp(`^/(savings-goals/${SEG}/contribute|debts/${SEG}/pay|subscriptions/${SEG}/pay)/?$`), 200],
+  ['POST', new RegExp(`^/(savings-goals/${SEG}/contribute|debts/${SEG}/pay|subscriptions/${SEG}/pay|planned-expenses/${SEG}/settle)/?$`), 200],
   ['POST', new RegExp(`^/deposits/${SEG}/(collect-interest|close|replenish|withdraw)/?$`), 200],
   ['PUT', new RegExp(`^/budgets/${SEG}/?$`), 200],
   ['DELETE', new RegExp(`^/budgets/${SEG}/?$`), 204],

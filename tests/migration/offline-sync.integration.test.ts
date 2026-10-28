@@ -669,6 +669,59 @@ describe.skipIf(!enabled)('offline sync: change feed + idempotency (real MySQL)'
       expect((await rawTx(goalTx)).date).toBe(day);
     });
 
+    it('settles a planned expense: one normal transaction, balance, paid[day], replay and ALREADY_SETTLED', async () => {
+      const uid = newUid();
+      await premium(uid);
+      const a = `${uid}-a`;
+      await insertDocument(key('cards', a), cardDoc(uid, 1000));
+      const planId = `${uid}-plan`;
+      await insertDocument(key('plannedExpenses', planId), {
+        userId: uid, name: 'Rent', amount: 100, currency: 'UZS', categoryId: 'cat1', icon: 'x',
+        recurrence: 'monthly', accountId: a, createdAt: 1,
+      });
+      const txId = randomUUID();
+      const body = { day: '2026-11-14', transactionId: txId };
+      const key1 = randomUUID();
+      const first = await call(uid, 'POST', `/planned-expenses/${planId}/settle`, body, key1);
+      expect(first.status).toBe(200);
+      const keyed = await call(uid, 'POST', `/planned-expenses/${planId}/settle`, body, key1);
+      expect(keyed.replayed).toBe(true);
+      expect(keyed.body).toEqual(first.body);
+      expect(first.body).toEqual({ id: planId, paid: { '2026-11-14': txId }, transaction: { id: txId } });
+      expect(await balanceOf(a)).toBe(900);
+      const stored = await rawTx(txId);
+      expect(stored).toMatchObject({ type: 'expense', amount: 100, categoryId: 'cat1', comment: 'Rent', cardId: a });
+      expect(stored.source).toBeUndefined();
+      // Replay with the same transactionId: original result, no second effect.
+      const replay = await call(uid, 'POST', `/planned-expenses/${planId}/settle`, body);
+      expect(replay.status).toBe(200);
+      expect(replay.body).toEqual(first.body);
+      expect(await balanceOf(a)).toBe(900);
+      // Same day with a new transaction id: ALREADY_SETTLED.
+      const again = await call(uid, 'POST', `/planned-expenses/${planId}/settle`, { day: '2026-11-14', transactionId: randomUUID() });
+      expect(again.status).toBe(409);
+      expect(again.body.error.code).toBe('ALREADY_SETTLED');
+      expect(await balanceOf(a)).toBe(900);
+      // Missing category, wrong day format, unknown plan.
+      const noCat = `${uid}-nocat`;
+      await insertDocument(key('plannedExpenses', noCat), { userId: uid, name: 'X', amount: 1, currency: 'UZS', icon: 'x', recurrence: 'once', createdAt: 1 });
+      expect((await call(uid, 'POST', `/planned-expenses/${noCat}/settle`, { day: '2026-11-14' })).status).toBe(400);
+      expect((await call(uid, 'POST', `/planned-expenses/${planId}/settle`, { day: '14-11-2026' })).status).toBe(400);
+      expect((await call(uid, 'POST', `/planned-expenses/${uid}-missing/settle`, { day: '2026-11-14' })).status).toBe(404);
+      // Income plan with overrides credits the account; foreign-currency account is refused.
+      const inc = `${uid}-inc`;
+      await insertDocument(key('plannedExpenses', inc), { userId: uid, name: 'Salary', amount: 500, currency: 'UZS', icon: 'x', recurrence: 'monthly', kind: 'income', createdAt: 1 });
+      const incomeTx = randomUUID();
+      expect((await call(uid, 'POST', `/planned-expenses/${inc}/settle`, { day: '2026-11-15', accountId: a, categoryId: 'c2', amount: 50, transactionId: incomeTx })).status).toBe(200);
+      expect(await balanceOf(a)).toBe(950);
+      expect((await rawTx(incomeTx)).type).toBe('income');
+      // paid is never accepted from clients on PATCH.
+      await call(uid, 'PATCH', `/planned-expenses/${planId}`, { paid: { '2030-01-01': 'x' }, skipped: ['2026-12-01'] });
+      const plan = await readDocument(key('plannedExpenses', planId));
+      expect(plan.data.paid).toEqual({ '2026-11-14': txId });
+      expect(plan.data.skipped).toEqual(['2026-12-01']);
+    });
+
     it('computes deposit operations as of the client date', async () => {
       const uid = newUid();
       await premium(uid);

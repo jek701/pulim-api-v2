@@ -49,6 +49,7 @@ Operation endpoints that create a transaction of their own accept an optional cl
 | `POST /v1/debts` | `id` (debt) + `transactionId` (initial cash tx, only used when `accountId` is given) | both ids come from the client |
 | `POST /v1/debts/:id/pay` | `transactionId` | |
 | `POST /v1/subscriptions/:id/pay` | `transactionId` | |
+| `POST /v1/planned-expenses/:id/settle` | `transactionId` | body `{ day: 'YYYY-MM-DD', accountId?, categoryId?, amount?, transactionId?, date? }`; creates a normal transaction (type = plan `kind`) and sets `paid[day]`; `409 ALREADY_SETTLED` if the day is already settled; `400` without any category |
 | `POST /v1/savings-goals/:id/contribute` | `transactionId` | |
 | `POST /v1/deposits/:id/collect-interest` | `transactionId` (body optional otherwise) | |
 | `POST /v1/deposits/:id/close`, `/replenish`, `/withdraw` | `transactionId` | |
@@ -57,7 +58,7 @@ Semantics: if an own transaction with that id and the same kind (`source`) alrea
 
 ### 1c. Operation time: `date`
 
-Optional `date` (epoch ms, the moment the user acted) is accepted on `POST /transactions/transfer`, `/cards/refill`, `/subscriptions/:id/pay`, `/debts` (initial cash tx), `/debts/:id/pay`, `/savings-goals/:id/contribute`, `/deposits/:id/(collect-interest|close|replenish|withdraw)`; `POST /transactions/:id/return` already had `date`, and `POST /transactions` has always taken it. It becomes the transaction `date` and `createdAt` (for deposits also the `now` of the interest/principal computation, `closedAt`, tranche date). The server accepts it only within **[serverNow − 90 days, serverNow + 5 minutes]**; outside that window, or when absent, it silently uses its own now (today's behaviour).
+Optional `date` (epoch ms, the moment the user acted) is accepted on `POST /transactions/transfer`, `/cards/refill`, `/subscriptions/:id/pay`, `/planned-expenses/:id/settle`, `/debts` (initial cash tx), `/debts/:id/pay`, `/savings-goals/:id/contribute`, `/deposits/:id/(collect-interest|close|replenish|withdraw)`; `POST /transactions/:id/return` already had `date`, and `POST /transactions` has always taken it. It becomes the transaction `date` and `createdAt` (for deposits also the `now` of the interest/principal computation, `closedAt`, tranche date). The server accepts it only within **[serverNow − 90 days, serverNow + 5 minutes]**; outside that window, or when absent, it silently uses its own now (today's behaviour).
 
 ### 1d. Category edits
 
@@ -77,7 +78,7 @@ Rules
 Send `Idempotency-Key: <uuid>` (pattern `^[A-Za-z0-9_-]{16,128}$`) on the outbox mutations below; one key per outbox operation, reused verbatim on each retry.
 
 **Honoured (each is exactly ONE SQL transaction on the server):**
-`POST /transactions`, `/transactions/transfer`, `/transactions/:id/return`, `PATCH /transactions/:id`, `/transactions/:id/transfer`, `/transactions/:id/return`, `DELETE /transactions/:id`; `POST /cards`, `/cards/refill`, `PATCH|DELETE /cards/:id`; `POST /categories|/subcategories|/savings-goals|/debts|/deposits|/subscriptions|/planned-expenses`; `PATCH /categories|/subcategories|/savings-goals|/debts|/subscriptions|/planned-expenses/:id`; `DELETE` of any of those collections; `POST /savings-goals/:id/contribute`, `/debts/:id/pay`, `/subscriptions/:id/pay`, `/deposits/:id/(collect-interest|close|replenish|withdraw)`; `PUT|DELETE /budgets/:categoryId`; `PATCH /settings`.
+`POST /transactions`, `/transactions/transfer`, `/transactions/:id/return`, `PATCH /transactions/:id`, `/transactions/:id/transfer`, `/transactions/:id/return`, `DELETE /transactions/:id`; `POST /cards`, `/cards/refill`, `PATCH|DELETE /cards/:id`; `POST /categories|/subcategories|/savings-goals|/debts|/deposits|/subscriptions|/planned-expenses`; `PATCH /categories|/subcategories|/savings-goals|/debts|/subscriptions|/planned-expenses/:id`; `DELETE` of any of those collections; `POST /savings-goals/:id/contribute`, `/debts/:id/pay`, `/subscriptions/:id/pay`, `/planned-expenses/:id/settle`, `/deposits/:id/(collect-interest|close|replenish|withdraw)`; `PUT|DELETE /budgets/:categoryId`; `PATCH /settings`.
 
 **Ignored (header has no effect, response carries `Idempotency-Ignored: true`):** everything else — `PATCH /profile` and other profile routes, `DELETE /transactions` (clear all), households, AI, dev notes, communications. Those are multi-step on the server; retry them as naturally idempotent set-style operations (replaying `PATCH /profile` with the same fields is harmless).
 

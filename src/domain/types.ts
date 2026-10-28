@@ -151,6 +151,11 @@ export interface PlannedExpense {
   customUnit?: CustomUnit;
   endDate?: number;
   kind?: 'income' | 'expense';
+  accountId?: string;
+  /** Skipped occurrence days, 'YYYY-MM-DD'. */
+  skipped?: string[];
+  /** Day key -> id of the transaction created by settle (server managed). */
+  paid?: Record<string, string>;
   createdAt: number;
 }
 
