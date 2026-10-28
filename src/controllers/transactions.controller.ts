@@ -1,13 +1,14 @@
 import { asyncHandler } from '../utils/asyncHandler';
 import { userScopedRepo } from '../repositories/base.repository';
+import { compareTransactions } from '../domain/transactionOrder';
 import * as txService from '../services/transaction.service';
 
 const repo = userScopedRepo('transactions');
 
 export const listTransactions = asyncHandler(async (req, res) => {
   const rows = await repo.list(req.uid);
-  // Frontend ordering: date desc, then createdAt desc.
-  rows.sort((a, b) => (b.date ?? 0) - (a.date ?? 0) || (b.createdAt ?? 0) - (a.createdAt ?? 0));
+  // Newest day first, inside a day the most recently added first (see domain/transactionOrder).
+  rows.sort(compareTransactions);
   res.json(rows);
 });
 

@@ -30,6 +30,7 @@ import { familyInviteLink, inviteShareArticle, pickButtonText } from '../telegra
 import { normalizeLanguage } from '../telegram/i18n';
 import { getIsPremium } from './entitlement.service';
 import { verifyTelegramInitData } from './telegramVerify.service';
+import { compareTransactions } from '../domain/transactionOrder';
 import { AppError } from '../utils/AppError';
 type Row = Record<string, any>;
 const households = () => queryTable('households');
@@ -633,7 +634,7 @@ export async function listHouseholdTransactions(uid: string): Promise<Row[]> {
   const snap = await readDocument(filterQuery(transactions(), 'householdId', '==', household.id));
   return snap.rows
     .map((doc) => ({ id: doc.id, ...doc.data }) as Row)
-    .sort((a, b) => (b.date ?? 0) - (a.date ?? 0) || (b.createdAt ?? 0) - (a.createdAt ?? 0));
+    .sort(compareTransactions);
 }
 export async function createHouseholdTransaction(uid: string, input: Row): Promise<Row> {
   const household = await requireHousehold(uid);
