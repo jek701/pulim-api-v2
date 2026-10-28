@@ -46,7 +46,8 @@ export async function settlePlannedExpense(uid: string, planId: string, input: S
     const amount = input.amount ?? (plan.data.amount as number);
     const categoryId = input.categoryId ?? plan.data.categoryId;
     if (!categoryId) throw AppError.badRequest('A category is required.');
-    const accountId = input.accountId ?? plan.data.accountId;
+    // The request's account is the only one used: the plan's default account is just a pay-sheet preset.
+    const accountId = input.accountId;
     const account = accountId
       ? await readOwned(tx, documentKey(cardsCol(), accountId), uid, 'Account not found.')
       : null;

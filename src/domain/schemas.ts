@@ -233,8 +233,11 @@ export const plannedExpenseCreateSchema = z.object({
   customUnit: z.enum(['day', 'week', 'month', 'year']).optional(),
   endDate: z.number().optional(),
   kind: z.enum(['income', 'expense']).optional(),
-  /** Default account for "Mark paid". */
-  accountId: z.string().min(1).optional(),
+  /** Default account for "Mark paid". '' or null = "no default" (clients send '' to clear on PATCH). */
+  accountId: z
+    .union([z.string().min(1), z.literal(''), z.null()])
+    .transform((v) => v ?? '')
+    .optional(),
   /** Skipped occurrence days (local calendar). `paid` is server-managed (settle) and never accepted. */
   skipped: z.array(dayKeySchema).max(MAX_SKIPPED_DAYS).optional(),
   ...clientId,

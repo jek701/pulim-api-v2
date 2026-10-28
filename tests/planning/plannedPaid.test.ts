@@ -21,6 +21,14 @@ describe('planned expense schemas', () => {
     expect('paid' in parsed).toBe(false);
     expect('paid' in plannedExpenseUpdateSchema.parse({ paid: { a: 'b' }, skipped: [] })).toBe(false);
   });
+  it("accepts accountId '' / null as 'no default' (normalised to '') on create and update", () => {
+    expect(plannedExpenseCreateSchema.parse({ ...base, accountId: '' }).accountId).toBe('');
+    expect(plannedExpenseCreateSchema.parse({ ...base, accountId: null }).accountId).toBe('');
+    expect(plannedExpenseUpdateSchema.parse({ accountId: '' })).toEqual({ accountId: '' });
+    expect(plannedExpenseUpdateSchema.parse({ accountId: null })).toEqual({ accountId: '' });
+    expect('accountId' in plannedExpenseUpdateSchema.parse({})).toBe(false);
+    expect(plannedExpenseUpdateSchema.safeParse({ accountId: 5 }).success).toBe(false);
+  });
   it('validates skipped day keys and the 400 cap', () => {
     expect(plannedExpenseUpdateSchema.safeParse({ skipped: ['14-11-2026'] }).success).toBe(false);
     const ok = Array.from({ length: MAX_SKIPPED_DAYS }, () => '2026-11-14');

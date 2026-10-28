@@ -49,7 +49,7 @@ Operation endpoints that create a transaction of their own accept an optional cl
 | `POST /v1/debts` | `id` (debt) + `transactionId` (initial cash tx, only used when `accountId` is given) | both ids come from the client |
 | `POST /v1/debts/:id/pay` | `transactionId` | |
 | `POST /v1/subscriptions/:id/pay` | `transactionId` | |
-| `POST /v1/planned-expenses/:id/settle` | `transactionId` | body `{ day: 'YYYY-MM-DD', accountId?, categoryId?, amount?, transactionId?, date? }`; creates a normal transaction (type = plan `kind`) and sets `paid[day]`; `409 ALREADY_SETTLED` if the day is already settled; `400` without any category |
+| `POST /v1/planned-expenses/:id/settle` | `transactionId` | body `{ day: 'YYYY-MM-DD', accountId?, categoryId?, amount?, transactionId?, date? }`; creates a normal transaction (type = plan `kind`) and sets `paid[day]`; the account is ONLY the request's `accountId` (the plan's default `accountId` is not a fallback; omitted = no account); an account of another currency is `400`; `409 ALREADY_SETTLED` if the day is already settled; `400` without any category |
 | `POST /v1/savings-goals/:id/contribute` | `transactionId` | |
 | `POST /v1/deposits/:id/collect-interest` | `transactionId` (body optional otherwise) | |
 | `POST /v1/deposits/:id/close`, `/replenish`, `/withdraw` | `transactionId` | |

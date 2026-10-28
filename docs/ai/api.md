@@ -62,7 +62,7 @@ Public: `GET /health`, `/health/live`, `/health/ready`; `POST /auth/telegram`; `
 - `categories`, `subcategories` (GET/POST/DELETE; custom = Premium)
 - `cards` GET/POST(limit)/PATCH/DELETE, `POST /cards/refill {creditCardId, sourceCardId, amount}`
 - `budgets` GET, `PUT /:categoryId` (Premium), DELETE; special ids `__income__`, `__debts__`, `__subscription__`
-- `savings-goals` + `/:id/contribute`; `subscriptions` + `/:id/pay` (expense with `categoryId '__subscription__'`, advances nextBillingDate); `planned-expenses` + `/:id/settle` (Mark paid/received: normal transaction of the plan `kind`, balance like subscription pay, `paid[day]=txId`; `paid` is server-only, plan also has optional `accountId`, `skipped[]`; `409 ALREADY_SETTLED`; not Premium-gated)
+- `savings-goals` + `/:id/contribute`; `subscriptions` + `/:id/pay` (expense with `categoryId '__subscription__'`, advances nextBillingDate); `planned-expenses` + `/:id/settle` (Mark paid/received: normal transaction of the plan `kind`, balance like subscription pay, `paid[day]=txId`; `paid` is server-only, plan also has optional `accountId` (default preset for the client; `''`/null = none; NOT used by settle), `skipped[]`; `409 ALREADY_SETTLED`; not Premium-gated)
 - `transactions`: GET (all, **no pagination**), POST, PATCH/DELETE `/:id`, DELETE all (clear data, **does not reverse balances**), `POST /transfer`, `PATCH /:id/transfer`, `POST|PATCH /:id/return`
 - `debts` + `/:id/pay`; `deposits` + `/:id/collect-interest|close|replenish|withdraw`
 - AI: `POST /ai/forecast` (cached 15 min), `POST /ai/chat` (SSE: meta, delta, done, error), `POST /ai/feedback`, `GET|PATCH|DELETE /ai-chats`. No key → 503 `AI_UNAVAILABLE`.

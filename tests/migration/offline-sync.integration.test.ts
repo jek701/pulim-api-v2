@@ -680,7 +680,7 @@ describe.skipIf(!enabled)('offline sync: change feed + idempotency (real MySQL)'
         recurrence: 'monthly', accountId: a, createdAt: 1,
       });
       const txId = randomUUID();
-      const body = { day: '2026-11-14', transactionId: txId };
+      const body = { day: '2026-11-14', accountId: a, transactionId: txId };
       const key1 = randomUUID();
       const first = await call(uid, 'POST', `/planned-expenses/${planId}/settle`, body, key1);
       expect(first.status).toBe(200);
@@ -715,6 +715,19 @@ describe.skipIf(!enabled)('offline sync: change feed + idempotency (real MySQL)'
       expect((await call(uid, 'POST', `/planned-expenses/${inc}/settle`, { day: '2026-11-15', accountId: a, categoryId: 'c2', amount: 50, transactionId: incomeTx })).status).toBe(200);
       expect(await balanceOf(a)).toBe(950);
       expect((await rawTx(incomeTx)).type).toBe('income');
+      // The plan's default account is NOT a fallback: a settle without accountId moves no balance.
+      const noAcc = `${uid}-noacc`;
+      await insertDocument(key('plannedExpenses', noAcc), {
+        userId: uid, name: 'Gym', amount: 10, currency: 'UZS', categoryId: 'cat1', icon: 'x',
+        recurrence: 'monthly', accountId: a, createdAt: 1,
+      });
+      const noAccTx = randomUUID();
+      expect((await call(uid, 'POST', `/planned-expenses/${noAcc}/settle`, { day: '2026-11-16', transactionId: noAccTx })).status).toBe(200);
+      expect(await balanceOf(a)).toBe(950);
+      expect((await rawTx(noAccTx)).cardId).toBeUndefined();
+      // accountId '' clears the default on PATCH and is accepted on create.
+      expect((await call(uid, 'PATCH', `/planned-expenses/${noAcc}`, { accountId: '' })).status).toBe(200);
+      expect((await readDocument(key('plannedExpenses', noAcc))).data.accountId).toBe('');
       // paid is never accepted from clients on PATCH.
       await call(uid, 'PATCH', `/planned-expenses/${planId}`, { paid: { '2030-01-01': 'x' }, skipped: ['2026-12-01'] });
       const plan = await readDocument(key('plannedExpenses', planId));
