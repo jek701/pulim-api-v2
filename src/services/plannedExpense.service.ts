@@ -12,7 +12,7 @@ import {
 import { AppError } from '../utils/AppError';
 
 type Row = Record<string, any>;
-const plannedCol = () => queryTable('plannedExpenses');
+const plannedCol = () => queryTable('planned_expenses');
 
 export interface SettleInput {
   day: string;
