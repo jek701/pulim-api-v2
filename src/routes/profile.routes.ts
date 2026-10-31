@@ -1,4 +1,7 @@
 import { Router } from 'express';
+import { guestImportSchema } from '../domain/guestImport';
+import { importGuestSnapshot } from '../services/guestImport.service';
+import { asyncHandler } from '../utils/asyncHandler';
 import { validate } from '../middleware/validate';
 import { profilePatchSchema, homeWidgetsSchema } from '../domain/schemas';
 import {
@@ -13,6 +16,13 @@ import {
 const router = Router();
 
 router.post('/bootstrap', postBootstrap);
+router.post(
+  '/import-guest',
+  validate(guestImportSchema),
+  asyncHandler(async (req, res) => {
+    res.json(await importGuestSnapshot(req.uid, req.body));
+  }),
+);
 router.post('/trial/start', postStartTrial);
 router.get('/', getProfileHandler);
 router.patch('/', validate(profilePatchSchema), patchProfile);

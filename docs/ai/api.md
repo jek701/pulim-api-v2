@@ -59,6 +59,7 @@ Public: `GET /health`, `/health/live`, `/health/ready`; `POST /auth/telegram`; `
 `GET /shortcut/v1/cards`, `GET /shortcut/v1/categories`, `POST /shortcut/v1/expenses` (plain-text replies).
 `/v1` (auth):
 - profile: `POST /profile/bootstrap`, `POST /profile/trial/start`, `GET|PATCH /profile`, `PATCH /profile/home-widgets`, `POST /profile/telegram-link-dismissed`, `PATCH /profile/notifications {enabled}`; `GET|PATCH /settings`
+- Native guest import: `POST /profile/import-guest` atomically imports a validated personal snapshot and permanent idempotency receipt without replaying balance effects. See [guest-import.md](../guest-import.md). Deploy before the native guest-import release; no DB migration.
 - `categories`, `subcategories` (GET/POST/DELETE; custom = Premium)
 - `cards` GET/POST(limit)/PATCH/DELETE, `POST /cards/refill {creditCardId, sourceCardId, amount}`
 - `budgets` GET, `PUT /:categoryId` (Premium), DELETE; special ids `__income__`, `__debts__`, `__subscription__`
