@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { validate } from '../middleware/validate';
-import { profilePatchSchema, homeWidgetsSchema } from '../domain/schemas';
+import { bootstrapSchema, profilePatchSchema, homeWidgetsSchema } from '../domain/schemas';
 import {
   postBootstrap,
   postStartTrial,
@@ -12,7 +12,7 @@ import {
 
 const router = Router();
 
-router.post('/bootstrap', postBootstrap);
+router.post('/bootstrap', validate(bootstrapSchema), postBootstrap);
 router.post('/trial/start', postStartTrial);
 router.get('/', getProfileHandler);
 router.patch('/', validate(profilePatchSchema), patchProfile);

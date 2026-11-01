@@ -5,7 +5,10 @@ import { syncMemberName } from '../services/household.service';
 import { getProfile, mergeProfile } from '../repositories/profile.repository';
 
 export const postBootstrap = asyncHandler(async (req, res) => {
-  res.status(200).json(await profileService.bootstrap(req.uid, req.claims));
+  const categories = req.body?.categories;
+  res
+    .status(200)
+    .json(await profileService.bootstrap(req.uid, req.claims, categories ? { categories } : undefined));
 });
 
 export const postStartTrial = asyncHandler(async (req, res) => {

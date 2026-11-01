@@ -113,6 +113,8 @@ export function syncCapabilities() {
     contract: SYNC_CONTRACT_VERSION,
     offlineSync: isSyncEnabled(),
     transactionOrigins: ['subscription'],
+    /** `POST /profile/bootstrap` accepts `{ categories: { defaults, custom } }` (free custom categories, once). */
+    onboardingCategories: true,
     idempotency: {
       header: 'Idempotency-Key',
       keyPattern: '^[A-Za-z0-9_-]{16,128}$',

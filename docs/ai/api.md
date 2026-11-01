@@ -59,7 +59,7 @@ Public: `GET /health`, `/health/live`, `/health/ready`; `POST /auth/telegram`; `
 `GET /shortcut/v1/cards`, `GET /shortcut/v1/categories`, `POST /shortcut/v1/expenses` (plain-text replies).
 `/v1` (auth):
 - profile: `POST /profile/bootstrap`, `POST /profile/trial/start`, `GET|PATCH /profile`, `PATCH /profile/home-widgets`, `POST /profile/telegram-link-dismissed`, `PATCH /profile/notifications {enabled}`; `GET|PATCH /settings`
-- `categories`, `subcategories` (GET/POST/DELETE; custom = Premium)
+- `categories`, `subcategories` (GET/POST/DELETE; custom = Premium). Exception: `POST /profile/bootstrap` takes an optional onboarding selection `{categories:{defaults:[{type,name}],custom:[{type,name,icon,color?}]}}` (zod `bootstrapSchema`; ≥1 expense, names 1..40, ≤10 custom) and, only for a user with no categories yet, seeds just those (defaults via `defaultCategoryId`, custom ids `${uid}__onboarding__<type>_<sha256-16>`, same doc shape). It is the one free path to custom categories and how a guest's onboarding categories reach the account. Capability `onboardingCategories: true` on `GET /sync/capabilities`. Default colors contain no purple (existing rows are not migrated). See [offline sync](../offline-sync.md#1a-bis-onboarding-categories-guest-import-and-first-sign-in).
 - `cards` GET/POST(limit)/PATCH/DELETE, `POST /cards/refill {creditCardId, sourceCardId, amount}`
 - `budgets` GET, `PUT /:categoryId` (Premium), DELETE; special ids `__income__`, `__debts__`, `__subscription__`
 - `savings-goals` + `/:id/contribute`; `subscriptions` + `/:id/pay` (expense with `categoryId '__subscription__'`, advances nextBillingDate); `planned-expenses` + `/:id/settle` (Mark paid/received: normal transaction of the plan `kind`, balance like subscription pay, `paid[day]=txId`; `paid` is server-only, plan also has optional `accountId` (default preset for the client; `''`/null = none; NOT used by settle), `skipped[]`; `409 ALREADY_SETTLED`; not Premium-gated)
@@ -84,7 +84,7 @@ Public: `GET /health`, `/health/live`, `/health/ready`; `POST /auth/telegram`; `
 
 ## Premium / trial
 `FREE_LIMITS` (`domain/entitlements.ts`): 1 debit card, 2 subscriptions, 1 AI chat, 10 AI msgs/30 days. Premium AI fair-use `AI_PREMIUM_MESSAGES_PER_PERIOD` (500).
-Premium-only: custom categories, budgets, debts, deposits, savings, planned, Shortcut, Telegram voice/receipt.
+Premium-only: custom categories (except the one-time onboarding bootstrap selection), budgets, debts, deposits, savings, planned, Shortcut, Telegram voice/receipt.
 `getIsPremium` = `isPremium === true && subscription.premiumUntil > now`. `profile.subscription` = Premium; `subscriptions` table = user's bills (don't confuse).
 Trial: explicit `POST /v1/profile/trial/start`, once, 7 days, `source:'trial'`; blocked after any paid history.
 Paid Premium only via billing webhook (contract + flow in [pulim-payment-api → docs/ai/payments.md](../../../pulim-payment-api/docs/ai/payments.md)): headers `x-pulim-event-id`, `x-pulim-timestamp`, `x-pulim-signature`; secret `PULIM_PAYMENT_INTERNAL_SECRET`; dedupe `billing_events`; apply if `version > subscription.billingVersion`; accepts only `source ∈ {atmos, none}`, `isTrial:false`. Never replay the old DEAD trial event in payment outbox; never roll back payment DB with app DB.

@@ -13,6 +13,7 @@ Consumer: the native Expo app (`rn-offline-core`): local SQLite + outbox, replay
   "contract": 1,
   "offlineSync": true,
   "transactionOrigins": ["subscription"],
+  "onboardingCategories": true,
   "idempotency": { "header": "Idempotency-Key", "keyPattern": "^[A-Za-z0-9_-]{16,128}$", "ttlDays": 30 },
   "clientIds": { "pattern": "^[A-Za-z0-9_-]{8,64}$", "collections": ["transactions", "cards", "categories", "subcategories", "savingsGoals", "debts", "deposits", "subscriptions", "plannedExpenses"] },
   "changes": { "defaultLimit": 200, "maxLimit": 500, "collections": ["profile", "settings", "categories", "subcategories", "cards", "transactions", "budgets", "savingsGoals", "debts", "deposits", "subscriptions", "plannedExpenses"] },
@@ -44,6 +45,25 @@ Accepted as an optional `id` in the JSON body of:
 ### 1a. Historical subscription transactions
 
 `POST /v1/transactions` additionally accepts optional `source: "subscription"` and `sourceLabel` (string, at most 500 characters). Guest import uses these fields to preserve the origin of an already-recorded subscription payment while creating its transaction through the existing outbox/create endpoint; it does not call `/subscriptions/:id/pay` or advance `nextBillingDate`. Other `source` values are rejected. Before importing, clients require `offlineSync: true` and advertised `Idempotency-Key` support; when the source contains subscription payments, they also require `transactionOrigins` to include `subscription` (older servers strip origin metadata). Both fields are stripped from generic transaction PATCH and household transaction create inputs; existing dedicated-edit restrictions remain unchanged. Omit both fields for an ordinary transaction. Client ids and `Idempotency-Key` retain the existing replay semantics.
+
+### 1a-bis. Onboarding categories (guest import and first sign-in)
+
+`POST /v1/profile/bootstrap` accepts an optional selection; clients must require `onboardingCategories: true` in the capabilities before sending it (an older server ignores unknown body keys and would seed all defaults):
+
+```json
+{
+  "categories": {
+    "defaults": [{ "type": "expense", "name": "Food" }, { "type": "income", "name": "Salary" }],
+    "custom": [{ "type": "expense", "name": "Coffee", "icon": "☕", "color": "#A2845E" }]
+  }
+}
+```
+
+- Applies only while the user has NO categories (same guard as before); otherwise the selection is ignored and the response is the normal profile. Without the field every default is seeded, exactly as before.
+- This is the only way a free user gets custom categories (`POST /categories` stays Premium). A guest's onboarding categories (chosen defaults + custom ones) reach the account through this single call, sent BEFORE the transactions are imported; the guest import then needs no plain custom-category creates, and imported transactions reference the same ids (`${uid}__default__<type>_<slug>` for defaults, `${uid}__onboarding__<type>_<hash>` for custom, see `GET /v1/categories`).
+- Validation (`400 VALIDATION_ERROR`, nothing seeded): at least one expense category in total, `defaults[]` must be existing defaults (`type`+`name` exactly as in the built-in list), at most 10 `custom`, names trimmed 1..40 chars, `type` `income|expense`, `icon` trimmed 1..32 chars (emoji), `color` optional `#RRGGBB` (server default `#8E8E93`). Entries repeating the same type + case-insensitive name collapse to the first; a custom entry equal to a chosen default is dropped.
+- Retry-safe: ids are deterministic (`defaultCategoryId`, and uid + type + normalized name for custom ones), writes merge, so a retried or concurrent bootstrap never duplicates. The header `Idempotency-Key` is ignored here as for the rest of the profile routes.
+- Custom ones are ordinary custom categories afterwards (editing them via PATCH needs Premium, as in 1d).
 
 ### 1b. Operation endpoints: `transactionId`
 

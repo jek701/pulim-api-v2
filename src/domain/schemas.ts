@@ -2,6 +2,12 @@ import { z } from 'zod';
 import { CURRENCIES } from './types';
 import { clientIdSchema } from './clientId';
 import { DAY_KEY_PATTERN, MAX_SKIPPED_DAYS } from './plannedPaid';
+import {
+  DEFAULT_CATEGORIES,
+  ONBOARDING_ICON_MAX,
+  ONBOARDING_MAX_CUSTOM_CATEGORIES,
+  ONBOARDING_NAME_MAX,
+} from './defaultCategories';
 
 // --- Primitives ---
 export const currencySchema = z.enum(CURRENCIES as [string, ...string[]]);
@@ -102,6 +108,41 @@ export const profilePatchSchema = z
 export const notificationSettingsPatchSchema = z.object({ enabled: z.boolean() }).strip();
 
 export const homeWidgetsSchema = z.object({ homeWidgets: z.array(homeWidgetSchema) });
+
+// --- Profile bootstrap: optional onboarding category selection ---
+const onboardingType = z.enum(['income', 'expense']);
+const onboardingName = z.string().trim().min(1).max(ONBOARDING_NAME_MAX);
+const onboardingDefaultSchema = z
+  .object({ type: onboardingType, name: onboardingName })
+  .refine((c) => DEFAULT_CATEGORIES.some((d) => d.type === c.type && d.name === c.name), {
+    message: 'Unknown default category.',
+  });
+const onboardingCustomSchema = z.object({
+  type: onboardingType,
+  name: onboardingName,
+  // Icons are emoji (the defaults are); there is no server-side icon list, so only bound it.
+  icon: z.string().trim().min(1).max(ONBOARDING_ICON_MAX),
+  color: z
+    .string()
+    .regex(/^#[0-9A-Fa-f]{6}$/, 'Use a #RRGGBB color.')
+    .optional(),
+});
+export const onboardingCategoriesSchema = z
+  .object({
+    defaults: z.array(onboardingDefaultSchema).max(DEFAULT_CATEGORIES.length * 2),
+    custom: z.array(onboardingCustomSchema).max(ONBOARDING_MAX_CUSTOM_CATEGORIES),
+  })
+  .refine((c) => [...c.defaults, ...c.custom].some((category) => category.type === 'expense'), {
+    message: 'Select at least one expense category.',
+  });
+/**
+ * `POST /v1/profile/bootstrap` body. Everything is optional (an empty/absent body keeps the
+ * legacy "seed all defaults" behavior); unknown keys are ignored.
+ */
+export const bootstrapSchema = z.preprocess(
+  (value) => value ?? {},
+  z.object({ categories: onboardingCategoriesSchema.optional() }),
+);
 
 // --- Settings ---
 export const settingsPatchSchema = z

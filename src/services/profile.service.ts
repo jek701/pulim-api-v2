@@ -9,7 +9,7 @@ import {
   writeBatch,
 } from '../db/documents';
 import type { DecodedToken } from '../config/firebaseAuth';
-import { DEFAULT_CATEGORIES, defaultCategoryId } from '../domain/defaultCategories';
+import { categorySeeds, type OnboardingCategorySelection } from '../domain/defaultCategories';
 import { deriveAuthMetadata } from '../domain/authMetadata';
 import { profileRef, getProfile } from '../repositories/profile.repository';
 import { getTrialBlockCode, TRIAL_MS } from '../domain/trial';
@@ -52,21 +52,24 @@ export async function startTrial(uid: string) {
   void queueTrialStarted(uid).catch(() => undefined);
   return getProfile(uid);
 }
-/** Seed default categories for a user whose categories collection is empty. */
-export async function seedDefaultCategories(uid: string): Promise<void> {
+/**
+ * Seed categories for a user whose categories collection is empty (otherwise a no-op, also
+ * for a supplied selection). Without `selection`: every default. With it: only the chosen
+ * defaults plus the custom ones. All ids are deterministic and writes merge, so retries and
+ * concurrent bootstraps converge on the same documents.
+ */
+export async function seedDefaultCategories(
+  uid: string,
+  selection?: OnboardingCategorySelection,
+): Promise<void> {
   const existing = await readDocument(
     limitQuery(filterQuery(queryTable('categories'), 'userId', '==', uid), 1),
   );
   if (!existing.empty) return;
   const createdAt = Date.now();
   const batch = writeBatch();
-  for (const cat of DEFAULT_CATEGORIES) {
-    const id = defaultCategoryId(uid, cat.type, cat.name);
-    batch.save(
-      documentKey(queryTable('categories'), id),
-      { ...cat, userId: uid, createdAt },
-      { merge: true },
-    );
+  for (const seed of categorySeeds(uid, createdAt, selection)) {
+    batch.save(documentKey(queryTable('categories'), seed.id), seed.data, { merge: true });
   }
   await batch.commit();
 }
@@ -76,11 +79,16 @@ export async function syncAuthMetadata(uid: string, claims: DecodedToken): Promi
   await saveDocument(profileRef(uid), { ...meta, updatedAt: Date.now() }, { merge: true });
 }
 /**
- * Idempotent post-login bootstrap: seed categories and sync auth metadata.
+ * Idempotent post-login bootstrap: seed categories (optionally the onboarding selection, the
+ * only way a free user gets custom categories) and sync auth metadata.
  * Trial activation is an explicit user action. Safe to call on every login.
  */
-export async function bootstrap(uid: string, claims: DecodedToken) {
-  await seedDefaultCategories(uid);
+export async function bootstrap(
+  uid: string,
+  claims: DecodedToken,
+  selection?: OnboardingCategorySelection,
+) {
+  await seedDefaultCategories(uid, selection);
   await syncAuthMetadata(uid, claims);
   await ensureNotificationDefaults(uid);
   return getProfile(uid);
