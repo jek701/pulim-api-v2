@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { collectionOf, keyHash, syncEpoch, syncScopeOf } from '../../src/db/syncIndex';
-import { decodeCursor, encodeCursor } from '../../src/services/sync.service';
+import { decodeCursor, encodeCursor, syncCapabilities } from '../../src/services/sync.service';
 import { AppError } from '../../src/utils/AppError';
 
 describe('syncScopeOf', () => {
@@ -67,5 +67,16 @@ describe('sync cursors', () => {
     } catch (error) {
       expect((error as AppError).statusCode).toBe(410);
     }
+  });
+});
+
+
+describe('sync capabilities', () => {
+  it('advertises supported historical transaction origins without changing contract version', () => {
+    expect(syncCapabilities()).toMatchObject({
+      contract: 1,
+      transactionOrigins: ['subscription'],
+      idempotency: { header: 'Idempotency-Key' },
+    });
   });
 });

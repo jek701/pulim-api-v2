@@ -12,6 +12,7 @@ Consumer: the native Expo app (`rn-offline-core`): local SQLite + outbox, replay
 {
   "contract": 1,
   "offlineSync": true,
+  "transactionOrigins": ["subscription"],
   "idempotency": { "header": "Idempotency-Key", "keyPattern": "^[A-Za-z0-9_-]{16,128}$", "ttlDays": 30 },
   "clientIds": { "pattern": "^[A-Za-z0-9_-]{8,64}$", "collections": ["transactions", "cards", "categories", "subcategories", "savingsGoals", "debts", "deposits", "subscriptions", "plannedExpenses"] },
   "changes": { "defaultLimit": 200, "maxLimit": 500, "collections": ["profile", "settings", "categories", "subcategories", "cards", "transactions", "budgets", "savingsGoals", "debts", "deposits", "subscriptions", "plannedExpenses"] },
@@ -42,7 +43,7 @@ Accepted as an optional `id` in the JSON body of:
 
 ### 1a. Historical subscription transactions
 
-`POST /v1/transactions` additionally accepts optional `source: "subscription"` and `sourceLabel` (string, at most 500 characters). Guest import uses these fields to preserve the origin of an already-recorded subscription payment while creating its transaction through the existing outbox/create endpoint; it does not call `/subscriptions/:id/pay` or advance `nextBillingDate`. Other `source` values are rejected. Both fields are stripped from generic transaction PATCH and household transaction create inputs; existing dedicated-edit restrictions remain unchanged. Omit both fields for an ordinary transaction. Client ids and `Idempotency-Key` retain the existing replay semantics.
+`POST /v1/transactions` additionally accepts optional `source: "subscription"` and `sourceLabel` (string, at most 500 characters). Guest import uses these fields to preserve the origin of an already-recorded subscription payment while creating its transaction through the existing outbox/create endpoint; it does not call `/subscriptions/:id/pay` or advance `nextBillingDate`. Other `source` values are rejected. Before importing, clients require `offlineSync: true` and advertised `Idempotency-Key` support; when the source contains subscription payments, they also require `transactionOrigins` to include `subscription` (older servers strip origin metadata). Both fields are stripped from generic transaction PATCH and household transaction create inputs; existing dedicated-edit restrictions remain unchanged. Omit both fields for an ordinary transaction. Client ids and `Idempotency-Key` retain the existing replay semantics.
 
 ### 1b. Operation endpoints: `transactionId`
 

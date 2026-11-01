@@ -112,6 +112,7 @@ export function syncCapabilities() {
   return {
     contract: SYNC_CONTRACT_VERSION,
     offlineSync: isSyncEnabled(),
+    transactionOrigins: ['subscription'],
     idempotency: {
       header: 'Idempotency-Key',
       keyPattern: '^[A-Za-z0-9_-]{16,128}$',
