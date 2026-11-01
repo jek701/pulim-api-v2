@@ -40,6 +40,10 @@ Accepted as an optional `id` in the JSON body of:
 | `POST /v1/subscriptions` | subscription |
 | `POST /v1/planned-expenses` | planned expense |
 
+### 1a. Historical subscription transactions
+
+`POST /v1/transactions` additionally accepts optional `source: "subscription"` and `sourceLabel` (string, at most 500 characters). Guest import uses these fields to preserve the origin of an already-recorded subscription payment while creating its transaction through the existing outbox/create endpoint; it does not call `/subscriptions/:id/pay` or advance `nextBillingDate`. Other `source` values are rejected. Both fields are stripped from generic transaction PATCH and household transaction create inputs; existing dedicated-edit restrictions remain unchanged. Omit both fields for an ordinary transaction. Client ids and `Idempotency-Key` retain the existing replay semantics.
+
 ### 1b. Operation endpoints: `transactionId`
 
 Operation endpoints that create a transaction of their own accept an optional client **`transactionId`** (same format and rules as `id`) so the local row and the server row are the same row (no duplicate on the first pull):

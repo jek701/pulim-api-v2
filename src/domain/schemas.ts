@@ -265,11 +265,20 @@ export const transactionCreateSchema = z.object({
   fxRate: z.number().optional(),
   fxRateSource: z.enum(['NBU', 'manual']).optional(),
   date: z.number(),
+  /** Preserve historical guest subscription payments without advancing the subscription again. */
+  source: z.enum(['subscription']).optional(),
+  sourceLabel: z.string().max(500).optional(),
   ...clientId,
 });
-export const transactionUpdateSchema = transactionCreateSchema.omit({ id: true }).partial();
-/** Household transactions are created by the server only (no client ids). */
-export const householdTransactionCreateSchema = transactionCreateSchema.omit({ id: true });
+export const transactionUpdateSchema = transactionCreateSchema
+  .omit({ id: true, source: true, sourceLabel: true })
+  .partial();
+/** Household transactions are created by the server only (no client ids or imported origins). */
+export const householdTransactionCreateSchema = transactionCreateSchema.omit({
+  id: true,
+  source: true,
+  sourceLabel: true,
+});
 
 export const transferSchema = z.object({
   fromCardId: z.string().min(1),
