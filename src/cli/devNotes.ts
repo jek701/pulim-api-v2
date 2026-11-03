@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import { filterQuery, queryTable, readDocument } from '../db/documents';
-import { RESOLVED_STATUSES, type DevNoteResolution } from '../devNotes/domain';
+import { RESOLVED_STATUSES, type DevNote, type DevNoteResolution } from '../devNotes/domain';
 import {
   claimDevNote,
   getDevNote,
@@ -27,15 +27,20 @@ async function readStdin(): Promise<string> {
   return Buffer.concat(chunks).toString('utf8').trim();
 }
 const print = (value: unknown) => process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
+const noteOutput = (note: DevNote) => ({
+  ...note,
+  platform: note.context?.platform ?? null,
+  route: note.context?.route ?? null,
+});
 async function main(): Promise<void> {
   const [command, ...args] = process.argv.slice(2);
   const ids = positional(args);
   switch (command) {
     case 'pending':
-      print(await listPendingDevNotes(STALE_CLAIM_MS));
+      print((await listPendingDevNotes(STALE_CLAIM_MS)).map(noteOutput));
       return;
     case 'show':
-      print(await getDevNote(ids[0] ?? ''));
+      print(noteOutput(await getDevNote(ids[0] ?? '')));
       return;
     case 'screenshot': {
       const dataUrl = await getScreenshot(ids[0] ?? '');

@@ -69,7 +69,7 @@ Public: `GET /health`, `/health/live`, `/health/ready`; `POST /auth/telegram`; `
 - AI: `POST /ai/forecast` (cached 15 min), `POST /ai/chat` (SSE: meta, delta, done, error), `POST /ai/feedback`, `GET|PATCH|DELETE /ai-chats`. No key → 503 `AI_UNAVAILABLE`.
 - households: `GET /households/current`, `POST /households`, `PATCH /households/current` (owner), invites (`POST /current/invites`, `GET /current/invites/:token`, `/pick`, `/share`, `GET /households/invites/:token`, `POST .../accept`),
   `/current/categories`, `/current/budgets`, `/current/cards` (+ `/:id/access {enabled, showBalance}`), `/current/goals` (+ contribute), `/current/transactions`. Error messages here are Russian.
-- dev notes: `GET /dev-notes/access`, `GET|POST /dev-notes`, `GET /:id/screenshot`, `POST /:id/replies`, `DELETE /:id`
+- dev notes: `GET /dev-notes/access`, `GET|POST /dev-notes`, `GET /:id/screenshot`, `POST /:id/replies`, `DELETE /:id`. Create accepts `{comment, context?, screenshot?}`; optional context fields include `platform` (`web|telegram|ios|android`), `route` (max 300 chars), `appVersion` / `osVersion` (32 each), `device` (64), and existing `appBuild` (64). Strings are trimmed. `context.platform: 'ios'` stores/returns `source: 'ios'`; other HTTP creates retain `source: 'app'`, and bot `/idea` retains `source: 'telegram'`. All fields are additive; older notes may have no platform/route. Screenshots remain base64 image data URLs, max 900,000 characters. No migration required.
 - communications: `GET|PATCH /communications/preferences`, `GET /communications/inbox`, `POST /inbox/:id/{read|click|dismiss}`, admin `GET /admin/access`, `GET|POST /admin/campaigns`, `PATCH /:id`, `POST /:id/send|pause`
 - `GET|POST|DELETE /shortcut-token` (POST Premium, plain key returned once)
 
@@ -124,7 +124,7 @@ For the native app (SQLite + outbox). Branch `claude/api-offline-sync-f3399a`; n
 ## Other
 - iPhone Shortcut: keys `pulim_sc_<base64url>`, sha256 stored; `scripts/build-shortcut.py` builds the file pointing at `https://api.m-pulim.uz/shortcut/v1`.
 - Communications: campaigns ru/uz/en, channels in_app/telegram, presentation inbox/banner/modal, audience tier/lang/telegram-linked; draft→scheduled→sending→completed (+paused/failed); marketing prefs inApp:true, telegram:false.
-- Dev notes: statuses new → in_progress → done|needs_reply|rejected; owner reply reopens. CLI `node dist/cli/devNotes.js pending|show|screenshot|claim|release|resolve|find-uid`. See [workflow](workflow.md).
+- Dev notes: statuses new → in_progress → done|needs_reply|rejected; owner reply reopens. CLI `node dist/cli/devNotes.js pending|show|screenshot|claim|release|resolve|find-uid`. `pending` (JSON array) and `show` (JSON object) include the stored `source`, full `context`, plus top-level `platform` and `route` (null when absent) so the nightly job can route iOS notes to the native app repo. See [workflow](workflow.md).
 - External: Telegram Bot API, OpenAI, Eskiz SMS (`notify.eskiz.uz`, texts must match approved templates in `phoneAuth.service.ts MESSAGE_TEMPLATES`), cbu.uz, Firebase Auth.
 
 ## Deploy / ops

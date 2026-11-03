@@ -23,6 +23,11 @@ export interface DevNoteMessage {
 const short = (max: number) => z.string().trim().max(max);
 
 export const devNoteContextSchema = z.object({
+  platform: z.enum(['web', 'telegram', 'ios', 'android']).optional(),
+  route: short(300).optional(),
+  appVersion: short(32).optional(),
+  osVersion: short(32).optional(),
+  device: short(64).optional(),
   tab: short(64).optional(),
   url: short(500).optional(),
   modal: short(200).optional(),
@@ -66,7 +71,7 @@ export const devNoteReplySchema = z.object({
 export interface DevNote {
   id: string;
   userId: string;
-  source: 'app' | 'telegram';
+  source: 'app' | 'telegram' | 'ios';
   comment: string;
   status: DevNoteStatus;
   context: DevNoteContext | null;

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   appendMessage,
+  devNoteContextSchema,
   devNoteCreateSchema,
   MAX_THREAD_MESSAGES,
   statusAfterResolve,
@@ -29,5 +30,30 @@ describe('dev notes', () => {
   it('only accepts base64 image data urls as screenshots', () => {
     expect(devNoteCreateSchema.safeParse({ comment: 'x', screenshot: 'data:image/jpeg;base64,AAAA' }).success).toBe(true);
     expect(devNoteCreateSchema.safeParse({ comment: 'x', screenshot: 'https://example.com/a.png' }).success).toBe(false);
+  });
+
+  it.each(['web', 'telegram', 'ios', 'android'])('accepts %s context and trims device metadata', (platform) => {
+    expect(devNoteContextSchema.parse({
+      platform,
+      route: ' /(tabs)/history ',
+      appVersion: ' 1.2.3 ',
+      osVersion: ' 26.0 ',
+      device: ' iPhone 17 ',
+      appBuild: ' 42 ',
+    })).toEqual({ platform, route: '/(tabs)/history', appVersion: '1.2.3', osVersion: '26.0', device: 'iPhone 17', appBuild: '42' });
+  });
+
+  it.each([
+    ['route', 300], ['appVersion', 32], ['osVersion', 32], ['device', 64],
+  ] as const)('limits %s to %i characters', (field, max) => {
+    expect(devNoteContextSchema.safeParse({ [field]: 'x'.repeat(max) }).success).toBe(true);
+    expect(devNoteContextSchema.safeParse({ [field]: 'x'.repeat(max + 1) }).success).toBe(false);
+    expect(devNoteContextSchema.safeParse({ [field]: 123 }).success).toBe(false);
+  });
+
+  it('rejects unsupported platforms, null context fields and unknown context fields', () => {
+    for (const context of [{ platform: 'desktop' }, { platform: null }, { route: null }, { unknown: 'x' }]) {
+      expect(devNoteCreateSchema.safeParse({ comment: 'x', context }).success).toBe(false);
+    }
   });
 });

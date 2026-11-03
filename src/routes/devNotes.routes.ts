@@ -30,7 +30,8 @@ router.get('/', asyncHandler(async (req, res) => {
 }));
 
 router.post('/', validate(devNoteCreateSchema), asyncHandler(async (req, res) => {
-  res.status(201).json(await createDevNote({ uid: req.uid, source: 'app', ...req.body }));
+  const source = req.body.context?.platform === 'ios' ? 'ios' : 'app';
+  res.status(201).json(await createDevNote({ uid: req.uid, source, ...req.body }));
 }));
 
 router.get('/:id/screenshot', asyncHandler(async (req, res) => {
