@@ -32,6 +32,8 @@ export interface SoliqReceipt {
   total: number;
   cardTotal?: number;
   cashTotal?: number;
+  /** Present (true) only for a refund receipt. */
+  isRefund?: true;
   items: SoliqReceiptItem[];
 }
 
@@ -91,6 +93,9 @@ function receiptDate(value: unknown): string | null {
   if (/^\d{14}$/.test(source)) {
     source = `${source.slice(0, 4)}-${source.slice(4, 6)}-${source.slice(6, 8)}T${source.slice(8, 10)}:${source.slice(10, 12)}:${source.slice(12, 14)}`;
   }
+  // Soliq's own format is local Tashkent time: '21.10.2026 12:56:20'.
+  const dotted = /^(\d{2})\.(\d{2})\.(\d{4})[ T](\d{2}:\d{2}:\d{2})$/.exec(source);
+  if (dotted) source = `${dotted[3]}-${dotted[2]}-${dotted[1]}T${dotted[4]}`;
   source = source.replace(' ', 'T');
   const match =
     /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,3})?(Z|[+-]\d{2}:\d{2})?$/.exec(
@@ -205,11 +210,27 @@ export function soliqReceiptKey(qr: SoliqQr): string {
     .digest('hex');
 }
 
-/** Only allowlisted receipt fields cross this boundary; raw upstream objects never enter the cache. */
+const round2 = (value: number): number => Math.round(value * 100) / 100;
+
+/** Σ line paid ≈ total. A mismatch means low confidence on the amount, never an exception. */
+export function receiptItemsAgree(receipt: Pick<SoliqReceipt, 'items' | 'total'>): boolean {
+  if (!receipt.items.length) return false;
+  const sum = receipt.items.reduce((value, item) => value + item.amount, 0);
+  return Math.abs(sum - receipt.total) <= Math.max(1, receipt.total * 0.005);
+}
+
+/**
+ * Real response: `{ success, message, status, data }`. Money is in sum. TINs are JSON numbers.
+ * Items: `amount` = quantity, `goodPrice` = unit price, `price` = line total before discount,
+ * `discount` = line discount, so the line paid is price - discount.
+ * Only an explicit allowlist crosses this boundary: data.tin and the items, plus extraInfo.companyName,
+ * extraInfo.merchantTin and extraInfo.address. Every other extraInfo key (phone, card numbers, taxi trip
+ * data, flight passport/PINFL, cadastral and account numbers, ...) is never read into the result.
+ */
 export function mapSoliqReceipt(raw: unknown, qr: SoliqQr, amountDivisor = 1): SoliqReceipt {
   const divisor = Number.isFinite(amountDivisor) && amountDivisor > 0 ? amountDivisor : 1;
   const money = (value: number | undefined): number | undefined =>
-    value === undefined || divisor === 1 ? value : Math.round((value / divisor) * 100) / 100;
+    value === undefined || divisor === 1 ? value : round2(value / divisor);
   const envelope = record(raw);
   const data = Object.hasOwn(envelope, 'data') ? record(envelope.data) : envelope;
   const payment = Object.hasOwn(data, 'payment') ? record(data.payment) : data;
@@ -221,8 +242,8 @@ export function mapSoliqReceipt(raw: unknown, qr: SoliqQr, amountDivisor = 1): S
   const cardTotal = money(numeric(payment.cardTotal));
   const cashTotal = money(numeric(payment.cashTotal));
   if (
-    (payment.cardTotal !== undefined && cardTotal === undefined) ||
-    (payment.cashTotal !== undefined && cashTotal === undefined)
+    (payment.cardTotal != null && cardTotal === undefined) ||
+    (payment.cashTotal != null && cashTotal === undefined)
   ) {
     throw new Error('Invalid Soliq receipt totals.');
   }
@@ -236,58 +257,56 @@ export function mapSoliqReceipt(raw: unknown, qr: SoliqQr, amountDivisor = 1): S
   }
   const items = details.map((item): SoliqReceiptItem => {
     const name = text(item.name);
-    const quantity = numeric(item.quantity ?? item.count ?? 1);
-    const price = money(numeric(item.price));
+    const quantity = numeric(item.amount);
+    const before = money(numeric(item.price));
     const discount = money(numeric(item.discount ?? 0));
-    const amount = money(numeric(item.amount));
+    const unit = money(numeric(item.goodPrice));
     if (
       !name ||
       quantity === undefined ||
       quantity <= 0 ||
-      price === undefined ||
+      before === undefined ||
       discount === undefined ||
-      amount === undefined
+      discount > before
     )
       throw new Error('Invalid Soliq receipt item.');
-    const ikpu = text(item.productCode, 32);
+    // Codes are strings; a numeric code would have lost its leading zero, so it is not guessed.
+    const ikpu = typeof item.productCode === 'string' ? text(item.productCode, 32) : null;
     return {
       name: receiptText(name) || 'Item',
       quantity,
-      price,
+      price: unit ?? round2(before / quantity),
       discount,
-      amount,
+      amount: round2(before - discount),
       ...(ikpu && /^\d+$/.test(ikpu) ? { ikpu } : {}),
       categoryId: null,
     };
   });
-  const comitent = details.find((item) => tin(item.comitentTin));
-  const sellerTin = tin(extra.merchantTin) ?? tin(comitent?.comitentTin) ?? tin(payment.tin);
-  const actualSign = text(payment.fiscalSign, 128);
+  // The real seller: extraInfo.merchantTin, else the most common comitentTin, else the aggregator's tin.
+  const comitents = new Map<string, number>();
+  for (const item of details) {
+    const value = tin(item.comitentTin);
+    if (value) comitents.set(value, (comitents.get(value) ?? 0) + 1);
+  }
+  const comitent = [...comitents].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+  const sellerTin = tin(extra.merchantTin) ?? comitent ?? tin(payment.tin);
+  // fiscalSign is read only to canonicalise the dedupe hash between the `s` and `h` QR variants.
+  const actualSign = text(extra.fiscalSign, 128) ?? text(payment.fiscalSign, 128);
+  const refund = payment.isRefund === 1 || payment.isRefund === true || payment.isRefund === '1' ||
+    (payment.refundPaymentId !== undefined && payment.refundPaymentId !== null && payment.refundPaymentId !== '');
   return {
     kind: 'soliq',
     receiptKey: soliqReceiptKey(actualSign ? { ...qr, fiscalSign: actualSign } : qr),
     merchant: {
       tin: sellerTin,
-      name:
-        receiptText(
-          text(extra.merchantName) ??
-            text(comitent?.comitentName) ??
-            text(payment.name) ??
-            text(payment.organizationName) ??
-            '',
-        ) || null,
-      address:
-        receiptText(
-          text(extra.merchantAddress) ??
-            text(comitent?.comitentAddress) ??
-            text(payment.address) ??
-            '',
-        ) || null,
+      name: receiptText(text(extra.companyName) ?? '') || null,
+      address: receiptText(text(extra.address) ?? '') || null,
     },
     date,
     total,
     ...(cardTotal !== undefined ? { cardTotal } : {}),
     ...(cashTotal !== undefined ? { cashTotal } : {}),
+    ...(refund ? { isRefund: true as const } : {}),
     items,
   };
 }
@@ -318,7 +337,8 @@ export class SoliqClient {
       let timer: ReturnType<typeof setTimeout> | undefined;
       let receipt: SoliqReceipt;
       try {
-        const timestamp = String(this.now());
+        // Unix SECONDS: milliseconds are answered with 401 "request expired".
+        const timestamp = String(Math.floor(this.now() / 1000));
         receipt = await Promise.race([
           (async () => {
             const response = await this.request(

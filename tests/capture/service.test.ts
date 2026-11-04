@@ -126,20 +126,27 @@ describe('receipt drafts', () => {
 
 describe('soliq capture end to end', () => {
   const url = 'https://ofd.soliq.uz/epi?t=EPTEST001&r=42&c=20261103123000&s=123456789';
-  const upstream = () => new Response(JSON.stringify({
-    paymentDate: '2026-11-03 12:30:00', fiscalSign: '123456789', cardTotal: 40000, cashTotal: 0,
-    extraInfo: { merchantTin: '100000002', merchantName: 'Synthetic market', phoneNumber: '+998901234567', cardNumber: '8600123412341234' },
-    paymentDetails: [{ name: 'Synthetic bread', quantity: 1, price: 40000, discount: 0, amount: 40000, productCode: '01901001001000000' }],
-  }), { status: 200 });
+  const item = (over: Record<string, unknown>) => ({ name: 'Synthetic bread', productCode: '01901001001000000',
+    goodPrice: 40000, price: 40000, amount: 1, discount: 0, comitentTin: 100000002, barcode: 'LEAK_barcode', ...over });
+  const data = (over: Record<string, unknown> = {}) => ({
+    tin: 100000001, terminalId: 'EPTEST001', paymentNo: 42, paymentDate: '03.11.2026 12:30:20', cardTotal: 40000, cashTotal: 0,
+    isRefund: 0, refundPaymentId: null, fiscalSignHash: 'LEAK_hash',
+    extraInfo: { fiscalSign: '123456789', companyName: 'Synthetic market', merchantTin: null, address: 'Test street',
+      phoneNumber: 'LEAK_phone', cardNumber: 'LEAK_card', flightPassportNumber: 'LEAK_passport', latitude: 41.123456 },
+    paymentDetails: [item({})], ...over,
+  });
+  const upstream = (over: Record<string, unknown> = {}) =>
+    new Response(JSON.stringify({ success: true, message: 'OK', status: 200, data: data(over) }), { status: 200 });
 
   it('does not count against the quota by default, and carries no buyer data to the client or the cache', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => upstream()));
     const result = await captureSoliq('user', url);
     expect(mocks.reserve).not.toHaveBeenCalled();
     expect(result.quota).toMatchObject({ used: 1, limit: 5, premium: false });
-    expect(result.receipt).toMatchObject({ kind: 'soliq', total: 40000, merchant: { tin: '100000002' } });
-    const everything = JSON.stringify([result, mocks.cache.mock.calls]);
-    expect(everything).not.toMatch(/998901234567|8600123412341234|phoneNumber|cardNumber/);
+    expect(result.receipt).toMatchObject({ kind: 'soliq', total: 40000, merchant: { tin: '100000002', name: 'Synthetic market' } });
+    expect(result.drafts[0].lowConfidenceFields).not.toContain('amount');
+    const everything = JSON.stringify([result, mocks.cache.mock.calls, mocks.warn.mock.calls]);
+    expect(everything).not.toMatch(/LEAK|41\.123456|phoneNumber|cardNumber/);
     expect(mocks.cache).toHaveBeenCalledOnce();
   });
 
@@ -175,13 +182,34 @@ describe('soliq capture end to end', () => {
 
   it('applies the configured amount divisor to every money field', async () => {
     mocks.env.SOLIQ_AMOUNT_DIVISOR = 100;
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
-      paymentDate: '2026-11-03 12:30:00', cardTotal: 4000000,
-      paymentDetails: [{ name: 'Synthetic', quantity: 1, price: 4000000, discount: 0, amount: 4000000 }],
-    }), { status: 200 })));
+    vi.stubGlobal('fetch', vi.fn(async () => upstream({ cardTotal: 4000000,
+      paymentDetails: [item({ goodPrice: 4000000, price: 4000000 })] })));
     const result = await captureSoliq('user', url);
     mocks.env.SOLIQ_AMOUNT_DIVISOR = 1;
     expect(result.receipt).toMatchObject({ total: 40000, items: [{ price: 40000, amount: 40000 }] });
+  });
+
+  it('sends the timestamp in Unix seconds', async () => {
+    const request = vi.fn(async () => upstream());
+    vi.stubGlobal('fetch', request);
+    await captureSoliq('user', url);
+    const sent = (request.mock.calls[0] as any)[1].headers['X-Timestamp'];
+    expect(sent).toMatch(/^\d{10}$/);
+  });
+
+  it('turns a refund receipt into an income draft with the category left to the user', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => upstream({ isRefund: 1 })));
+    const result = await captureSoliq('user', url);
+    expect(result.receipt.isRefund).toBe(true);
+    expect(result.drafts[0]).toMatchObject({ type: 'income', categoryId: null, categoryConfidence: 'low' });
+    expect(result.drafts[0].lowConfidenceFields).toContain('category');
+  });
+
+  it('marks the amount low (not an error) when the paid lines do not add up to the total', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => upstream({ cardTotal: 55000 })));
+    const result = await captureSoliq('user', url);
+    expect(result.drafts[0]).toMatchObject({ amount: 55000 });
+    expect(result.drafts[0].lowConfidenceFields).toContain('amount');
   });
 });
 

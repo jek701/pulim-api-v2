@@ -176,6 +176,10 @@ describe('quota, duplicates, safe cache, additive migration', () => {
     expect(Number(insert.parameters[2]) - before).toBeGreaterThanOrEqual(30 * 86400000);
     expect(store.queries.at(-1)?.sql).toContain('DELETE FROM capture_receipt_cache');
   });
+  it('keeps only a literal true refund marker in the cached receipt', () => {
+    expect(safeCachedReceipt({ isRefund: true, total: 1 })).toMatchObject({ isRefund: true });
+    expect(safeCachedReceipt({ isRefund: 'yes', total: 1 })).not.toHaveProperty('isRefund');
+  });
   it('creates additive tables and a generated owner/receipt projection, and seeds valid defaults', async () => {
     await migrateCapture(database());
     expect(store.queries.filter((query) => query.sql.startsWith('CREATE TABLE IF NOT EXISTS'))).toHaveLength(9);

@@ -90,18 +90,20 @@ Discarded: nothing.
 - A learning vote is single when the suggestion was kept or there was no suggestion, double when the user changed it.
 - Quota limit is 5 free / 300 Premium for voice and photo; Soliq is free unless `CAPTURE_COUNT_SOLIQ`. A voice note with no operations, and any failed call, does not use a slot.
 - Receipt `comment` is localized on the server by profile language (ru/uz/en); the app may overwrite it.
-- Soliq money fields are assumed to be in sum. If real receipts turn out to be in tiyin, set `SOLIQ_AMOUNT_DIVISOR=100` and clear `capture_receipt_cache`. Nobody has checked this against a real receipt.
+- Soliq follow-up after the lead checked two real receipts: timestamp is Unix seconds; envelope `{ success, message, status, data }`; dates `DD.MM.YYYY HH:mm:ss` (Tashkent); money is in sum (`SOLIQ_AMOUNT_DIVISOR` stays 1); item `amount` is the quantity, `goodPrice` the unit price, `price` the line total before discount; TINs are numbers; only `extraInfo.companyName/merchantTin/address` are read.
+- Refund receipts (`isRefund: 1` or `refundPaymentId`): `receipt.isRefund: true` and an **income** draft with `categoryId: null` and `category` in `lowConfidenceFields`. Chosen because a refund is money coming back and our receipt categories are expense categories; the app can show a "refund" note from `receipt.isRefund`. This is an optional additive field on `receipt`.
+- A Soliq receipt whose paid lines do not add up to the total gets `amount` in `lowConfidenceFields` instead of an error.
 
 ## Verified
 
-- `DOTENV_CONFIG_PATH=/dev/null npm run typecheck`, `npm test` (76 files passed, 766 tests passed, 53 skipped MySQL integration tests) and `npm run build` all pass on the final tree. `npm run lint` shows only the existing `scripts/clean-dist.cjs` errors.
-- 241 capture tests: parser and corpus, Soliq URLs (all variants), signature, mapping, buyer-field stripping, cache, retry and timeout; category inference order; quota boundaries and the month and year rollover in Tashkent; duplicate lookup scoping; learning (single and double vote, voter hashing, replacement of a repeat vote, personal categories never voting); post-commit learning not running for replays, rollbacks or legacy clients; capability gating in `/v1/sync/capabilities` and per route; guests rejected; multipart limits and media checks over real HTTP; error contract and no provider text in responses; owner digest scheduling and claim; migration is additive and self-contained.
+- `DOTENV_CONFIG_PATH=/dev/null npm run typecheck`, `npm test` (76 files passed, 775 tests passed, 53 skipped MySQL integration tests) and `npm run build` all pass on the final tree. `npm run lint` shows only the existing `scripts/clean-dist.cjs` errors.
+- 250 capture tests: parser and corpus, Soliq URLs (all variants), signature, mapping, buyer-field stripping, cache, retry and timeout; category inference order; quota boundaries and the month and year rollover in Tashkent; duplicate lookup scoping; learning (single and double vote, voter hashing, replacement of a repeat vote, personal categories never voting); post-commit learning not running for replays, rollbacks or legacy clients; capability gating in `/v1/sync/capabilities` and per route; guests rejected; multipart limits and media checks over real HTTP; error contract and no provider text in responses; owner digest scheduling and claim; migration is additive and self-contained.
 - Existing transaction create, PATCH and household bodies parse exactly as before.
 
 ## Not verified
 
 - The migration SQL has not run on a real MySQL (no Docker daemon was available for the rehearsal DB). Syntax and semantics were reviewed by hand and through a recording mock only. Run it first on the rehearsal DB (`compose.migration.yaml`, `npm run test:mysql` stays untouched) and check `EXPLAIN` of the duplicate lookup.
-- Nothing was called against OpenAI or Soliq. The strict JSON schemas, `reasoning`/`verbosity` parameters, the Soliq response shape, the `X-Signature` scheme and the money unit are unverified against the live services. Model accuracy per field is unmeasured.
+- Nothing was called against OpenAI or Soliq by me. The strict JSON schemas and `reasoning`/`verbosity` parameters are unverified against OpenAI. The Soliq mapping now follows the shape the lead observed on two real receipts but my tests use synthetic fixtures; the lead's live check script is the real verification. Model accuracy per field is unmeasured.
 - m4a duration parsing was tested on hand-built containers, not on a real recording from the app. A fragmented MP4 (duration 0 in `mdhd`) would be rejected.
 - The IKPU seed prefixes come from Codex's reading of the Cabinet resolution and were not re-checked against real receipts.
 - No end-to-end run with the app (Part B). Concurrency of quota and voting is covered by the SQL design (conditional UPDATE, row lock on the merchant), not by a concurrent test.

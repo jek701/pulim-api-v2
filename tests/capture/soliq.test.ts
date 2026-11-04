@@ -4,6 +4,7 @@ import {
   createSoliqSignature,
   mapSoliqReceipt,
   parseSoliqUrl,
+  receiptItemsAgree,
   SOLIQ_CACHE_TTL_MS,
   SoliqClient,
   soliqReceiptKey,
@@ -14,40 +15,49 @@ import {
 const url = 'https://ofd.soliq.uz/epi?t=EPTEST001&r=42&c=20261103123000&s=123456789';
 const qr = parseSoliqUrl(url);
 const now = Date.parse('2026-11-04T00:00:00Z');
-const fixture = () => ({
-  tin: '100000001',
-  name: 'Synthetic aggregator',
-  address: 'Test street 1',
-  paymentDate: '2026-11-03 12:30:00',
-  fiscalSign: '123456789',
-  cardTotal: '19000',
-  cashTotal: 1000,
+// Exact real shape (types and key names), synthetic values. TINs are JSON numbers, dates are
+// 'DD.MM.YYYY HH:mm:ss' in Tashkent time, money is in sum, and for items `amount` is the QUANTITY,
+// `goodPrice` the unit price, `price` the line total before discount.
+const EXTRA_INFO_KEYS = [
+  'fiscalSign', 'companyName', 'fiscalSignHash', 'taxiInfoTin', 'taxiInfoCardNumber', 'refundPaymentId',
+  'phoneNumber', 'qrPaymentId', 'qrPaymentProvider', 'cashedOutFromCard', 'pptId', 'cardType', 'merchantTin',
+  'pickUpNs10', 'pickUpNs11', 'pickUpAddress', 'receiptType', 'paymentType', 'latitude', 'longitude',
+  'cardNumber', 'tripStartLatitude', 'tripStartLongitude', 'tripStartAddress', 'tripEndLatitude',
+  'tripEndLongitude', 'tripEndAddress', 'cadastralNumber', 'accountNumber', 'qrSalePointId', 'address',
+  'flightPassportNumber', 'flightPinfl', 'flightNumber', 'flightSeatNumber',
+] as const;
+const ALLOWED_EXTRA = ['companyName', 'merchantTin', 'address'];
+const line = (over: Record<string, unknown>) => ({
+  id: 1, name: 'Synthetic item', barcode: 'LEAK_barcode', productCode: '', productName: 'LEAK_productName',
+  labelErrorCode: null, vatPercent: 12, packageCode: 'LEAK_packageCode', packageName: 'LEAK_packageName',
+  voucher: 'LEAK_voucher', refundPaymentId: null, comitentTin: 100000003, productErrorCode: null,
+  productGroup: null, goodPrice: 0, price: 0, remains: 0, vat: 0, remainingVat: 0, amount: 1, discount: 0,
+  other: 0, cardRatio: 0, ...over,
+});
+const fixture = (): any => ({
+  paymentId: 7, ns10Code: 1, ns11Code: 2, tin: 100000001, terminalId: 'EPTEST001', paymentNo: 42,
+  paymentDate: '03.11.2026 12:30:20', cashTotal: 1000, cardTotal: 19000, vatTotal: 2143,
+  created: '03.11.2026 12:30:25', updated: '03.11.2026 12:30:26', fiscalSignHash: 'LEAK_hash',
+  terminalStateId: 1, isRefund: 0, receiptType: 1, refundPaymentId: null, labels: null,
+  kkmName: 'LEAK_kkm', kkmSerialNumber: 'LEAK_serial', statusMessage: null,
   extraInfo: {
-    merchantTin: '100000002',
-    merchantName: 'Synthetic market',
-    phoneNumber: '+998901234567',
-    buyerName: 'DO NOT KEEP BUYER',
-    cardNumber: '8600123412341234',
+    ...Object.fromEntries(EXTRA_INFO_KEYS.map((key) => [key, `LEAK_${key}`])),
+    fiscalSign: '123456789',
+    companyName: 'Synthetic market',
+    merchantTin: 100000002,
+    address: 'Test street 1',
+    latitude: 41.123456, longitude: 69.654321, tripStartLatitude: 41.111111, tripEndLongitude: 69.222222,
   },
-  buyer: { id: 'DO NOT KEEP BUYER ID' },
-  cardNumber: '8600123412341234',
   paymentDetails: [
-    {
-      name: 'Synthetic bread',
-      quantity: 2,
-      price: 6000,
-      discount: 2000,
-      amount: 10000,
-      productCode: '01901001001000000',
-      vat: 1200,
-      comitentTin: '100000003',
-      buyerPhone: '+998901234567',
-    },
-    { name: 'Synthetic soap', count: 1, price: '10000', discount: 0, amount: '10000' },
+    line({ name: 'Synthetic bread', productCode: '01901001001000000', goodPrice: 6000, price: 12000,
+      amount: 2, discount: 2000, vat: 1200 }),
+    line({ name: 'Synthetic soap', goodPrice: 10000, price: 10000, amount: 1, discount: 0 }),
   ],
 });
-const response = (value: unknown = fixture(), status = 200) =>
+const envelope = (data: unknown = fixture()) => ({ success: true, message: 'OK', status: 200, data });
+const response = (value: unknown = envelope(), status = 200) =>
   new Response(JSON.stringify(value), { status });
+const seconds = String(now / 1000);
 const client = (
   request: typeof fetch,
   options: { cache?: SoliqCache; onFailure?: ReturnType<typeof vi.fn> } = {},
@@ -132,7 +142,7 @@ describe('Soliq signing and mapping', () => {
         .update(JSON.stringify(['EPTEST001', '42', '123456789']))
         .digest('hex'),
       merchant: { tin: '100000002', name: 'Synthetic market', address: 'Test street 1' },
-      date: '2026-11-03T12:30:00+05:00',
+      date: '2026-11-03T12:30:20+05:00',
       total: 20000,
       cardTotal: 19000,
       cashTotal: 1000,
@@ -157,33 +167,90 @@ describe('Soliq signing and mapping', () => {
       ],
     });
     const serialized = JSON.stringify(receipt);
-    for (const privateValue of [
-      '+998901234567',
-      '8600123412341234',
-      'DO NOT KEEP',
-      'vat',
-      'extraInfo',
-      'buyer',
-    ]) {
-      expect(serialized).not.toContain(privateValue);
+    expect(serialized).not.toMatch(/LEAK|41\.123456|69\.654321|extraInfo/);
+    expect(receiptItemsAgree(receipt)).toBe(true);
+  });
+
+  it('maps both real receipt shapes: no discount, and discounts where only price - discount is paid', () => {
+    const a = fixture();
+    a.cashTotal = 0; a.cardTotal = 43000;
+    a.paymentDetails = [line({ name: 'A1', goodPrice: 10000, price: 10000 }), line({ name: 'A2', goodPrice: 13000, price: 13000 }),
+      line({ name: 'A3', goodPrice: 20000, price: 20000 })];
+    const receiptA = mapSoliqReceipt(envelope(a), qr);
+    expect(receiptA.total).toBe(43000);
+    expect(receiptItemsAgree(receiptA)).toBe(true);
+    const b = fixture();
+    b.cashTotal = 0; b.cardTotal = 120800;
+    b.paymentDetails = [line({ name: 'B1', goodPrice: 50000, price: 50000, discount: 10000 }),
+      line({ name: 'B2', goodPrice: 40000, price: 40000, discount: 8000 }),
+      line({ name: 'B3', goodPrice: 31000, price: 31000, discount: 6200 }),
+      line({ name: 'B4', goodPrice: 15000, price: 30000, amount: 2, discount: 6000 })];
+    const receiptB = mapSoliqReceipt(envelope(b), qr);
+    expect(receiptB.items.reduce((sum, item) => sum + item.price * item.quantity, 0)).toBe(151000);
+    expect(receiptB.items.reduce((sum, item) => sum + item.discount, 0)).toBe(30200);
+    expect(receiptB.items.map((item) => item.amount)).toEqual([40000, 32000, 24800, 24000]);
+    expect(receiptB.total).toBe(120800);
+    expect(receiptItemsAgree(receiptB)).toBe(true);
+    // A mismatch is low confidence for the caller, never an exception.
+    expect(receiptItemsAgree({ ...receiptB, total: 100000 })).toBe(false);
+    expect(receiptItemsAgree({ ...receiptB, items: [] })).toBe(false);
+  });
+
+  it('keeps fractional quantities of weighed goods and derives a missing unit price', () => {
+    const raw = fixture();
+    raw.cashTotal = 0; raw.cardTotal = 7000;
+    raw.paymentDetails = [line({ name: 'Cheese', amount: 0.35, goodPrice: 20000, price: 7000 })];
+    expect(mapSoliqReceipt(raw, qr).items[0]).toMatchObject({ quantity: 0.35, price: 20000, discount: 0, amount: 7000 });
+    raw.paymentDetails = [line({ name: 'Cheese', amount: 0.35, goodPrice: undefined, price: 7000 })];
+    expect(mapSoliqReceipt(raw, qr).items[0]).toMatchObject({ quantity: 0.35, price: 20000, amount: 7000 });
+  });
+
+  it('accepts the DD.MM.YYYY HH:mm:ss local Tashkent date and rejects impossible ones', () => {
+    const raw = fixture();
+    raw.paymentDate = '21.10.2026 12:56:20';
+    expect(mapSoliqReceipt(raw, qr).date).toBe('2026-10-21T12:56:20+05:00');
+    for (const bad of ['31.02.2026 12:00:00', '21.10.2026 25:00:00', '2026.10.21 12:00:00']) {
+      expect(() => mapSoliqReceipt({ ...raw, paymentDate: bad }, qr)).toThrow();
     }
+  });
+
+  it('flags refund receipts (isRefund or refundPaymentId) and leaves ordinary ones unmarked', () => {
+    expect(mapSoliqReceipt({ ...fixture(), isRefund: 1 }, qr).isRefund).toBe(true);
+    expect(mapSoliqReceipt({ ...fixture(), refundPaymentId: 99 }, qr).isRefund).toBe(true);
+    expect(mapSoliqReceipt(fixture(), qr)).not.toHaveProperty('isRefund');
+  });
+
+  it('only companyName, merchantTin and address come out of extraInfo, even when every key is filled', () => {
+    const raw = fixture();
+    expect(Object.keys(raw.extraInfo).sort()).toEqual([...EXTRA_INFO_KEYS].sort());
+    const serialized = JSON.stringify(mapSoliqReceipt(envelope(raw), qr));
+    for (const key of EXTRA_INFO_KEYS.filter((k) => !ALLOWED_EXTRA.includes(k))) {
+      expect(serialized, key).not.toContain(`LEAK_${key}`);
+    }
+    expect(serialized).not.toMatch(/41\.123456|69\.654321|41\.111111|69\.222222|LEAK|123456789"/);
+    expect(JSON.parse(serialized).merchant).toEqual({ tin: '100000002', name: 'Synthetic market', address: 'Test street 1' });
   });
 
   it('scrubs buyer data embedded in allowed merchant and item text fields', () => {
     const raw = fixture();
-    raw.extraInfo.merchantName = 'Market; phone: +998901234567';
-    raw.address = 'Test street; card: 8600123412341234';
+    raw.extraInfo.companyName = 'Market; phone: +998901234567';
+    raw.extraInfo.address = 'Test street; card: 8600123412341234';
     raw.paymentDetails[0].name = 'Bread +998 90 123 45 67';
     const serialized = JSON.stringify(mapSoliqReceipt(raw, qr));
     expect(serialized).not.toMatch(/998|8600123412341234|phone:|card:/);
     expect(serialized).toContain('Bread [redacted]');
   });
 
-  it('uses comitentTin before aggregator tin, then falls back to tin', () => {
+  it('uses merchantTin, then the most common comitentTin, then the aggregator tin (numbers or null)', () => {
     const raw = fixture();
-    raw.extraInfo.merchantTin = '';
+    expect(mapSoliqReceipt(raw, qr).merchant.tin).toBe('100000002');
+    raw.extraInfo.merchantTin = null;
     expect(mapSoliqReceipt(raw, qr).merchant.tin).toBe('100000003');
-    raw.paymentDetails[0].comitentTin = '';
+    raw.paymentDetails = [line({ comitentTin: 100000004 }), line({ comitentTin: 100000005 }), line({ comitentTin: 100000005 })]
+      .map((item, i) => ({ ...item, name: `Item ${i}`, goodPrice: 6000, price: 6000 }));
+    raw.cashTotal = 0; raw.cardTotal = 18000;
+    expect(mapSoliqReceipt(raw, qr).merchant.tin).toBe('100000005');
+    raw.paymentDetails.forEach((item: any) => { item.comitentTin = null; });
     expect(mapSoliqReceipt(raw, qr).merchant.tin).toBe('100000001');
     raw.tin = 'invalid';
     expect(mapSoliqReceipt(raw, qr).merchant.tin).toBeNull();
@@ -193,7 +260,7 @@ describe('Soliq signing and mapping', () => {
     const raw = fixture();
     const wrapped =
       shape === 'data'
-        ? { data: raw }
+        ? envelope(raw)
         : shape === 'payment'
           ? { payment: raw }
           : { data: { payment: raw } };
@@ -209,7 +276,6 @@ describe('Soliq signing and mapping', () => {
 
   it.each([
     { ...fixture(), cardTotal: 'invalid', cashTotal: 1000 },
-    { ...fixture(), cashTotal: null },
     { ...fixture(), cardTotal: -1, cashTotal: undefined },
     { ...fixture(), cardTotal: 'NaN', cashTotal: undefined },
     { ...fixture(), paymentDate: '2026-02-30 12:00:00' },
@@ -231,10 +297,15 @@ describe('Soliq client', () => {
       redirect: 'error',
       headers: {
         'Content-Type': 'application/json',
-        'X-Timestamp': String(now),
-        'X-Signature': createSoliqSignature({ ...qr, timestamp: now, signingKey: 'synthetic-key' }),
+        // Unix seconds: milliseconds are answered with 401 "request expired".
+        'X-Timestamp': seconds,
+        'X-Signature': createSoliqSignature({ ...qr, timestamp: seconds, signingKey: 'synthetic-key' }),
       },
     });
+    expect(seconds).toMatch(/^\d{10}$/);
+    expect(createSoliqSignature({ ...qr, timestamp: seconds, signingKey: 'synthetic-key' })).toBe(
+      createHmac('sha256', 'synthetic-key').update(`EPTEST001:42:${seconds}`).digest('hex'),
+    );
     expect(JSON.parse(options!.body as string)).toEqual({ ...qr, paymentType: 'CHECK_EPI' });
     expect(options!.signal).toBeInstanceOf(AbortSignal);
   });
@@ -264,7 +335,19 @@ describe('Soliq client', () => {
     const receipt = await client(request, { cache }).getReceipt(url);
     expect(request).toHaveBeenCalledTimes(2);
     expect(cache.set).toHaveBeenCalledWith(soliqReceiptKey(qr), receipt, now + SOLIQ_CACHE_TTL_MS);
-    expect(JSON.stringify(vi.mocked(cache.set).mock.calls)).not.toContain('phoneNumber');
+    expect(JSON.stringify(vi.mocked(cache.set).mock.calls)).not.toMatch(/LEAK|phoneNumber/);
+  });
+
+  it('leaks no extraInfo value through the receipt, the cache payload or failure logs', async () => {
+    const cache: SoliqCache = { get: vi.fn().mockResolvedValue(null), set: vi.fn().mockResolvedValue(undefined) };
+    const onFailure = vi.fn();
+    const ok = await client(vi.fn<typeof fetch>().mockResolvedValue(response()), { cache, onFailure }).getReceipt(url);
+    // A failing upstream that echoes the same data must not reach the logs either.
+    const failing = client(vi.fn<typeof fetch>().mockImplementation(async () => response(envelope(), 500)), { cache, onFailure });
+    await expect(failing.getReceipt(url.replace('r=42', 'r=43'))).rejects.toMatchObject({ code: 'soliq_unavailable' });
+    const everything = JSON.stringify([ok, vi.mocked(cache.set).mock.calls, onFailure.mock.calls]);
+    expect(everything).not.toMatch(/LEAK|41\.123456|69\.654321/);
+    expect(onFailure).toHaveBeenCalledWith({ event: 'capture.soliq_failed', statusCode: 500 });
   });
 
   it('uses an unexpired cache without a signing key or network request', async () => {

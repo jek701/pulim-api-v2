@@ -68,6 +68,7 @@ export function safeCachedReceipt(value: unknown): Record<string, unknown> {
     total: number(receipt.total),
     ...(receipt.cardTotal !== undefined ? { cardTotal: number(receipt.cardTotal) } : {}),
     ...(receipt.cashTotal !== undefined ? { cashTotal: number(receipt.cashTotal) } : {}),
+    ...(receipt.isRefund === true ? { isRefund: true } : {}),
     items: Array.isArray(receipt.items) ? receipt.items.slice(0, 200).map((item: any) => ({
       name: text(item?.name, 255) ?? '', quantity: number(item?.quantity), price: number(item?.price),
       discount: number(item?.discount), amount: number(item?.amount),

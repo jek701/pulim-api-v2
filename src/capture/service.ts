@@ -7,7 +7,7 @@ import { env } from '../config/env';
 import { logger } from '../utils/logger';
 import { STANDARD_CATEGORY_KEYS, inferCaptureCategory } from './categories';
 import { cacheReceipt, findReceiptDuplicate, getCachedReceipt, getCaptureMerchantNames } from './repository';
-import { SoliqClient, parseSoliqUrl } from './soliq';
+import { SoliqClient, parseSoliqUrl, receiptItemsAgree } from './soliq';
 import { extractCapturePhoto, guessCaptureCategory, parseCaptureVoice, transcribeCapture, type CaptureContext } from './models';
 import { captureTimezone, dateInTimezone } from './time';
 import { withCaptureQuota } from './quota';
@@ -94,12 +94,16 @@ export async function receiptDrafts(uid: string, receipt: CaptureReceipt, contex
   }
   // The account is not stated on a receipt: null lets the app pre-fill its default, not a doubt.
   const low: CaptureDraft['lowConfidenceFields'] = [];
-  if (!inferred.categoryId || inferred.confidence === 'low') low.push('category');
+  // A refund receipt is money coming back: an income draft. Its category is the user's call (our
+  // categories here are expense ones), so it is null and flagged rather than guessed.
+  const refund = receipt.isRefund === true;
+  if (refund || !inferred.categoryId || inferred.confidence === 'low') low.push('category');
   if (options.amountLow) low.push('amount');
   if (options.dateLow) low.push('date');
   const draft: CaptureDraft = {
-    draftId: randomUUID(), type: 'expense', amount: receipt.total, currency: options.currency ?? 'UZS',
-    categoryId: inferred.categoryId, categoryConfidence: inferred.categoryId ? inferred.confidence : 'low',
+    draftId: randomUUID(), type: refund ? 'income' : 'expense', amount: receipt.total, currency: options.currency ?? 'UZS',
+    categoryId: refund ? null : inferred.categoryId,
+    categoryConfidence: !refund && inferred.categoryId ? inferred.confidence : 'low',
     accountId: null, date: dateInTimezone(new Date(receipt.date), context.timezone),
     comment: receiptComment(receipt.merchant.name, receipt.items.length, context.language),
     lowConfidenceFields: low, items: receipt.items,
@@ -124,7 +128,8 @@ export async function captureSoliq(uid: string, url: string, timezone?: string) 
     });
     const receipt = await client.getReceipt(url);
     const context = await captureContext(uid, timezone);
-    return receiptDrafts(uid, receipt, context);
+    // Σ(price - discount) must match the total; if not, say so instead of presenting a clean draft.
+    return receiptDrafts(uid, receipt, context, { amountLow: !receiptItemsAgree(receipt) });
   });
 }
 
