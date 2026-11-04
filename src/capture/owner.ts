@@ -64,21 +64,30 @@ export async function runMerchantSummary(now = new Date()): Promise<void> {
   if (!owners.length) return;
   const merchants = await reviewMerchants(30, now.getTime() - 7 * 24 * 3600_000);
   if (!merchants.length) return;
+  // One bad owner (no profile, no chat, a failing send) must not stop the others.
+  let failed = 0;
   for (const uid of owners) {
-    const profile = await readDocument(documentKey('profiles', uid));
-    const chatId = profile.data.notifications?.telegram?.chatId;
-    if (!profile.exists || typeof chatId !== 'string' || !chatId) continue;
-    const ownerHash = createHash('sha256').update(uid).digest('hex');
-    const claim = await sql`INSERT IGNORE INTO capture_owner_summary (week, owner_hash, claimed_at)
-      VALUES (${week}, ${ownerHash}, ${now.getTime()})`.execute(database());
-    if (Number(claim.numAffectedRows) !== 1) continue;
     try {
-      const { sendMessage } = await import('../telegram/client');
-      await sendMessage(chatId, renderMerchantSummary(merchants), { parse_mode: undefined });
+      const profile = await readDocument(documentKey('profiles', uid));
+      if (!profile.exists) continue;
+      const chatId = profile.data?.notifications?.telegram?.chatId;
+      if (typeof chatId !== 'string' || !chatId) continue;
+      const ownerHash = createHash('sha256').update(uid).digest('hex');
+      const claim = await sql`INSERT IGNORE INTO capture_owner_summary (week, owner_hash, claimed_at)
+        VALUES (${week}, ${ownerHash}, ${now.getTime()})`.execute(database());
+      if (Number(claim.numAffectedRows) !== 1) continue;
+      try {
+        const { sendMessage } = await import('../telegram/client');
+        await sendMessage(chatId, renderMerchantSummary(merchants), { parse_mode: undefined });
+      } catch {
+        // No provider error payload: it may contain message content or provider credentials.
+        // Release the claim so the next minute retries this owner.
+        await sql`DELETE FROM capture_owner_summary WHERE week = ${week} AND owner_hash = ${ownerHash}`.execute(database());
+        failed++;
+      }
     } catch {
-      // No provider error payload: it may contain message content or provider credentials.
-      await sql`DELETE FROM capture_owner_summary WHERE week = ${week} AND owner_hash = ${ownerHash}`.execute(database());
-      throw new Error('Merchant summary delivery failed');
+      failed++;
     }
   }
+  if (failed) throw new Error('Merchant summary delivery failed');
 }

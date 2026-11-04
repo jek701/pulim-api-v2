@@ -4,6 +4,7 @@ const store = vi.hoisted(() => ({
   queries: [] as Array<{ sql: string; parameters: readonly unknown[] }>,
   handler: (_sql: string, _parameters: readonly unknown[]): { rows: any[]; numAffectedRows?: bigint } => ({ rows: [] }),
   profile: { exists: true, data: { notifications: { telegram: { chatId: '777' } } } } as any,
+  profileFor: undefined as undefined | ((uid: string) => any),
   send: vi.fn(),
 }));
 vi.mock('../../src/db/database', async () => {
@@ -23,7 +24,8 @@ vi.mock('../../src/db/database', async () => {
   } });
   return { database: () => db, closeDatabase: async () => {} };
 });
-vi.mock('../../src/db/documents', () => ({ documentKey: (table: string, id: string) => ({ table, id }), readDocument: async () => store.profile }));
+vi.mock('../../src/db/documents', () => ({ documentKey: (table: string, id: string) => ({ table, id }), readDocument: async (key: { id: string }) => store.profileFor ? store.profileFor(key.id) : store.profile }));
+vi.mock('../../src/utils/logger', () => ({ logger: { warn: vi.fn() } }));
 vi.mock('../../src/telegram/client', () => ({ sendMessage: store.send }));
 import { reviewMerchants, runMerchantSummary } from '../../src/capture/owner';
 
@@ -44,6 +46,7 @@ const rows: Record<string, any> = {
 beforeEach(() => {
   vi.clearAllMocks();
   store.queries = [];
+  store.profileFor = undefined;
   process.env.DEV_NOTES_UIDS = 'owner-1';
   store.profile = { exists: true, data: { notifications: { telegram: { chatId: '777' } } } };
   store.handler = (query, parameters) => {
@@ -66,6 +69,32 @@ describe('merchant review', () => {
   it('limits "new" to the last seven days but always keeps contested ones', async () => {
     const result = await reviewMerchants(30, monday.getTime() - 7 * 86_400_000);
     expect(result.map((merchant) => merchant.tin)).toEqual(['111111111', '222222222']);
+  });
+});
+
+describe('weekly owner summary: one bad owner does not stop the rest', () => {
+  it('skips an owner without a profile (data is absent) and still sends to the next', async () => {
+    process.env.DEV_NOTES_UIDS = 'ghost,owner-2';
+    const profiles: Record<string, any> = { ghost: { exists: false, data: undefined },
+      'owner-2': { exists: true, data: { notifications: { telegram: { chatId: '888' } } } } };
+    store.profileFor = (uid: string) => profiles[uid];
+    await runMerchantSummary(monday);
+    expect(store.send).toHaveBeenCalledOnce();
+    expect(store.send.mock.calls[0][0]).toBe('888');
+  });
+  it('keeps going after a failing send, releases its claim, and reports the failure once at the end', async () => {
+    process.env.DEV_NOTES_UIDS = 'owner-1,owner-2';
+    store.profileFor = () => ({ exists: true, data: { notifications: { telegram: { chatId: '777' } } } });
+    store.send.mockRejectedValueOnce(new Error('blocked')).mockResolvedValue({});
+    await expect(runMerchantSummary(monday)).rejects.toThrow('Merchant summary delivery failed');
+    expect(store.send).toHaveBeenCalledTimes(2);
+    expect(store.queries.filter((query) => query.sql.startsWith('DELETE FROM capture_owner_summary'))).toHaveLength(1);
+  });
+  it('an unreadable profile for one owner does not abort the loop either', async () => {
+    process.env.DEV_NOTES_UIDS = 'broken,owner-2';
+    store.profileFor = (uid: string) => { if (uid === 'broken') throw new Error('db hiccup'); return { exists: true, data: { notifications: { telegram: { chatId: '888' } } } }; };
+    await expect(runMerchantSummary(monday)).rejects.toThrow('Merchant summary delivery failed');
+    expect(store.send).toHaveBeenCalledOnce();
   });
 });
 
