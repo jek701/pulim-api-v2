@@ -7,7 +7,7 @@ import type { QueuedNotification } from '../notifications/types';
 import { addLocalDays, dateKey, dayStart } from '../notifications/schedule';
 import { logger } from '../utils/logger';
 import { apnsConfigured } from './apns';
-import { listPushUserIds } from './devices.repository';
+import { enabledDevices, listPushUserIds } from './devices.repository';
 import {
   collectScheduledPushes,
   refreshScheduledPush,
@@ -61,6 +61,38 @@ export async function pushSnapshot(
     ),
   };
 }
+export async function planPushUser(
+  uid: string,
+  now = Date.now(),
+  knownActive = false,
+): Promise<number> {
+  if (!env.NOTIFICATIONS_ENABLED || !apnsConfigured() || !notificationRecipientAllowed(uid))
+    return 0;
+  if (!knownActive && !(await enabledDevices(uid)).length) return 0;
+  let queued = 0;
+  const profile = await getProfile(uid);
+  if (!profile?.notifications?.enabled) return 0;
+  const settings = normalizePushSettings(profile.notifications, profile.timezone);
+  const snapshot = await pushSnapshot(uid, profile, now);
+  for (const candidate of collectScheduledPushes(snapshot)) {
+    if (!settings.groups[candidate.group]) continue;
+    const { runAt, dedupeKey, ...payload } = candidate;
+    if (now > runAt + env.NOTIFY_STALE_AFTER_MS) continue;
+    if (
+      await upsertScheduledNotification({
+        userId: uid,
+        chatId: profile.notifications.telegram.chatId ?? '',
+        type: candidate.type,
+        runAt,
+        dedupeKey: `${dedupeKey}:${uid}`,
+        pushOnly: true,
+        payload: { kind: 'push', ...payload },
+      })
+    )
+      queued += 1;
+  }
+  return queued;
+}
 export async function runPushPlanner(now = Date.now()): Promise<number> {
   if (!env.NOTIFICATIONS_ENABLED || !apnsConfigured()) return 0;
   let queued = 0;
@@ -70,27 +102,7 @@ export async function runPushPlanner(now = Date.now()): Promise<number> {
     for (const uid of users) {
       if (!notificationRecipientAllowed(uid)) continue;
       try {
-        const profile = await getProfile(uid);
-        if (!profile?.notifications?.enabled) continue;
-        const settings = normalizePushSettings(profile.notifications, profile.timezone);
-        const snapshot = await pushSnapshot(uid, profile, now);
-        for (const candidate of collectScheduledPushes(snapshot)) {
-          if (!settings.groups[candidate.group]) continue;
-          const { runAt, dedupeKey, ...payload } = candidate;
-          if (now > runAt + env.NOTIFY_STALE_AFTER_MS) continue;
-          if (
-            await upsertScheduledNotification({
-              userId: uid,
-              chatId: profile.notifications.telegram.chatId ?? '',
-              type: candidate.type,
-              runAt,
-              dedupeKey: `${dedupeKey}:${uid}`,
-              pushOnly: true,
-              payload: { kind: 'push', ...payload },
-            })
-          )
-            queued += 1;
-        }
+        queued += await planPushUser(uid, now, true);
       } catch (error) {
         logger.error({ err: error, uid }, 'notify.push.plan_failed');
       }

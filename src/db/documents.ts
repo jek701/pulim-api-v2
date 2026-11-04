@@ -4,7 +4,11 @@ import { randomInt } from 'node:crypto';
 import { sql, type Kysely, type Transaction } from 'kysely';
 import { database } from './database';
 import { tables, entity, type Entity } from './tables';
-import { IdempotencyConflict, idempotencyStorage, type IdempotencyContext } from './idempotencyContext';
+import {
+  IdempotencyConflict,
+  idempotencyStorage,
+  type IdempotencyContext,
+} from './idempotencyContext';
 import {
   collectionOf,
   isSyncEnabled,
@@ -367,8 +371,12 @@ export async function syncHouseholdMembers(
 export class SqlTransaction {
   private readonly writes: Write[] = [];
   private readonly committed: Array<() => void> = [];
-  afterCommit(callback: () => void): void { this.committed.push(callback); }
-  notifyCommitted(): void { this.committed.forEach((callback) => callback()); }
+  afterCommit(callback: () => void): void {
+    this.committed.push(callback);
+  }
+  notifyCommitted(): void {
+    this.committed.forEach((callback) => callback());
+  }
   constructor(private readonly executor?: Executor) {}
   read(key: DocumentKey): Promise<StoredDocument>;
   read(query: QuerySpec): Promise<Selection>;
@@ -427,15 +435,35 @@ export class SqlTransaction {
       if (write.kind === 'remove') {
         // The owner is only known from the stored document (needed for the tombstone scope).
         const old =
-          (isSyncEnabled() && collectionOf(write.key.table))
-            || (env.NOTIFICATIONS_ENABLED && env.PUSH_ENABLED && write.key.table === 'transactions')
+          (isSyncEnabled() && collectionOf(write.key.table)) ||
+          (env.NOTIFICATIONS_ENABLED &&
+            env.PUSH_ENABLED &&
+            [
+              'transactions',
+              'subscriptions',
+              'debts',
+              'cards',
+              'deposits',
+              'savingsGoals',
+            ].includes(write.key.table))
             ? ((await readUsing(write.key, executor, true)) as StoredDocument)
             : undefined;
         await syncHouseholdMembers(executor, write.key);
         await executor.deleteFrom(table).where('id', '=', id).execute();
         if (old?.exists) {
           track(write.key, old.data, true);
-          if (env.NOTIFICATIONS_ENABLED && env.PUSH_ENABLED && write.key.table === 'transactions')
+          if (
+            env.NOTIFICATIONS_ENABLED &&
+            env.PUSH_ENABLED &&
+            [
+              'transactions',
+              'subscriptions',
+              'debts',
+              'cards',
+              'deposits',
+              'savingsGoals',
+            ].includes(write.key.table)
+          )
             pushChanges.push({ key: write.key, before: old.data, after: { deleted: true } });
         }
         continue;
@@ -457,13 +485,31 @@ export class SqlTransaction {
       else await executor.insertInto(table).values(values).execute();
       await syncHouseholdMembers(executor, write.key, data);
       track(write.key, data, false, old.exists ? old.data : undefined);
-      if (env.NOTIFICATIONS_ENABLED && env.PUSH_ENABLED
-        && ['profiles', 'savingsGoals', 'households', 'transactions'].includes(write.key.table))
-        pushChanges.push({ key: write.key, before: old.exists ? old.data : undefined, after: data });
+      if (
+        env.NOTIFICATIONS_ENABLED &&
+        env.PUSH_ENABLED &&
+        [
+          'profiles',
+          'savingsGoals',
+          'households',
+          'transactions',
+          'subscriptions',
+          'debts',
+          'cards',
+          'deposits',
+        ].includes(write.key.table)
+      )
+        pushChanges.push({
+          key: write.key,
+          before: old.exists ? old.data : undefined,
+          after: data,
+        });
     }
     if (pushChanges.length) {
       const { enqueueWriteEvents } = await import('../push/outbox');
-      if (await enqueueWriteEvents(executor, pushChanges, (callback) => this.afterCommit(callback))) {
+      if (
+        await enqueueWriteEvents(executor, pushChanges, (callback) => this.afterCommit(callback))
+      ) {
         const { kickDelivery } = await import('../push/kick');
         this.afterCommit(kickDelivery);
       }

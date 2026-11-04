@@ -1,3 +1,4 @@
+import { kickPushPlanning } from '../push/kick';
 import { AppError } from '../utils/AppError';
 import { Router } from 'express';
 import { z } from 'zod';
@@ -19,6 +20,7 @@ router.post(
   validate(registerDeviceSchema),
   asyncHandler(async (req, res) => {
     const device = await registerDevice(req.uid, req.body);
+    kickPushPlanning(req.uid);
     res.json({
       device: {
         id: device.id,

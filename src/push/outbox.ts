@@ -1,3 +1,4 @@
+import { kickPushPlanning } from './kick';
 import type { Kysely, Transaction } from 'kysely';
 import { env, notificationRecipientAllowed } from '../config/env';
 import { documentKey, queryTable, SqlTransaction } from '../db/documents';
@@ -35,7 +36,34 @@ export async function enqueueWriteEvents(
       });
     }
   }
-  if (!events.length && !budgets.size) return false;
+  const planningUids = new Set<string>();
+  for (const { key, before, after } of changes) {
+    let uid = after.userId ?? before?.userId;
+    if (key.table === 'profiles') {
+      const fields = (data?: Record<string, any>) =>
+        JSON.stringify([
+          data?.language,
+          data?.timezone,
+          data?.notifications?.timezone,
+          data?.notifications?.enabled,
+          data?.notifications?.groups,
+          data?.notifications?.quietHours,
+          data?.subscription?.premiumUntil,
+          data?.subscription?.isTrial,
+        ]);
+      if (fields(before) === fields(after)) continue;
+      uid = key.id;
+    }
+    if (
+      uid &&
+      after.scope !== 'household' &&
+      before?.scope !== 'household' &&
+      notificationRecipientAllowed(uid)
+    )
+      planningUids.add(uid);
+  }
+  if (!events.length && !budgets.size && !planningUids.size) return false;
+
   const tx = new SqlTransaction(executor);
   const rows: Array<{
     ref: ReturnType<typeof documentKey>;
@@ -108,5 +136,6 @@ export async function enqueueWriteEvents(
   // Timers only wake a delivery check. The durable task is invisible until the effect commits.
   for (const { uid, categoryId } of budgets.values())
     afterCommit?.(() => armBudgetCheck(`${uid}:${categoryId}`));
+  for (const uid of planningUids) afterCommit?.(() => kickPushPlanning(uid));
   return rows.length > 0;
 }
