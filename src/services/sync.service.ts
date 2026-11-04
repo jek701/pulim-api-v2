@@ -107,7 +107,7 @@ async function readState(
 const add = (page: SyncPage['collections'], collection: SyncCollection) =>
   (page[collection] ??= { upserted: [], deleted: [] });
 
-export function syncCapabilities(pushNotifications = false) {
+export function syncCapabilities(pushNotifications = false, capture = { voice: false, receipt: false }) {
   const collections = Object.keys(SYNC_COLLECTIONS);
   return {
     contract: SYNC_CONTRACT_VERSION,
@@ -116,6 +116,7 @@ export function syncCapabilities(pushNotifications = false) {
     /** `POST /profile/bootstrap` accepts `{ categories: { defaults, custom } }` (free custom categories, once). */
     onboardingCategories: true,
     pushNotifications,
+    capture,
     idempotency: {
       header: 'Idempotency-Key',
       keyPattern: '^[A-Za-z0-9_-]{16,128}$',

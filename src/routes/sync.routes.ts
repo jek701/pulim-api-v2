@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../utils/AppError';
 import { pushAvailable } from '../push/availability';
+import { captureCapabilities } from '../capture/availability';
 import {
   SYNC_DEFAULT_LIMIT,
   SYNC_MAX_LIMIT,
@@ -18,7 +19,8 @@ const changesQuerySchema = z.object({
 const router = Router();
 
 router.get('/capabilities', asyncHandler(async (_req, res) => {
-  res.json(syncCapabilities(await pushAvailable()));
+  const [push, capture] = await Promise.all([pushAvailable(), captureCapabilities()]);
+  res.json(syncCapabilities(push, capture));
 }));
 router.get(
   '/changes',

@@ -96,6 +96,14 @@ const EnvSchema = z
     NOTIFY_AI_TIMEOUT_MS: z.coerce.number().int().positive().max(60_000).default(20_000),
 
     OPENAI_API_KEY: z.string().optional(),
+    CAPTURE_TRANSCRIBE_MODEL: z.string().optional(),
+    CAPTURE_PARSE_MODEL: z.string().optional(),
+    CAPTURE_RECEIPT_MODEL: z.string().optional(),
+    CAPTURE_COUNT_SOLIQ: boolish,
+    CAPTURE_VOTER_SALT: z.string().default(''),
+    SOLIQ_OFD_SIGNING_KEY: z.string().default(''),
+    /** 1 if Soliq money fields are in sum, 100 if in tiyin. Verify with one real receipt before launch. */
+    SOLIQ_AMOUNT_DIVISOR: z.coerce.number().positive().max(10_000).default(1),
     AI_MODEL_FREE: z.string().default('gpt-5.4-mini'),
     AI_MODEL_PREMIUM: z.string().default('gpt-5.6-terra'),
     AI_MODEL_FORECAST: z.string().default('gpt-5.4-mini'),
