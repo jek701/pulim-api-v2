@@ -146,6 +146,13 @@ export async function createTransaction(uid: string, payload: Row): Promise<Row>
       const delta = balanceDelta(card.data.cardType, input.type, input.amount);
       tx.patch(card.ref, { balance: patchValue.increment(delta) });
     }
+    if (input.capture) {
+      tx.afterCommit(() => {
+        void import('../capture/learning').then(({ learnCommittedCapture }) =>
+          learnCommittedCapture(uid, ref.id, input),
+        ).catch(() => logger.warn('capture.learning_failed'));
+      });
+    }
     return { id: ref.id, ...doc };
   });
   queueBudgetCheck(uid);

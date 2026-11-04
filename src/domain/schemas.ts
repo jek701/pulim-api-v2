@@ -296,6 +296,20 @@ export const plannedExpenseSettleSchema = z.object({
 });
 
 // --- Transactions (atomic) ---
+/**
+ * Optional provenance of a voice/receipt draft. Deliberately lenient: a malformed field is
+ * dropped and unknown keys (e.g. anything buyer-related) are stripped, so capture metadata can
+ * never make a user's money write fail. An unusable `kind` drops the whole object.
+ */
+export const captureMetadataSchema = z.object({
+  kind: z.enum(['voice', 'receipt_soliq', 'receipt_photo']),
+  receiptKey: z.string().regex(/^[a-f0-9]{64}$/).optional().catch(undefined),
+  merchantTin: z.string().regex(/^(?:\d{9}|\d{14})$/).optional().catch(undefined),
+  suggestedCategoryId: z.string().min(1).max(2048).optional().catch(undefined),
+  draftId: z.string().min(1).max(128).optional().catch(undefined),
+}).transform((capture) => Object.fromEntries(
+  Object.entries(capture).filter(([, value]) => value !== undefined),
+) as typeof capture);
 export const transactionCreateSchema = z.object({
   amount: positive,
   currency: currencySchema,
@@ -311,16 +325,18 @@ export const transactionCreateSchema = z.object({
   /** Preserve historical guest subscription payments without advancing the subscription again. */
   source: z.enum(['subscription']).optional(),
   sourceLabel: z.string().max(500).optional(),
+  capture: captureMetadataSchema.optional().catch(undefined),
   ...clientId,
 });
 export const transactionUpdateSchema = transactionCreateSchema
-  .omit({ id: true, source: true, sourceLabel: true })
+  .omit({ id: true, source: true, sourceLabel: true, capture: true })
   .partial();
 /** Household transactions are created by the server only (no client ids or imported origins). */
 export const householdTransactionCreateSchema = transactionCreateSchema.omit({
   id: true,
   source: true,
   sourceLabel: true,
+  capture: true,
 });
 
 export const transferSchema = z.object({

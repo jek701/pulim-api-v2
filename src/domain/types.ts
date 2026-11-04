@@ -223,6 +223,7 @@ export interface Transaction {
   comment?: string;
   source?: TransactionSource;
   origin?: 'telegram';
+  capture?: import('../capture/types').CaptureMetadata;
   sourceLabel?: string;
   toCardId?: string;
   toAmount?: number;
