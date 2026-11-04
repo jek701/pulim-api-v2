@@ -1,3 +1,17 @@
+# Native push addendum — 2026-11-04
+
+The implemented native APNs contract extends the Telegram specification below. The older Firestore/process descriptions below are historical; runtime storage is MySQL and delivery runs in the worker plus immediate API kicks.
+
+- Registry: additive migration `004_push_devices`; no automatic or production execution. Authenticated `POST /v1/push/devices` and owned idempotent `DELETE /v1/push/devices/:token`. Device language/timezone also update the profile atomically.
+- Preferences: master enabled, groups money/family/premium/habit true and familyExpenses false, alsoTelegram false, custom quietHours 22:00–08:00, timezone Asia/Tashkent; read-only pushActive. GET profile/PATCH notification settings and `pushNotifications:true` capability follow the task-3 shared contract.
+- Active devices + configured sender select push. Telegram remains for fallback or alsoTelegram. The legacy digest stays intact for Telegram-only users; push reminders are individual. Communications use this routing with their existing marketing consent.
+- Immediate goal/family/paid-Premium events and per-category budget tasks are durable on the triggering SQL transaction. Delivery is kicked after commit; budget debounce is 25 seconds and the worker is a retry/safety net. Claims are shared across processes.
+- The native planner prequeues local 10:00 reminders and 21:00 evening prompts, refreshes affected users after committed reminder/profile changes and registration, revalidates before sending, excludes app-local planned-expense reminders, and caps habit messages at one/day and all messages at six/day. Evening prompts require no personal transaction and account age <14 local calendar days.
+- Quiet hours use exact minutes and the profile timezone. Only budget_100 and apple_billing_failed bypass them. APNs action categories are SUBSCRIPTION_DUE, DEBT_DUE, EVENING_LOG; links and all 21 localized templates are in `src/push/`.
+- Native transport is token-authenticated HTTP/2 to APNs. Default off; environment names and verification limits are in the [API report](next/task3-api-report.md). No Apple billing-failure event source is enabled.
+
+---
+
 # ТЗ: проактивные напоминания и отчёты в Telegram
 
 **Версия:** 2.0 · **Дата:** 2026-09-02 · **Исполнитель:** AI Codex
