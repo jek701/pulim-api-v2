@@ -365,7 +365,14 @@ describe('quota, duplicates, safe cache, additive migration', () => {
     expect(store.queries.filter((query) => query.sql.startsWith('CREATE TABLE IF NOT EXISTS'))).toHaveLength(11);
     const ddl = store.queries.map((query) => query.sql).join('\n');
     expect(ddl).toContain('GENERATED ALWAYS AS');
-    expect(ddl).toContain(') VIRTUAL');
+    expect(ddl).toContain(') VIRTUAL, ALGORITHM=INSTANT');
+    expect(ddl).toContain('ALGORITHM=INPLACE LOCK=NONE');
+    // Fail fast behind a long transaction: the timeout is set before the first ALTER/CREATE INDEX on transactions.
+    const sqls = store.queries.map((query) => query.sql);
+    const timeout = sqls.findIndex((query) => query === 'SET SESSION lock_wait_timeout = 5');
+    expect(timeout).toBeGreaterThanOrEqual(0);
+    expect(timeout).toBeLessThan(sqls.findIndex((query) => query.startsWith('ALTER TABLE transactions')));
+    expect(timeout).toBeLessThan(sqls.findIndex((query) => query.startsWith('CREATE INDEX capture_owner_receipt')));
     expect(ddl).not.toMatch(/STORED/);
     expect(ddl).toContain('user_id(512), capture_receipt_key');
     expect(ddl).not.toMatch(/DROP |TRUNCATE /);
@@ -381,6 +388,17 @@ describe('quota, duplicates, safe cache, additive migration', () => {
     expect(classify('02105001001000000')).toBe('food');
     expect(classify('10701001001000000')).toBeNull();
 
+  });
+});
+
+describe('migration idempotency', () => {
+  it('re-running adds neither the column nor the index again, and still imports no env', async () => {
+    store.handler = (query) => ({ rows: query.includes('information_schema') ? [{ COLUMN_NAME: 'x', INDEX_NAME: 'x' }] : [], numAffectedRows: 0n });
+    await migrateCapture(database());
+    const sqls = store.queries.map((query) => query.sql);
+    expect(sqls.some((query) => query.startsWith('ALTER TABLE transactions'))).toBe(false);
+    expect(sqls.some((query) => query.startsWith('CREATE INDEX'))).toBe(false);
+    expect(sqls.every((query) => !/DROP |TRUNCATE |DELETE FROM|UPDATE /.test(query))).toBe(true);
   });
 });
 

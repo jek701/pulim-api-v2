@@ -63,6 +63,9 @@ export async function migrateCapture(db: Kysely<any>): Promise<void> {
     owner_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
     claimed_at BIGINT NOT NULL, PRIMARY KEY (week, owner_hash)
   ) ENGINE=InnoDB`.execute(db);
+  // The two ALTERs below touch the live transactions table. Fail fast instead of queueing behind a
+  // long-running transaction (a queued ALTER blocks every later query on the table).
+  await sql`SET SESSION lock_wait_timeout = 5`.execute(db);
   const columns = await sql<{ COLUMN_NAME: string }>`SELECT COLUMN_NAME FROM information_schema.COLUMNS
     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'transactions' AND COLUMN_NAME = 'capture_receipt_key'`.execute(db);
   if (!columns.rows.length) {
@@ -74,13 +77,14 @@ export async function migrateCapture(db: Kysely<any>): Promise<void> {
         CASE WHEN JSON_TYPE(JSON_EXTRACT(data_json, '$.capture.receiptKey')) = 'STRING'
           THEN LEFT(JSON_UNQUOTE(JSON_EXTRACT(data_json, '$.capture.receiptKey')), 64)
           ELSE NULL END
-      ) VIRTUAL`.execute(db);
+      ) VIRTUAL, ALGORITHM=INSTANT`.execute(db);
   }
   const indexes = await sql<{ INDEX_NAME: string }>`SELECT INDEX_NAME FROM information_schema.STATISTICS
     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'transactions' AND INDEX_NAME = 'capture_owner_receipt'`.execute(db);
   if (!indexes.rows.length) {
     // user_id is VARBINARY(2048); the prefix keeps the composite below MySQL's 3072-byte limit.
-    await sql`CREATE INDEX capture_owner_receipt ON transactions (user_id(512), capture_receipt_key)`.execute(db);
+    await sql`CREATE INDEX capture_owner_receipt ON transactions (user_id(512), capture_receipt_key)
+      ALGORITHM=INPLACE LOCK=NONE`.execute(db);
   }
   for (const seed of IKPU_SEEDS) {
     await sql`INSERT IGNORE INTO ikpu_category_map (prefix, standard_key, source, updated_at)
