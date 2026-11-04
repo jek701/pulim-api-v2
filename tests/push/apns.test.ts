@@ -22,7 +22,7 @@ function setup(overrides: Partial<ApnsConfig> = {}) {
   const send = vi.fn().mockResolvedValue({ status: 200, apnsId: 'test-id' });
   const loadKey = vi.fn().mockResolvedValue(syntheticKey);
   const error = vi.fn();
-  const sender = createApnsSender({ ...config, ...overrides }, { transport: { send }, loadKey, now: () => time, log: { error } });
+  const sender = createApnsSender({ ...config, ...overrides }, { transport: { send }, loadKey, keyReadable: () => true, now: () => time, log: { error } });
   return { sender, send, loadKey, error, advance: (ms: number) => { time += ms; } };
 }
 
@@ -73,6 +73,30 @@ describe('APNs sender', () => {
     expect(loadKey).not.toHaveBeenCalled();
   });
 
+  it('checks key readability once and stays unconfigured when the check fails', async () => {
+    const keyReadable = vi.fn(() => { throw new Error('sensitive-path'); });
+    const send = vi.fn();
+    const sender = createApnsSender(config, { transport: { send }, keyReadable });
+    expect(sender.configured()).toBe(false);
+    expect(sender.configured()).toBe(false);
+    expect(await sender.send(device, payload)).toEqual({ status: 503, reason: 'ProviderNotConfigured' });
+    expect(keyReadable).toHaveBeenCalledOnce();
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('reports unreadable files as unconfigured using the real readability probe', () => {
+    expect(createApnsSender({ ...config, APNS_KEY_PATH: '/synthetic-missing-apns-test/key.p8' }).configured()).toBe(false);
+  });
+
+  it.each(['BadTopic', 'TopicDisallowed', 'DeviceTokenNotForTopic'])('does not pause the provider for terminal topic failure %s', async reason => {
+    const { sender, send, error } = setup();
+    send.mockResolvedValueOnce({ status: 403, reason });
+    expect(await sender.send(device, payload)).toEqual({ status: 403, reason });
+    expect(await sender.send(device, payload)).toMatchObject({ status: 200 });
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(error).not.toHaveBeenCalled();
+  });
+
   it('pauses on provider authentication errors until a fresh JWT is generated', async () => {
     const { sender, send, error, advance } = setup();
     send.mockResolvedValueOnce({ status: 403, reason: 'InvalidProviderToken' });
@@ -120,6 +144,7 @@ describe('APNs sender', () => {
   it.each([
     [200, undefined, 'success'], [410, 'Unregistered', 'disable'], [410, 'ExpiredToken', 'disable'],
     [400, 'BadDeviceToken', 'disable'], [400, 'DeviceTokenNotForTopic', 'disable'],
+    [400, 'BadTopic', 'disable'], [403, 'TopicDisallowed', 'disable'],
     [429, 'TooManyRequests', 'retry'], [500, 'InternalServerError', 'retry'], [503, 'Shutdown', 'retry'],
     [403, 'InvalidProviderToken', 'auth'], [413, 'PayloadTooLarge', 'permanent'],
   ] as const)('classifies status %s / %s as %s', (status, reason, expected) => {
@@ -145,6 +170,7 @@ class FakeSession extends EventEmitter {
   closed = false;
   destroyed = false;
   streams: FakeStream[] = [];
+  unref = vi.fn();
   request(_headers: OutgoingHttpHeaders) { const stream = new FakeStream(); this.streams.push(stream); return stream; }
   setTimeout() {}
   close() { this.closed = true; this.emit('close'); }
@@ -160,11 +186,12 @@ describe('persistent APNs HTTP/2 transport', () => {
   }
 
   it('reuses each environment session and parses APNs response fields', async () => {
-    const { transport, open } = setupTransport();
+    const { transport, open, sessions } = setupTransport();
     expect(await transport.send('sandbox', {}, '{}')).toEqual({ status: 410, reason: 'Unregistered', apnsId: 'id-123' });
     await transport.send('sandbox', {}, '{}');
     await transport.send('production', {}, '{}');
     expect(open.mock.calls.map(([host]) => host)).toEqual(['sandbox', 'production']);
+    expect(sessions.every(session => session.unref.mock.calls.length === 1)).toBe(true);
     transport.close();
   });
 

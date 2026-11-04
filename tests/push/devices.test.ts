@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const store = vi.hoisted(() => ({
   rows: new Map<string, any>(),
@@ -6,6 +6,9 @@ const store = vi.hoisted(() => ({
   error: undefined as undefined | { code: string },
   transactionExecutors: [] as unknown[],
   flushExecutors: [] as unknown[],
+  profileLocks: new Map<string, Promise<void>>(),
+  lockedOwners: [] as string[],
+  operations: [] as string[],
 }));
 vi.mock('../../src/db/database', () => {
   function query(kind: string) {
@@ -20,7 +23,7 @@ vi.mock('../../src/db/database', () => {
           return op === '>'
             ? Buffer.compare(Buffer.from(row[key]), value) > 0
             : Buffer.from(row[key]).equals(value);
-        return op === 'is' ? row[key] === value : row[key] === value;
+        return op === 'in' ? value.includes(row[key]) : row[key] === value;
       });
     const chain: any = {
       selectAll: () => chain,
@@ -29,6 +32,7 @@ vi.mock('../../src/db/database', () => {
         return chain;
       },
       distinct: () => chain,
+      forUpdate: () => chain,
       orderBy: () => chain,
       limit: (value: number) => {
         maximum = value;
@@ -53,6 +57,7 @@ vi.mock('../../src/db/database', () => {
       execute: async () => {
         if (store.error) throw store.error;
         if (kind === 'insert') {
+          store.operations.push('insert');
           const current = store.rows.get(values.token);
           store.rows.set(values.token, current ? { ...current, ...duplicate } : values);
         }
@@ -81,8 +86,10 @@ vi.mock('../../src/db/database', () => {
     transaction: () => ({
       setIsolationLevel: () => ({
         execute: async (work: any) => {
-          store.transactionExecutors.push(db);
-          return work(db);
+          const executor = { ...db, releases: [] as Array<() => void> };
+          store.transactionExecutors.push(executor);
+          try { return await work(executor); }
+          finally { executor.releases.forEach(release => release()); }
         },
       }),
     }),
@@ -98,7 +105,16 @@ vi.mock('../../src/notifications/settings', () => ({
 vi.mock('../../src/db/documents', () => ({
   SqlTransaction: class {
     writes: any[] = [];
+    constructor(private executor: any) {}
     async read(ref: any) {
+      const previous = store.profileLocks.get(ref.id) ?? Promise.resolve();
+      let release!: () => void;
+      const lock = new Promise<void>(resolve => { release = resolve; });
+      store.profileLocks.set(ref.id, lock);
+      await previous;
+      this.executor.releases.push(release);
+      store.lockedOwners.push(ref.id);
+      store.operations.push('profile_lock');
       return { exists: store.profiles.has(ref.id), data: store.profiles.get(ref.id) };
     }
     save(ref: any, data: any) {
@@ -136,7 +152,11 @@ beforeEach(() => {
   store.error = undefined;
   store.transactionExecutors.length = 0;
   store.flushExecutors.length = 0;
+  store.profileLocks.clear();
+  store.lockedOwners.length = 0;
+  store.operations.length = 0;
 });
+afterEach(() => vi.restoreAllMocks());
 describe('push device ownership', () => {
   it('upserts one normalized token, preserves creation and atomically updates profile metadata', async () => {
     const first = await registerDevice('one', registration);
@@ -203,5 +223,38 @@ describe('push device ownership', () => {
     await expect(unregisterDevice('one', registration.token)).resolves.toBeUndefined();
     store.error = { code: 'ECONNRESET' };
     await expect(pushActive('one')).rejects.toMatchObject({ code: 'ECONNRESET' });
+  });
+  it('returns a clear unavailable error when registering before the migration', async () => {
+    store.error = { code: 'ER_NO_SUCH_TABLE' };
+    await expect(registerDevice('one', registration)).rejects.toMatchObject({ statusCode: 503, code: 'PUSH_UNAVAILABLE' });
+  });
+  it('keeps at most ten devices and retires the least recently seen one', async () => {
+    let now = 1000;
+    vi.spyOn(Date, 'now').mockImplementation(() => now++);
+    const inputs = Array.from({ length: 11 }, (_, index) => ({
+      ...registration, token: index.toString(16).padStart(64, '0'),
+    }));
+    for (const input of inputs.slice(0, 10)) await registerDevice('one', input);
+    // Refreshing the first device makes the second device the oldest.
+    await registerDevice('one', inputs[0]);
+    await registerDevice('one', inputs[10]);
+    expect(await enabledDevices('one')).toHaveLength(10);
+    expect(store.rows.get(inputs[1].token)).toMatchObject({ disabled_reason: 'DeviceLimitExceeded' });
+    expect(store.rows.get(inputs[0].token).disabled_at).toBeNull();
+    expect(store.rows.get(inputs[10].token).disabled_at).toBeNull();
+  });
+  it('serializes simultaneous registrations by owner before enforcing the cap', async () => {
+    let now = 1000;
+    vi.spyOn(Date, 'now').mockImplementation(() => now++);
+    const inputs = Array.from({ length: 12 }, (_, index) => ({
+      ...registration, token: index.toString(16).padStart(64, '0'),
+    }));
+    await Promise.all(inputs.map(input => registerDevice('one', input)));
+    expect(store.lockedOwners).toEqual(Array(12).fill('one'));
+    expect(store.operations).toEqual(Array.from({ length: 12 }, () => ['profile_lock', 'insert']).flat());
+    expect(await enabledDevices('one')).toHaveLength(10);
+    expect(inputs.slice(0, 2).map(input => store.rows.get(input.token).disabled_reason))
+      .toEqual(['DeviceLimitExceeded', 'DeviceLimitExceeded']);
+    expect(store.flushExecutors).toEqual(store.transactionExecutors);
   });
 });

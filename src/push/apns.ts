@@ -1,5 +1,6 @@
 import { createPrivateKey, sign } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
+import { accessSync, constants as fsConstants } from 'node:fs';
 import { connect, constants, type ClientHttp2Session, type OutgoingHttpHeaders } from 'node:http2';
 import { env } from '../config/env';
 import { logger } from '../utils/logger';
@@ -38,7 +39,7 @@ export interface ApnsTransport {
 /** Device failures must not retire a working provider credential, or vice versa. */
 export function classifyApnsResponse(result: ApnsResult): 'success' | 'disable' | 'retry' | 'auth' | 'permanent' {
   if (result.status === 200) return 'success';
-  if (result.status === 410 || ['Unregistered', 'BadDeviceToken', 'DeviceTokenNotForTopic', 'ExpiredToken'].includes(result.reason ?? '')) return 'disable';
+  if (result.status === 410 || ['Unregistered', 'BadDeviceToken', 'BadTopic', 'TopicDisallowed', 'DeviceTokenNotForTopic', 'ExpiredToken'].includes(result.reason ?? '')) return 'disable';
   if (result.status === 403) return 'auth';
   if (result.status === 429 || result.status >= 500) return 'retry';
   return 'permanent';
@@ -58,6 +59,7 @@ export class Http2ApnsTransport implements ApnsTransport {
     const existing = this.sessions.get(host);
     if (existing && !existing.closed && !existing.destroyed) return existing;
     const session = this.open(host);
+    session.unref();
     this.sessions.set(host, session);
     const forget = () => {
       if (this.sessions.get(host) === session) this.sessions.delete(host);
@@ -121,6 +123,7 @@ interface ApnsDependencies {
   transport?: ApnsTransport;
   now?: () => number;
   loadKey?: (path: string) => Promise<string | Buffer>;
+  keyReadable?: (path: string) => boolean;
   log?: Pick<typeof logger, 'error'>;
 }
 
@@ -130,12 +133,23 @@ export function createApnsSender(config: ApnsConfig, dependencies: ApnsDependenc
   const now = dependencies.now ?? Date.now;
   const loadKey = dependencies.loadKey ?? ((path: string) => readFile(path));
   const log = dependencies.log ?? logger;
+  const keyReadable = dependencies.keyReadable ?? ((path: string) => {
+    accessSync(path, fsConstants.R_OK);
+    return true;
+  });
+  // Probe once per process/sender; never advertise a provider whose key cannot be read.
+  let available = false;
+  if (config.PUSH_ENABLED && config.APNS_KEY_ID && config.APNS_TEAM_ID && config.APNS_KEY_PATH) {
+    try {
+      available = keyReadable(config.APNS_KEY_PATH);
+    } catch { /* No credential values or paths should escape this check. */ }
+  }
   let cached: { jwt: string; issuedAt: number } | undefined;
   let generating: Promise<string> | undefined;
   let circuitUntil = 0;
 
   function configured(): boolean {
-    return Boolean(config.PUSH_ENABLED && config.APNS_KEY_ID && config.APNS_TEAM_ID && config.APNS_KEY_PATH);
+    return available;
   }
 
   async function token(): Promise<string> {
@@ -190,7 +204,7 @@ export function createApnsSender(config: ApnsConfig, dependencies: ApnsDependenc
     } catch {
       return { status: 503, reason: 'TransportError' };
     }
-    if (result.status === 403) {
+    if (classifyApnsResponse(result) === 'auth') {
       circuitUntil = (cached?.issuedAt ?? now()) + TOKEN_TTL_MS;
       log.error({ event: 'push.apns.auth_rejected', status: 403, reason: safeReason(result.reason) }, 'APNs authentication rejected; sending paused until provider token refresh');
       return { ...result, retryAt: circuitUntil };

@@ -7,7 +7,11 @@ const mocks = vi.hoisted(() => ({
   active: vi.fn(),
   patch: vi.fn(),
   anonymous: false,
+  available: vi.fn(),
 }));
+vi.mock('../../src/config/env', () => ({ env: { APNS_BUNDLE_ID: 'com.izik.pulim' } }));
+vi.mock('../../src/push/kick', () => ({ kickPushPlanning: vi.fn() }));
+vi.mock('../../src/push/availability', () => ({ pushAvailable: mocks.available }));
 vi.mock('../../src/push/devices.repository', () => ({
   registerDevice: mocks.register,
   unregisterDevice: mocks.remove,
@@ -47,6 +51,7 @@ describe('authenticated push HTTP contract', () => {
     mocks.remove.mockResolvedValue(undefined);
     mocks.patch.mockImplementation(async (_uid, input) => ({ enabled: true, ...input }));
     mocks.active.mockResolvedValue(true);
+    mocks.available.mockResolvedValue(true);
   });
   const body = {
     token: 'AB'.repeat(32),
@@ -91,6 +96,23 @@ describe('authenticated push HTTP contract', () => {
       body: JSON.stringify({ ...body, timezone: 'invalid' }),
     });
     expect(response.status).toBe(400);
+    expect(mocks.register).not.toHaveBeenCalled();
+  });
+  it('rejects a different bundle before registration', async () => {
+    const response = await fetch(`${base}/v1/push/devices`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ...body, bundleId: 'com.other.app' }),
+    });
+    expect(response.status).toBe(400);
+    expect(mocks.register).not.toHaveBeenCalled();
+  });
+  it('returns a clear 503 when push or its registry is unavailable', async () => {
+    mocks.available.mockResolvedValue(false);
+    const response = await fetch(`${base}/v1/push/devices`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+    });
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: { code: 'PUSH_UNAVAILABLE' } });
     expect(mocks.register).not.toHaveBeenCalled();
   });
   it('returns empty 204 for repeated owned-token deletion', async () => {

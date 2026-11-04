@@ -5,6 +5,7 @@ import { relationalTables } from '../db/tables';
 import { profileRef } from '../repositories/profile.repository';
 import { notificationDefaults } from '../notifications/settings';
 import type { DeviceRegistration } from './schemas';
+import { AppError } from '../utils/AppError';
 
 export interface PushDevice {
   id: string;
@@ -38,6 +39,18 @@ function device(row: Record<string, any>): PushDevice {
   };
 }
 const missingTable = (error: unknown) => (error as { code?: string }).code === 'ER_NO_SUCH_TABLE';
+let tableAvailable: Promise<boolean> | undefined;
+/** The owner-controlled migration is checked once on first use, including concurrent callers. */
+export function pushDevicesAvailable(): Promise<boolean> {
+  return tableAvailable ??= database().selectFrom(TABLE).select('id').limit(1).execute()
+    .then(() => true)
+    .catch((error: unknown) => {
+      if (missingTable(error)) return false;
+      // Outages are retryable and must not permanently cache a disabled capability.
+      tableAvailable = undefined;
+      throw error;
+    });
+}
 export async function enabledDevices(uid: string): Promise<PushDevice[]> {
   try {
     return (
@@ -66,6 +79,11 @@ export async function registerDevice(uid: string, input: DeviceRegistration): Pr
         .transaction()
         .setIsolationLevel('repeatable read')
         .execute(async (db) => {
+          const documents = new SqlTransaction(db);
+          const ref = profileRef(uid);
+          // Serialize registrations for this owner before locking distinct device tokens.
+          // Without this shared row lock, two new tokens could both observe nine devices.
+          const profile = await documents.read(ref);
           const now = Date.now();
           const values = {
             id,
@@ -84,9 +102,18 @@ export async function registerDevice(uid: string, input: DeviceRegistration): Pr
           const { id: _id, created_at: _created, token: _token, ...updated } = values;
           // The unique-token lock serializes simultaneous registrations and transfers ownership.
           await db.insertInto(TABLE).values(values).onDuplicateKeyUpdate(updated).execute();
-          const documents = new SqlTransaction(db);
-          const ref = profileRef(uid);
-          const profile = await documents.read(ref);
+          // Locking reads see the latest committed registry under REPEATABLE READ.
+          const enabled = await db.selectFrom(TABLE).selectAll()
+            .where('uid', '=', Buffer.from(uid)).where('disabled_at', 'is', null)
+            .forUpdate().execute();
+          enabled.sort((a, b) => Number(b.last_seen_at) - Number(a.last_seen_at) ||
+            Number(String(b.id) === id) - Number(String(a.id) === id) ||
+            String(a.id).localeCompare(String(b.id)));
+          const retired = enabled.slice(10).map((row) => row.id);
+          if (retired.length) {
+            await db.updateTable(TABLE).set({ disabled_at: now, disabled_reason: 'DeviceLimitExceeded' })
+              .where('id', 'in', retired).execute();
+          }
           documents.save(
             ref,
             {
@@ -110,6 +137,9 @@ export async function registerDevice(uid: string, input: DeviceRegistration): Pr
           return device(row);
         });
     } catch (error) {
+      if (missingTable(error)) {
+        throw new AppError(503, 'PUSH_UNAVAILABLE', 'Push notifications are unavailable until the device registry is installed.');
+      }
       if (
         attempt >= 4 ||
         !['ER_LOCK_DEADLOCK', 'ER_LOCK_WAIT_TIMEOUT'].includes(
