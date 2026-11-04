@@ -89,6 +89,17 @@ describe('receipt drafts', () => {
     expect(expenseKeys).not.toContain('salary');
   });
 
+  it('treats a photo receipt’s TIN and item codes as untrusted: no shared directory, no IKPU classification', async () => {
+    await receiptDrafts('user', { ...receipt(), kind: 'photo' }, context());
+    for (const [input] of mocks.infer.mock.calls) {
+      expect(input.trustedTin).not.toBe(true);
+      expect(input.classifyIkpu).toBeUndefined();
+    }
+    mocks.infer.mockClear();
+    await receiptDrafts('user', receipt(), context());
+    expect(mocks.infer.mock.calls[0][0]).toMatchObject({ trustedTin: true, classifyIkpu: expect.any(Function) });
+  });
+
   it('shows an AI suggestion as a highlighted low-confidence category, and null when the user lacks it', async () => {
     mocks.infer.mockResolvedValue({ categoryId: food.id, confidence: 'low', standardKey: 'food' });
     const guessed = await receiptDrafts('user', receipt(), context());

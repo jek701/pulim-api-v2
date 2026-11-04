@@ -23,6 +23,8 @@ vi.mock('../../src/db/database', async () => {
   return { database: () => db, closeDatabase: async () => {} };
 });
 vi.mock('../../src/config/env', () => { throw new Error('Storage and migration must not import application env'); });
+const logged = vi.hoisted(() => ({ warn: vi.fn() }));
+vi.mock('../../src/utils/logger', () => ({ logger: { warn: logged.warn } }));
 vi.mock('../../src/db/documents', () => ({ documentKey: (table: string, id: string) => ({ table, id }), readDocument: vi.fn() }));
 
 import { database } from '../../src/db/database';
@@ -71,9 +73,9 @@ describe('category evidence and privacy', () => {
   });
   it('uses verified then consensus and does not substitute another default when the user lacks it', async () => {
     store.handler = (query) => ({ rows: query.includes('SELECT status') ? [{ status: 'verified', standard_key: 'transport' }] : [] });
-    expect(await inferCaptureCategory({ uid: 'u', tin: '123456789', categories: [food] })).toEqual({ categoryId: null, confidence: 'low', standardKey: null });
+    expect(await inferCaptureCategory({ uid: 'u', tin: '123456789', trustedTin: true, categories: [food] })).toEqual({ categoryId: null, confidence: 'low', standardKey: null });
     store.handler = (query) => ({ rows: query.includes('SELECT standard_key, weight_sum') ? [{ standard_key: 'food', weight_sum: 4, voter_count: 3 }] : [] });
-    expect((await inferCaptureCategory({ uid: 'u', tin: '123456789', categories: [food] })).categoryId).toBe(food.id);
+    expect((await inferCaptureCategory({ uid: 'u', tin: '123456789', trustedTin: true, categories: [food] })).categoryId).toBe(food.id);
   });
   it('uses IKPU before AI; an AI guess is only a low-confidence suggestion of the user\'s own category', async () => {
     store.handler = (query) => ({ rows: query.includes('SELECT prefix') ? [{ prefix: '010', standard_key: 'food' }] : [] });
@@ -141,6 +143,88 @@ describe('category evidence and privacy', () => {
     await learnCaptureTransaction({ uid: 'u', transactionId: 'tx1', categoryId: custom.id, merchantTin: '123456789', categories: [custom] });
     expect(store.queries.some((query) => query.sql.startsWith('INSERT INTO merchant_user_category'))).toBe(true);
     expect(store.queries.some((query) => query.sql.startsWith('INSERT INTO merchant_category_votes'))).toBe(false);
+  });
+});
+
+describe('review fixes: untrusted TINs, IKPU classification, best-effort directory', () => {
+  const unknown = (n: number) => `9999${n}123456789012`;
+  it('lets an untrusted (photo) TIN reach only the user’s own choice, never the shared directory', async () => {
+    store.handler = (query) => ({ rows: query.includes('merchant_user_category') ? [{ category_id: Buffer.from(food.id) }] : [], numAffectedRows: 1n });
+    const own = await inferCaptureCategory({ uid: 'u', tin: '123456789', merchant: { name: 'Photo Shop', address: 'x' }, categories: [food] });
+    expect(own).toMatchObject({ categoryId: food.id, confidence: 'high' });
+    store.queries = [];
+    store.handler = () => ({ rows: [], numAffectedRows: 1n });
+    const guess = await inferCaptureCategory({ uid: 'u', tin: '123456789', merchant: { name: 'Photo Shop', address: 'x' }, categories: [food], aiGuess: async () => 'food' });
+    expect(guess).toMatchObject({ categoryId: food.id, confidence: 'low' });
+    const sql = store.queries.map((query) => query.sql).join('\n');
+    expect(sql).not.toMatch(/INTO merchants|FROM merchants|merchant_category_votes|UPDATE merchants/);
+  });
+
+  it('releases the claim when the model call fails, and stores NULL only for an explicit "uncertain"', async () => {
+    const failing = vi.fn(async () => { throw new Error('provider down'); });
+    await inferCaptureCategory({ uid: 'u', trustedTin: true, categories: [food], items: [{ ikpu: unknown(1), amount: 1 }], classifyIkpu: failing });
+    expect(store.queries.some((query) => query.sql.startsWith('DELETE FROM ikpu_category_map') && query.sql.includes("source = 'pending'"))).toBe(true);
+    expect(store.queries.some((query) => query.sql.startsWith('UPDATE ikpu_category_map SET standard_key'))).toBe(false);
+    store.queries = [];
+    await inferCaptureCategory({ uid: 'u', trustedTin: true, categories: [food], items: [{ ikpu: unknown(2), amount: 1 }], classifyIkpu: async () => null });
+    const update = store.queries.find((query) => query.sql.startsWith('UPDATE ikpu_category_map SET standard_key'))!;
+    expect(update.parameters.slice(0, 1)).toEqual([null]);
+    expect(store.queries.some((query) => query.sql.startsWith('DELETE FROM ikpu_category_map'))).toBe(false);
+  });
+
+  it('classifies at most five new IKPU groups per request', async () => {
+    const classify = vi.fn(async () => 'food');
+    const items = Array.from({ length: 8 }, (_, index) => ({ ikpu: `${70000 + index * 1000}123456789012`.slice(0, 17), amount: 1 }));
+    await inferCaptureCategory({ uid: 'u', trustedTin: true, categories: [food], items, classifyIkpu: classify });
+    expect(classify).toHaveBeenCalledTimes(5);
+  });
+
+  it('takes over a pending claim only after it has been abandoned for ten minutes', async () => {
+    const classify = vi.fn(async () => 'food');
+    store.handler = (query) => ({ rows: [], numAffectedRows: query.startsWith('INSERT IGNORE INTO ikpu_category_map') ? 0n : query.includes("source = 'pending' AND updated_at <") ? 1n : 1n });
+    await inferCaptureCategory({ uid: 'u', trustedTin: true, categories: [food], items: [{ ikpu: unknown(3), amount: 1 }], classifyIkpu: classify });
+    const takeover = store.queries.find((query) => query.sql.includes("source = 'pending' AND updated_at <"))!;
+    expect(takeover.parameters[2] as number).toBeLessThan(Date.now() - 9 * 60_000);
+    expect(classify).toHaveBeenCalledOnce();
+    store.handler = () => ({ rows: [], numAffectedRows: 0n });
+    classify.mockClear();
+    await inferCaptureCategory({ uid: 'u', trustedTin: true, categories: [food], items: [{ ikpu: unknown(4), amount: 1 }], classifyIkpu: classify });
+    expect(classify).not.toHaveBeenCalled();
+  });
+
+  it('gives model-classified IKPU groups low confidence and seeded ones medium', async () => {
+    const rows = (source: string) => ({ rows: [{ prefix: '010', standard_key: 'food', source }], numAffectedRows: 1n });
+    store.handler = (query) => query.includes('FROM ikpu_category_map') ? rows('ai') : { rows: [] };
+    const items = [{ ikpu: '01012345', amount: 500 }];
+    expect(await inferCaptureCategory({ uid: 'u', categories: [food], items })).toEqual({ categoryId: food.id, confidence: 'low', standardKey: 'food' });
+    store.handler = (query) => query.includes('FROM ikpu_category_map') ? rows('seed') : { rows: [] };
+    expect((await inferCaptureCategory({ uid: 'u', categories: [food], items })).confidence).toBe('medium');
+  });
+
+  it('never fails a scan when the directory write fails; logs and carries on', async () => {
+    store.handler = (query) => {
+      if (query.startsWith('INSERT INTO merchants')) throw new Error('Deadlock found');
+      return { rows: [], numAffectedRows: 1n };
+    };
+    const result = await inferCaptureCategory({ uid: 'u', tin: '123456789', trustedTin: true, merchant: { name: 'Shop' },
+      categories: [food], aiGuess: async () => 'food' });
+    expect(result).toMatchObject({ categoryId: food.id, confidence: 'low' });
+    expect(logged.warn).toHaveBeenCalledWith('capture.directory_write_failed');
+    logged.warn.mockClear();
+    store.handler = (query) => {
+      if (query.includes('INTO merchants') || query.startsWith('SELECT tin FROM merchants')) throw new Error('Deadlock found');
+      return { rows: [], numAffectedRows: 1n };
+    };
+    expect((await inferCaptureCategory({ uid: 'u', tin: '123456789', trustedTin: true, categories: [food], aiGuess: async () => 'food' })).standardKey).toBe('food');
+    expect(logged.warn).toHaveBeenCalledWith('capture.directory_write_failed');
+  });
+
+  it('takes the merchant row lock exclusively in one statement (no INSERT IGNORE then FOR UPDATE)', async () => {
+    await inferCaptureCategory({ uid: 'u', tin: '123456789', trustedTin: true, categories: [food], aiGuess: async () => 'food' });
+    const sql = store.queries.map((query) => query.sql);
+    expect(sql.some((query) => query.startsWith('INSERT IGNORE INTO merchants'))).toBe(false);
+    expect(sql.findIndex((query) => query.startsWith('INSERT INTO merchants (tin, first_seen, last_seen) VALUES') && query.includes('ON DUPLICATE KEY UPDATE tin = tin')))
+      .toBeLessThan(sql.findIndex((query) => query.startsWith('SELECT tin FROM merchants') && query.includes('FOR UPDATE')));
   });
 });
 

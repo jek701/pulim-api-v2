@@ -75,10 +75,13 @@ export async function receiptDrafts(uid: string, receipt: CaptureReceipt, contex
     c.type === 'expense' && c.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') === key));
   const categories = context.categories.filter(c => c.type === 'expense' || c.type === 'both');
   const guess = () => guessCaptureCategory(uid, `${receipt.merchant.name ?? ''}; ${receipt.items.slice(0, 15).map(i => i.name).join(', ')}`, expenseKeys);
-  const classifyIkpu = (prefix: string) => guessCaptureCategory(uid,
+  // Only Soliq receipts carry trustworthy item codes and a server-fetched seller TIN. A photo's TIN and
+  // codes are OCR text: they never feed the shared directory or trigger model classification.
+  const soliq = receipt.kind === 'soliq';
+  const classifyIkpu = !soliq ? undefined : (prefix: string) => guessCaptureCategory(uid,
     `IKPU group ${prefix}: ${receipt.items.filter(i => i.ikpu?.startsWith(prefix)).slice(0, 10).map(i => i.name).join(', ')}`, expenseKeys);
   const inferred = await inferCaptureCategory({ uid, tin: receipt.merchant.tin ?? undefined,
-    merchant: receipt.merchant, categories, items: receipt.items, aiGuess: guess, classifyIkpu });
+    merchant: receipt.merchant, trustedTin: soliq, categories, items: receipt.items, aiGuess: guess, classifyIkpu });
   // Item-level inference omits the TIN so a broad merchant category cannot override IKPU.
   // One lookup per distinct IKPU code, not per line.
   const byIkpu = new Map<string, string | null>();

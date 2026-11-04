@@ -3,6 +3,7 @@ import { sql } from 'kysely';
 import { database } from '../db/database';
 import { DEFAULT_CATEGORIES } from '../domain/defaultCategories';
 import type { Category } from '../domain/types';
+import { logger } from '../utils/logger';
 import { isCaptureStorageReady, safeCachedReceipt } from './repository';
 
 const keyForName = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
@@ -35,29 +36,52 @@ export function consensusCategory(votes: CategoryVote[]): string | null {
     && isStandardCategoryKey(winner.standardKey) ? winner.standardKey : null;
 }
 
-export function ikpuWeightedCategory(
-  items: Array<{ ikpu?: string; amount: number }>,
-  mappings: Array<{ prefix: string; standardKey: string | null }>,
-): string | null {
-  const totals = new Map<string, number>();
+export interface IkpuMapping { prefix: string; standardKey: string | null; source?: string }
+export interface IkpuCategory { standardKey: string; viaAi: boolean }
+
+/** Amount-weighted category of the items. `viaAi` when model-classified rows carry half or more of the winner. */
+export function ikpuCategory(items: Array<{ ikpu?: string; amount: number }>, mappings: IkpuMapping[]): IkpuCategory | null {
+  const totals = new Map<string, { all: number; ai: number }>();
   for (const item of items) {
     if (!item.ikpu || !Number.isFinite(item.amount) || item.amount <= 0) continue;
     const match = mappings.filter((mapping) => item.ikpu!.startsWith(mapping.prefix))
       .sort((a, b) => b.prefix.length - a.prefix.length)[0];
     if (!match?.standardKey || !isStandardCategoryKey(match.standardKey)) continue;
-    totals.set(match.standardKey, (totals.get(match.standardKey) ?? 0) + item.amount);
+    const entry = totals.get(match.standardKey) ?? { all: 0, ai: 0 };
+    entry.all += item.amount;
+    if (match.source === 'ai') entry.ai += item.amount;
+    totals.set(match.standardKey, entry);
   }
-  const ranked = [...totals].sort((a, b) => b[1] - a[1]);
-  return ranked[0] && ranked[0][1] > (ranked[1]?.[1] ?? 0) ? ranked[0][0] : null;
+  const ranked = [...totals].sort((a, b) => b[1].all - a[1].all);
+  if (!ranked[0] || ranked[0][1].all <= (ranked[1]?.[1].all ?? 0)) return null;
+  return { standardKey: ranked[0][0], viaAi: ranked[0][1].ai * 2 >= ranked[0][1].all };
+}
+
+export function ikpuWeightedCategory(
+  items: Array<{ ikpu?: string; amount: number }>,
+  mappings: Array<{ prefix: string; standardKey: string | null }>,
+): string | null {
+  return ikpuCategory(items, mappings)?.standardKey ?? null;
 }
 
 export interface InferenceInput {
   uid: string; tin?: string | null; categories: Category[];
   merchant?: { tin?: string | null; name?: string | null; address?: string | null };
   items?: Array<{ ikpu?: string; amount: number }>;
+  /**
+   * The TIN came from Soliq (server-fetched), not from text read off a photo. Only then may it touch the
+   * shared directory (merchant rows, AI votes, verified/consensus lookups); an untrusted TIN only
+   * reaches the user's own remembered choice.
+   */
+  trustedTin?: boolean;
   aiGuess?: () => Promise<string | null>;
+  /** Only passed for Soliq receipts: item codes read from a photo are never sent for classification. */
   classifyIkpu?: (prefix: string) => Promise<string | null>;
 }
+
+/** New IKPU groups the model may classify in one request. */
+export const MAX_IKPU_CLASSIFICATIONS = 5;
+const STALE_PENDING_MS = 10 * 60_000;
 
 export async function inferCaptureCategory(input: InferenceInput): Promise<CategoryInference> {
   const db = database();
@@ -67,10 +91,13 @@ export async function inferCaptureCategory(input: InferenceInput): Promise<Categ
   };
   const merchantTin = input.tin ?? input.merchant?.tin;
   const tin = merchantTin && isMerchantTin(merchantTin) ? merchantTin : null;
-  if (tin && input.merchant) {
+  if (tin && input.trustedTin && input.merchant) {
     const safe = safeCachedReceipt({ merchant: { ...input.merchant, tin } }).merchant as { name: string | null; address: string | null };
-    await sql`INSERT INTO merchants (tin, name, address, first_seen, last_seen) VALUES (${tin}, ${safe.name}, ${safe.address}, ${Date.now()}, ${Date.now()})
-      ON DUPLICATE KEY UPDATE name = COALESCE(VALUES(name), name), address = COALESCE(VALUES(address), address)`.execute(db);
+    // The directory is best effort: a deadlock or DB error here must never fail the scan.
+    try {
+      await sql`INSERT INTO merchants (tin, name, address, first_seen, last_seen) VALUES (${tin}, ${safe.name}, ${safe.address}, ${Date.now()}, ${Date.now()})
+        ON DUPLICATE KEY UPDATE name = COALESCE(VALUES(name), name), address = COALESCE(VALUES(address), address)`.execute(db);
+    } catch { logger.warn('capture.directory_write_failed'); }
   }
   if (tin) {
     const personal = await sql<{ category_id: string | Buffer }>`SELECT category_id FROM merchant_user_category
@@ -78,12 +105,12 @@ export async function inferCaptureCategory(input: InferenceInput): Promise<Categ
     const personalId = personal.rows[0]?.category_id.toString();
     const category = input.categories.find((candidate) => candidate.id === personalId);
     if (category) return { categoryId: category.id, confidence: 'high', standardKey: standardCategoryKey(category) };
-    const merchant = await sql<{ status: string; standard_key: string | null }>`SELECT status, standard_key FROM merchants WHERE tin = ${tin}`.execute(db);
+    const merchant = input.trustedTin ? await sql<{ status: string; standard_key: string | null }>`SELECT status, standard_key FROM merchants WHERE tin = ${tin}`.execute(db) : { rows: [] };
     if (merchant.rows[0]?.status === 'verified' && merchant.rows[0].standard_key) {
       return mapped(merchant.rows[0].standard_key, 'high');
     }
-    const votes = await sql<{ standard_key: string; weight_sum: number; voter_count: number }>`SELECT standard_key, weight_sum, voter_count
-      FROM merchant_category_votes WHERE tin = ${tin}`.execute(db);
+    const votes = input.trustedTin ? await sql<{ standard_key: string; weight_sum: number; voter_count: number }>`SELECT standard_key, weight_sum, voter_count
+      FROM merchant_category_votes WHERE tin = ${tin}`.execute(db) : { rows: [] };
     const consensus = consensusCategory(votes.rows.map((vote) => ({ standardKey: vote.standard_key, weight: Number(vote.weight_sum), voterCount: Number(vote.voter_count) })));
     if (consensus) return mapped(consensus, 'high');
   }
@@ -91,40 +118,64 @@ export async function inferCaptureCategory(input: InferenceInput): Promise<Categ
   const prefixes = [...new Set(items.flatMap((item) => /^\d{1,17}$/.test(item.ikpu ?? '')
     ? Array.from({ length: item.ikpu!.length }, (_, index) => item.ikpu!.slice(0, index + 1)) : []))];
   if (prefixes.length) {
-    const result = await sql<{ prefix: string; standard_key: string | null }>`SELECT prefix, standard_key
+    const result = await sql<{ prefix: string; standard_key: string | null; source: string }>`SELECT prefix, standard_key, source
       FROM ikpu_category_map WHERE prefix IN (${sql.join(prefixes)})`.execute(db);
-    const mappings = result.rows.map((row) => ({ prefix: row.prefix, standardKey: row.standard_key }));
+    const mappings: IkpuMapping[] = result.rows.map((row) => ({ prefix: row.prefix, standardKey: row.standard_key, source: row.source }));
     if (input.classifyIkpu) {
+      let classified = 0;
       for (const item of items) {
+        if (classified >= MAX_IKPU_CLASSIFICATIONS) break;
         if (!/^\d{5,17}$/.test(item.ikpu ?? '') || mappings.some((mapping) => item.ikpu!.startsWith(mapping.prefix))) continue;
         const prefix = item.ikpu!.slice(0, 5);
-        // Claim once before calling the model: concurrent scans cannot all classify a new group.
-        const claimed = await sql`INSERT IGNORE INTO ikpu_category_map (prefix, standard_key, source, updated_at)
-          VALUES (${prefix}, NULL, 'pending', ${Date.now()})`.execute(db);
-        if (Number(claimed.numAffectedRows) !== 1) continue;
-        let key: string | null = null;
-        try { key = await input.classifyIkpu(prefix); } catch { /* Uncertain stays unclassified. */ }
+        if (!await claimIkpuPrefix(db, prefix)) continue;
+        classified++;
+        let key: string | null;
+        try { key = await input.classifyIkpu(prefix); }
+        catch {
+          // No answer is not "uncertain": release the claim so a later scan can try again.
+          await sql`DELETE FROM ikpu_category_map WHERE prefix = ${prefix} AND source = 'pending'`.execute(db).catch(() => undefined);
+          continue;
+        }
+        // null is the model's explicit "uncertain"; remember it so the group is not asked again.
         key = key && isStandardCategoryKey(key) ? key : null;
         await sql`UPDATE ikpu_category_map SET standard_key = ${key}, source = 'ai', updated_at = ${Date.now()}
           WHERE prefix = ${prefix}`.execute(db);
-        mappings.push({ prefix, standardKey: key });
+        mappings.push({ prefix, standardKey: key, source: 'ai' });
       }
     }
-    const key = ikpuWeightedCategory(items, mappings);
-    if (key) return mapped(key, 'medium');
+    const found = ikpuCategory(items, mappings);
+    // Seeded groups are reliable enough for "medium"; a model-classified group is only a "low" suggestion.
+    if (found) return mapped(found.standardKey, found.viaAi ? 'low' : 'medium');
   }
   let aiKey: string | null = null;
   try { aiKey = await input.aiGuess?.() ?? null; } catch { return unresolved(); }
   if (!aiKey || !isStandardCategoryKey(aiKey)) return unresolved();
-  if (tin) await recordAiGuess(tin, aiKey);
+  if (tin && input.trustedTin) {
+    try { await recordAiGuess(tin, aiKey); } catch { logger.warn('capture.directory_write_failed'); }
+  }
   // A model guess is only ever a highlighted suggestion (confidence low), never a trusted default.
   const suggestion = categoryForStandardKey(aiKey, input.categories);
   return { categoryId: suggestion?.id ?? null, confidence: 'low', standardKey: aiKey };
 }
 
+/** Claim once before the model call so concurrent scans cannot all classify a new group.
+ * A pending claim abandoned by a crashed process is taken over after ten minutes. */
+async function claimIkpuPrefix(db: ReturnType<typeof database>, prefix: string): Promise<boolean> {
+  const now = Date.now();
+  const inserted = await sql`INSERT IGNORE INTO ikpu_category_map (prefix, standard_key, source, updated_at)
+    VALUES (${prefix}, NULL, 'pending', ${now})`.execute(db);
+  if (Number(inserted.numAffectedRows) === 1) return true;
+  const takeover = await sql`UPDATE ikpu_category_map SET updated_at = ${now}
+    WHERE prefix = ${prefix} AND source = 'pending' AND updated_at < ${now - STALE_PENDING_MS}`.execute(db);
+  return Number(takeover.numAffectedRows) === 1;
+}
+
 async function recordAiGuess(tin: string, key: string): Promise<void> {
   await database().transaction().execute(async (db) => {
-    await sql`INSERT IGNORE INTO merchants (tin, first_seen, last_seen) VALUES (${tin}, ${Date.now()}, ${Date.now()})`.execute(db);
+    // One statement that takes the exclusive row lock straight away. INSERT IGNORE would take a
+    // shared lock on an existing row and the following FOR UPDATE would then deadlock two scans.
+    await sql`INSERT INTO merchants (tin, first_seen, last_seen) VALUES (${tin}, ${Date.now()}, ${Date.now()})
+      ON DUPLICATE KEY UPDATE tin = tin`.execute(db);
     await sql`SELECT tin FROM merchants WHERE tin = ${tin} FOR UPDATE`.execute(db);
     const existing = await sql`SELECT tin FROM merchant_category_votes WHERE tin = ${tin} AND ai_weight > 0 LIMIT 1`.execute(db);
     if (existing.rows.length) return;
