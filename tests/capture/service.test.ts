@@ -4,7 +4,7 @@ import { DEFAULT_CATEGORIES, defaultCategoryId } from '../../src/domain/defaultC
 const mocks = vi.hoisted(() => ({
   env: { CAPTURE_COUNT_SOLIQ: false, SOLIQ_OFD_SIGNING_KEY: 'synthetic-key', SOLIQ_AMOUNT_DIVISOR: 1 } as Record<string, unknown>,
   rows: { categories: [] as any[], cards: [] as any[], transactions: [] as any[] },
-  infer: vi.fn(), issue: vi.fn(), guess: vi.fn(), duplicate: vi.fn(), cached: vi.fn(), cache: vi.fn(),
+  infer: vi.fn(), issue: vi.fn(), allowance: vi.fn(), guess: vi.fn(), duplicate: vi.fn(), cached: vi.fn(), cache: vi.fn(),
   usage: vi.fn(), reserve: vi.fn(), refund: vi.fn(), premium: vi.fn(),
   transcribe: vi.fn(), parse: vi.fn(), photo: vi.fn(), profile: vi.fn(), warn: vi.fn(),
 }));
@@ -24,7 +24,7 @@ vi.mock('../../src/capture/categories', async (original) => ({
 vi.mock('../../src/capture/repository', () => ({
   findReceiptDuplicate: mocks.duplicate, getCachedReceipt: mocks.cached, cacheReceipt: mocks.cache,
   getCaptureMerchantNames: async (tins: string[]) => tins.map((tin) => `merchant-${tin}`),
-  recordIssuedMerchant: mocks.issue, getCaptureUsage: mocks.usage, reserveCaptureUsage: mocks.reserve, refundCaptureUsage: mocks.refund,
+  recordIssuedMerchant: mocks.issue, takeCaptureRefund: mocks.allowance, getCaptureUsage: mocks.usage, reserveCaptureUsage: mocks.reserve, refundCaptureUsage: mocks.refund,
 }));
 vi.mock('../../src/services/entitlement.service', () => ({ getIsPremium: mocks.premium }));
 vi.mock('../../src/capture/models', () => ({
@@ -56,7 +56,7 @@ beforeEach(() => {
   mocks.rows.categories = categories; mocks.rows.cards = []; mocks.rows.transactions = [];
   mocks.profile.mockResolvedValue({ language: 'ru', timezone: 'Asia/Tashkent' });
   mocks.duplicate.mockResolvedValue(undefined);
-  mocks.issue.mockResolvedValue(undefined);
+  mocks.issue.mockResolvedValue(undefined); mocks.allowance.mockResolvedValue(true);
   mocks.cached.mockResolvedValue(undefined); mocks.cache.mockResolvedValue(undefined);
   mocks.usage.mockResolvedValue(1); mocks.reserve.mockResolvedValue(true); mocks.refund.mockResolvedValue(undefined);
   mocks.premium.mockResolvedValue(false);
@@ -251,6 +251,26 @@ describe('voice and photo quota', () => {
     mocks.transcribe.mockResolvedValue('tomorrow is sunny'); mocks.parse.mockResolvedValue([]);
     expect((await captureVoice('user', Buffer.from('x'), 'audio/mp4')).drafts).toEqual([]);
     expect(mocks.refund).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops refunding empty results after the daily allowance and for a photo that is not a receipt', async () => {
+    mocks.allowance.mockResolvedValue(false);
+    mocks.transcribe.mockResolvedValue(''); mocks.parse.mockResolvedValue([]);
+    expect((await captureVoice('user', Buffer.from('x'), 'audio/mp4')).quota.used).toBe(2);
+    expect(mocks.refund).not.toHaveBeenCalled();
+    mocks.allowance.mockResolvedValue(true);
+    const { AppError } = await import('../../src/utils/AppError');
+    mocks.photo.mockRejectedValue(new AppError(422, 'not_a_receipt'));
+    await expect(capturePhoto('user', Buffer.from('x'))).rejects.toMatchObject({ code: 'not_a_receipt' });
+    expect(mocks.refund).toHaveBeenCalledOnce();
+  });
+
+  it('does not charge a client that disconnected before the answer', async () => {
+    mocks.transcribe.mockResolvedValue('x'); mocks.parse.mockResolvedValue([{}]);
+    const controller = new AbortController();
+    mocks.parse.mockImplementation(async () => { controller.abort(); return [{}]; });
+    expect((await captureVoice('user', Buffer.from('x'), 'audio/mp4', undefined, undefined, controller.signal)).quota.used).toBe(1);
+    expect(mocks.refund).toHaveBeenCalledOnce();
   });
 
   it('rejects at the limit before any model call and refunds failed model work exactly once', async () => {

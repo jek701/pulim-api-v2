@@ -41,6 +41,16 @@ const voiceFields = z.object({ timezone: captureTimezone.optional(), language: z
 const photoFields = voiceFields.omit({ language: true });
 const soliqBody = z.object({ url: z.string().max(2048), timezone: captureTimezone.optional() }).strict();
 
+/**
+ * Aborts when the client goes away before the response was written, so the quota slot it paid
+ * for is given back (it never saw the answer).
+ */
+const disconnected = (res: import('express').Response): AbortSignal => {
+  const controller = new AbortController();
+  res.once('close', () => { if (!res.writableFinished) controller.abort(); });
+  return controller.signal;
+};
+
 router.get('/quota', requires('any'), limiter(60), asyncHandler(async (req, res) => {
   res.json(await captureQuota(req.uid));
 }));
@@ -48,18 +58,18 @@ router.post('/voice', requires('voice'), limiter(20), asyncHandler(async (req, r
   const upload = await readCaptureUpload(req, 'audio');
   const fields = input(voiceFields, upload.fields);
   validateCaptureMedia(upload.buffer, upload.mime, 'audio');
-  res.json(await captureVoice(req.uid, upload.buffer, upload.mime, fields.timezone, fields.language));
+  res.json(await captureVoice(req.uid, upload.buffer, upload.mime, fields.timezone, fields.language, disconnected(res)));
 }));
 router.post('/receipt/photo', requires('receipt'), limiter(20), asyncHandler(async (req, res) => {
   const upload = await readCaptureUpload(req, 'image');
   const fields = input(photoFields, upload.fields);
   validateCaptureMedia(upload.buffer, upload.mime, 'image');
-  res.json(await capturePhoto(req.uid, upload.buffer, fields.timezone));
+  res.json(await capturePhoto(req.uid, upload.buffer, fields.timezone, disconnected(res)));
 }));
 // Soft per-user limit on the unofficial Soliq endpoint, tighter than the recognition calls.
 router.post('/receipt/soliq', requires('receipt'), limiter(10), asyncHandler(async (req, res) => {
   const body = input(soliqBody, req.body);
-  res.json(await captureSoliq(req.uid, body.url, body.timezone));
+  res.json(await captureSoliq(req.uid, body.url, body.timezone, disconnected(res)));
 }));
 
 /**

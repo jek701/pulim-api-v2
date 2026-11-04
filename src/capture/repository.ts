@@ -23,19 +23,54 @@ export async function getCaptureUsage(uid: string, month: string): Promise<numbe
   return Number(result.rows[0]?.count ?? 0);
 }
 
+const isDeadlock = (error: unknown): boolean => {
+  const { errno, code } = (error ?? {}) as { errno?: unknown; code?: unknown };
+  return errno === 1213 || code === 'ER_LOCK_DEADLOCK';
+};
+/** Two or three concurrent first-time inserts of one key can still deadlock in InnoDB: just retry. */
+async function retryOnDeadlock<T>(work: () => Promise<T>, attempts = 3): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try { return await work(); }
+    catch (error) { if (attempt >= attempts || !isDeadlock(error)) throw error; }
+  }
+}
+
+/**
+ * Take one slot of a counter if it is below `limit`. The row lock is taken EXCLUSIVELY by the first
+ * statement (INSERT ... ON DUPLICATE KEY UPDATE with a no-op update), never as the shared lock an
+ * INSERT IGNORE takes on an existing row, so two double-tap requests cannot deadlock by both
+ * upgrading shared -> exclusive. The conditional UPDATE then decides; its matched-row count is
+ * unambiguous (the mysql2 driver reports matched, not changed, rows).
+ */
 export async function reserveCaptureUsage(uid: string, month: string, limit: number): Promise<boolean> {
   if (!Number.isSafeInteger(limit) || limit <= 0) return false;
-  return database().transaction().execute(async (db) => {
-    await sql`INSERT IGNORE INTO capture_usage (uid, month, count) VALUES (${uid}, ${month}, 0)`.execute(db);
+  return retryOnDeadlock(() => database().transaction().execute(async (db) => {
+    await sql`INSERT INTO capture_usage (uid, month, count) VALUES (${uid}, ${month}, 0)
+      ON DUPLICATE KEY UPDATE count = count`.execute(db);
     const result = await sql`UPDATE capture_usage SET count = count + 1
       WHERE uid = ${uid} AND month = ${month} AND count < ${limit}`.execute(db);
     return Number(result.numAffectedRows) === 1;
-  });
+  }));
 }
 
+/** `count` is INT UNSIGNED: never GREATEST(count - 1, 0), which raises below zero. */
 export async function refundCaptureUsage(uid: string, month: string): Promise<void> {
-  await sql`UPDATE capture_usage SET count = GREATEST(count - 1, 0)
+  await sql`UPDATE capture_usage SET count = IF(count > 0, count - 1, 0)
     WHERE uid = ${uid} AND month = ${month}`.execute(database());
+}
+
+/**
+ * Refunds for results the user caused (nothing recognised, not a receipt) are limited per day, or a
+ * free user could probe the recognition models indefinitely. True when this refund is allowed.
+ */
+export async function takeCaptureRefund(uid: string, day: string, cap: number): Promise<boolean> {
+  return retryOnDeadlock(() => database().transaction().execute(async (db) => {
+    await sql`INSERT INTO capture_refunds (uid, day, count) VALUES (${uid}, ${day}, 0)
+      ON DUPLICATE KEY UPDATE count = count`.execute(db);
+    const result = await sql`UPDATE capture_refunds SET count = count + 1
+      WHERE uid = ${uid} AND day = ${day} AND count < ${cap}`.execute(db);
+    return Number(result.numAffectedRows) === 1;
+  }));
 }
 
 export async function findReceiptDuplicate(uid: string, receiptKey: string): Promise<{ date: string; transactionId: string } | undefined> {

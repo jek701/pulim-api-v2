@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-const mocks = vi.hoisted(() => ({ premium: vi.fn(), get: vi.fn(), reserve: vi.fn(), refund: vi.fn(), warn: vi.fn() }));
+const mocks = vi.hoisted(() => ({ premium: vi.fn(), get: vi.fn(), reserve: vi.fn(), refund: vi.fn(), allowance: vi.fn(), warn: vi.fn() }));
 vi.mock('../../src/services/entitlement.service', () => ({ getIsPremium: mocks.premium }));
-vi.mock('../../src/capture/repository', () => ({ getCaptureUsage: mocks.get, reserveCaptureUsage: mocks.reserve, refundCaptureUsage: mocks.refund }));
+vi.mock('../../src/capture/repository', () => ({ getCaptureUsage: mocks.get, reserveCaptureUsage: mocks.reserve, refundCaptureUsage: mocks.refund, takeCaptureRefund: mocks.allowance }));
 vi.mock('../../src/utils/logger', () => ({ logger: { warn: mocks.warn } }));
-import { captureQuota, withCaptureQuota } from '../../src/capture/quota';
+import { captureQuota, withCaptureQuota, CAPTURE_DAILY_REFUND_CAP } from '../../src/capture/quota';
+import { AppError } from '../../src/utils/AppError';
 import { captureMonth, dateInTimezone } from '../../src/capture/time';
-beforeEach(() => { vi.clearAllMocks(); mocks.premium.mockResolvedValue(false); mocks.get.mockResolvedValue(4); mocks.reserve.mockResolvedValue(true); mocks.refund.mockResolvedValue(undefined); });
+beforeEach(() => { vi.clearAllMocks(); mocks.premium.mockResolvedValue(false); mocks.get.mockResolvedValue(4); mocks.reserve.mockResolvedValue(true); mocks.refund.mockResolvedValue(undefined); mocks.allowance.mockResolvedValue(true); });
 describe('capture monthly quota', () => {
   it('rolls months and years exactly at midnight Tashkent, independent of server timezone', () => {
     expect(captureMonth(new Date('2026-11-30T18:59:59.999Z'))).toEqual({ month: '2026-11', resetsAt: '2026-11-30T19:00:00.000Z' });
@@ -34,5 +35,52 @@ describe('capture monthly quota', () => {
     await expect(withCaptureQuota('user', true, async () => { throw new Error('model failure'); })).rejects.toThrow('model failure');
     expect(mocks.refund).toHaveBeenCalledWith('user', expect.stringMatching(/^\d{4}-\d{2}$/));
     expect(mocks.warn).toHaveBeenCalledWith('capture.quota_refund_failed');
+  });
+  describe('review fixes: refund limits and disconnects', () => {
+    const empty = async ({ release }: { release: () => void }) => { release(); return { drafts: [] }; };
+    it('refunds an empty result within the daily allowance, then counts the call', async () => {
+      expect((await withCaptureQuota('user', true, empty)).quota.used).toBe(4);
+      expect(mocks.allowance).toHaveBeenCalledWith('user', expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/), CAPTURE_DAILY_REFUND_CAP);
+      expect(CAPTURE_DAILY_REFUND_CAP).toBe(5);
+      expect(mocks.refund).toHaveBeenCalledOnce();
+      mocks.allowance.mockResolvedValue(false); mocks.refund.mockClear();
+      expect((await withCaptureQuota('user', true, empty)).quota.used).toBe(5);
+      expect(mocks.refund).not.toHaveBeenCalled();
+    });
+    it('treats not_a_receipt like an empty result: refunded only within the allowance', async () => {
+      const notReceipt = async () => { throw new AppError(422, 'not_a_receipt'); };
+      await expect(withCaptureQuota('user', true, notReceipt)).rejects.toMatchObject({ code: 'not_a_receipt' });
+      expect(mocks.refund).toHaveBeenCalledOnce();
+      mocks.allowance.mockResolvedValue(false); mocks.refund.mockClear();
+      await expect(withCaptureQuota('user', true, notReceipt)).rejects.toMatchObject({ code: 'not_a_receipt' });
+      expect(mocks.refund).not.toHaveBeenCalled();
+    });
+    it('always refunds provider failures, without touching the allowance', async () => {
+      mocks.allowance.mockResolvedValue(false);
+      await expect(withCaptureQuota('user', true, async () => { throw new Error('provider'); })).rejects.toThrow('provider');
+      expect(mocks.refund).toHaveBeenCalledOnce();
+      expect(mocks.allowance).not.toHaveBeenCalled();
+    });
+    it('does not charge, and does not spend the allowance, when the client left before the answer', async () => {
+      mocks.allowance.mockResolvedValue(false);
+      const controller = new AbortController();
+      const result = await withCaptureQuota('user', true, async () => { controller.abort(); return { drafts: [{}] }; }, { signal: controller.signal });
+      expect(result.quota.used).toBe(4);
+      expect(mocks.refund).toHaveBeenCalledOnce();
+      expect(mocks.allowance).not.toHaveBeenCalled();
+      mocks.refund.mockClear();
+      expect((await withCaptureQuota('user', true, async () => ({ drafts: [{}] }), { signal: new AbortController().signal })).quota.used).toBe(5);
+      expect(mocks.refund).not.toHaveBeenCalled();
+    });
+    it('treats a failing allowance lookup as "no refund" rather than an error', async () => {
+      mocks.allowance.mockRejectedValue(new Error('db down'));
+      expect((await withCaptureQuota('user', true, empty)).quota.used).toBe(5);
+      expect(mocks.warn).toHaveBeenCalledWith('capture.quota_refund_failed');
+    });
+    it('never refunds an uncounted Soliq call', async () => {
+      await withCaptureQuota('user', false, empty);
+      expect(mocks.refund).not.toHaveBeenCalled();
+      expect(mocks.allowance).not.toHaveBeenCalled();
+    });
   });
 });

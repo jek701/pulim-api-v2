@@ -85,7 +85,7 @@ describe('capture HTTP contract', () => {
       body: form({ audio: audio(), language: 'ru', timezone: 'Asia/Tashkent' }) });
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ transcript: 'кофе 25 минг', drafts: [], quota });
-    expect(mocks.voice).toHaveBeenCalledWith('user-1', expect.any(Buffer), 'audio/mp4', 'Asia/Tashkent', 'ru');
+    expect(mocks.voice).toHaveBeenCalledWith('user-1', expect.any(Buffer), 'audio/mp4', 'Asia/Tashkent', 'ru', expect.any(AbortSignal));
   });
 
   it.each([
@@ -112,7 +112,7 @@ describe('capture HTTP contract', () => {
   it('accepts a bounded JPEG receipt photo and rejects other images and oversize dimensions', async () => {
     const image = (bytes: Buffer, type = 'image/jpeg') => form({ image: new Blob([new Uint8Array(bytes)], { type }), timezone: 'Asia/Tashkent' });
     expect((await fetch(`${base}/v1/capture/receipt/photo`, { method: 'POST', body: image(syntheticJpeg(1500, 2000)) })).status).toBe(200);
-    expect(mocks.photo).toHaveBeenCalledWith('user-1', expect.any(Buffer), 'Asia/Tashkent');
+    expect(mocks.photo).toHaveBeenCalledWith('user-1', expect.any(Buffer), 'Asia/Tashkent', expect.any(AbortSignal));
     for (const bad of [image(syntheticJpeg(1500, 2001)), image(syntheticJpeg(100, 100), 'image/png'), image(Buffer.from('nope'))]) {
       expect((await fetch(`${base}/v1/capture/receipt/photo`, { method: 'POST', body: bad })).status).toBe(400);
     }
@@ -122,10 +122,35 @@ describe('capture HTTP contract', () => {
   it('POST /receipt/soliq validates the body and passes url and timezone', async () => {
     const url = 'https://ofd.soliq.uz/epi?t=EPTEST&r=1&c=20261103123000&s=1';
     expect((await json('/receipt/soliq', { url, timezone: 'Asia/Tashkent' })).status).toBe(200);
-    expect(mocks.soliq).toHaveBeenCalledWith('user-1', url, 'Asia/Tashkent');
+    expect(mocks.soliq).toHaveBeenCalledWith('user-1', url, 'Asia/Tashkent', expect.any(AbortSignal));
     for (const body of [{}, { url: 5 }, { url, extra: 1 }, { url, timezone: 'bad' }]) {
       expect((await json('/receipt/soliq', body)).status).toBe(400);
     }
+  });
+
+  it('aborts the signal handed to the service when the client leaves before the answer', async () => {
+    let signal!: AbortSignal;
+    let release!: () => void;
+    mocks.voice.mockImplementation((...args: any[]) => {
+      signal = args[5];
+      return new Promise((resolve) => { release = () => resolve({ transcript: '', drafts: [], quota }); });
+    });
+    const client = new AbortController();
+    const pending = fetch(`${base}/v1/capture/voice`, { method: 'POST', body: form({ audio: audio() }), signal: client.signal }).catch(() => undefined);
+    await vi.waitFor(() => expect(mocks.voice).toHaveBeenCalled());
+    expect(signal.aborted).toBe(false);
+    client.abort();
+    await pending;
+    await vi.waitFor(() => expect(signal.aborted).toBe(true));
+    release();
+  });
+
+  it('keeps the signal quiet for a client that receives its answer', async () => {
+    let signal!: AbortSignal;
+    mocks.voice.mockImplementation(async (...args: any[]) => { signal = args[5]; return { transcript: '', drafts: [], quota }; });
+    expect((await fetch(`${base}/v1/capture/voice`, { method: 'POST', body: form({ audio: audio() }) })).status).toBe(200);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(signal.aborted).toBe(false);
   });
 
   it('402 carries code and quota in the contract shape, plus the usual error envelope', async () => {

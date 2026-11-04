@@ -43,7 +43,7 @@ export async function captureContext(uid: string, timezone?: string): Promise<Ca
   };
 }
 
-export async function captureVoice(uid: string, buffer: Buffer, mime: string, timezone?: string, language?: 'uz' | 'ru' | 'en') {
+export async function captureVoice(uid: string, buffer: Buffer, mime: string, timezone?: string, language?: 'uz' | 'ru' | 'en', signal?: AbortSignal) {
   return withCaptureQuota(uid, true, async ({ release }) => {
     const context = await captureContext(uid, timezone);
     const transcript = await transcribeCapture(uid, buffer, mime, context, language);
@@ -51,7 +51,7 @@ export async function captureVoice(uid: string, buffer: Buffer, mime: string, ti
     // Silence or unrelated speech is not a recognition the user should pay a free-tier slot for.
     if (!drafts.length) release();
     return { transcript, drafts };
-  });
+  }, { signal });
 }
 
 const RECEIPT_WORD = { ru: 'Чек', uz: 'Chek', en: 'Receipt' } as const;
@@ -123,7 +123,7 @@ export async function receiptDrafts(uid: string, receipt: CaptureReceipt, contex
   return { receipt, drafts: [draft], ...(duplicateOf ? { duplicateOf } : {}) };
 }
 
-export async function captureSoliq(uid: string, url: string, timezone?: string) {
+export async function captureSoliq(uid: string, url: string, timezone?: string, signal?: AbortSignal) {
   parseSoliqUrl(url); // A malformed URL is rejected before any quota or network work.
   return withCaptureQuota(uid, env.CAPTURE_COUNT_SOLIQ, async () => {
     const client = new SoliqClient({
@@ -141,13 +141,13 @@ export async function captureSoliq(uid: string, url: string, timezone?: string) 
     const context = await captureContext(uid, timezone);
     // Σ(price - discount) must match the total; if not, say so instead of presenting a clean draft.
     return receiptDrafts(uid, receipt, context, { amountLow: !receiptItemsAgree(receipt) });
-  });
+  }, { signal });
 }
 
-export async function capturePhoto(uid: string, buffer: Buffer, timezone?: string) {
+export async function capturePhoto(uid: string, buffer: Buffer, timezone?: string, signal?: AbortSignal) {
   return withCaptureQuota(uid, true, async () => {
     const context = await captureContext(uid, timezone);
     const extracted = await extractCapturePhoto(uid, buffer, context);
     return receiptDrafts(uid, extracted.receipt, context, extracted);
-  });
+  }, { signal });
 }

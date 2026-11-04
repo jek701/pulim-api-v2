@@ -44,6 +44,11 @@ export async function migrateCapture(db: Kysely<any>): Promise<void> {
     uid VARBINARY(512) NOT NULL, month CHAR(7) CHARACTER SET ascii NOT NULL,
     count INT UNSIGNED NOT NULL DEFAULT 0, PRIMARY KEY (uid, month)
   ) ENGINE=InnoDB`.execute(db);
+  // Per-user, per-day allowance of refunded recognitions that came back empty (see takeCaptureRefund).
+  await sql`CREATE TABLE IF NOT EXISTS capture_refunds (
+    uid VARBINARY(512) NOT NULL, day CHAR(10) CHARACTER SET ascii NOT NULL,
+    count INT UNSIGNED NOT NULL DEFAULT 0, PRIMARY KEY (uid, day)
+  ) ENGINE=InnoDB`.execute(db);
   await sql`CREATE TABLE IF NOT EXISTS capture_receipt_cache (
     receipt_key CHAR(64) CHARACTER SET ascii COLLATE ascii_bin PRIMARY KEY,
     receipt_json JSON NOT NULL, expires_at BIGINT NOT NULL,

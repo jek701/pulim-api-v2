@@ -30,7 +30,7 @@ vi.mock('../../src/db/documents', () => ({ documentKey: (table: string, id: stri
 import { database } from '../../src/db/database';
 import { migrateCapture } from '../../src/capture/migration';
 import { IKPU_SEEDS } from '../../src/capture/seeds';
-import { cacheReceipt, findReceiptDuplicate, getIssuedMerchant, receiptSiblings, recordIssuedMerchant, getCaptureUsage, refundCaptureUsage, reserveCaptureUsage, safeCachedReceipt } from '../../src/capture/repository';
+import { cacheReceipt, findReceiptDuplicate, takeCaptureRefund, getIssuedMerchant, receiptSiblings, recordIssuedMerchant, getCaptureUsage, refundCaptureUsage, reserveCaptureUsage, safeCachedReceipt } from '../../src/capture/repository';
 import { categoryForStandardKey, consensusCategory, inferCaptureCategory, ikpuWeightedCategory, isStandardCategoryKey, learnCaptureTransaction, learningWeight, standardCategoryKey, voterHash } from '../../src/capture/categories';
 import { renderMerchantSummary, summaryWeek, verifyMerchant } from '../../src/capture/owner';
 
@@ -295,15 +295,45 @@ describe('issued merchants and receipt siblings', () => {
 });
 
 describe('quota, duplicates, safe cache, additive migration', () => {
-  it('reserves with a conditional atomic update and refunds without going below zero', async () => {
+  it('reserves with an exclusive-lock upsert then a conditional update, and refunds without going below zero', async () => {
     store.handler = (query) => ({ rows: query.startsWith('SELECT count') ? [{ count: '4' }] : [], numAffectedRows: 1n });
     expect(await getCaptureUsage('u', '2026-11')).toBe(4);
     expect(await reserveCaptureUsage('u', '2026-11', 5)).toBe(true);
-    expect(store.queries.find((query) => query.sql.startsWith('UPDATE capture_usage'))?.sql).toContain('AND count < ?');
-    store.handler = () => ({ rows: [], numAffectedRows: 0n });
+    const sqls = store.queries.map((query) => query.sql);
+    // No INSERT IGNORE: it takes a shared lock on an existing row and the UPDATE then deadlocks two double taps.
+    expect(sqls.some((query) => query.includes('INSERT IGNORE INTO capture_usage'))).toBe(false);
+    const upsert = sqls.findIndex((query) => query.startsWith('INSERT INTO capture_usage') && query.includes('ON DUPLICATE KEY UPDATE count = count'));
+    const update = sqls.findIndex((query) => query.startsWith('UPDATE capture_usage'));
+    expect(upsert).toBeGreaterThanOrEqual(0);
+    expect(update).toBeGreaterThan(upsert);
+    expect(sqls[update]).toContain('AND count < ?');
+    store.handler = (query) => ({ rows: [], numAffectedRows: query.startsWith('UPDATE capture_usage') ? 0n : 1n });
     expect(await reserveCaptureUsage('u', '2026-11', 5)).toBe(false);
     await refundCaptureUsage('u', '2026-11');
-    expect(store.queries.at(-1)?.sql).toContain('GREATEST(count - 1, 0)');
+    expect(store.queries.at(-1)?.sql).toContain('IF(count > 0, count - 1, 0)');
+    expect(store.queries.at(-1)?.sql).not.toContain('GREATEST');
+  });
+  it('retries a reservation that was chosen as the deadlock victim, but not other errors', async () => {
+    let attempts = 0;
+    store.handler = (query) => {
+      if (query.startsWith('INSERT INTO capture_usage') && ++attempts < 3) throw Object.assign(new Error('Deadlock found'), { errno: 1213 });
+      return { rows: [], numAffectedRows: 1n };
+    };
+    expect(await reserveCaptureUsage('u', '2026-11', 5)).toBe(true);
+    expect(attempts).toBe(3);
+    attempts = -10;
+    await expect(reserveCaptureUsage('u', '2026-11', 5)).rejects.toThrow('Deadlock');
+    store.handler = () => { throw new Error('connection lost'); };
+    store.queries = [];
+    await expect(reserveCaptureUsage('u', '2026-11', 5)).rejects.toThrow('connection lost');
+    expect(store.queries.filter((query) => query.sql.startsWith('INSERT INTO capture_usage'))).toHaveLength(1);
+  });
+  it('takes a daily refund allowance the same way', async () => {
+    store.handler = (query) => ({ rows: [], numAffectedRows: query.startsWith('UPDATE capture_refunds') ? 1n : 1n });
+    expect(await takeCaptureRefund('u', '2026-11-04', 5)).toBe(true);
+    expect(store.queries.find((query) => query.sql.startsWith('UPDATE capture_refunds'))!.parameters).toEqual(['u', '2026-11-04', 5]);
+    store.handler = (query) => ({ rows: [], numAffectedRows: query.startsWith('UPDATE capture_refunds') ? 0n : 1n });
+    expect(await takeCaptureRefund('u', '2026-11-04', 5)).toBe(false);
   });
   it('scopes receipt lookup to the current user and returns the original date/id', async () => {
     store.handler = (query) => ({ rows: query.includes('FROM transactions') ? [{ id: Buffer.from('saved-id'), data_json: JSON.stringify({ date: Date.UTC(2026, 10, 1) }) }] : [{ version: '005_capture' }] });
@@ -332,7 +362,7 @@ describe('quota, duplicates, safe cache, additive migration', () => {
   });
   it('creates additive tables and a generated owner/receipt projection, and seeds valid defaults', async () => {
     await migrateCapture(database());
-    expect(store.queries.filter((query) => query.sql.startsWith('CREATE TABLE IF NOT EXISTS'))).toHaveLength(10);
+    expect(store.queries.filter((query) => query.sql.startsWith('CREATE TABLE IF NOT EXISTS'))).toHaveLength(11);
     const ddl = store.queries.map((query) => query.sql).join('\n');
     expect(ddl).toContain('GENERATED ALWAYS AS');
     expect(ddl).toContain(') VIRTUAL');
