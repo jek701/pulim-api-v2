@@ -76,8 +76,9 @@ describe('APNs sender', () => {
   it('pauses on provider authentication errors until a fresh JWT is generated', async () => {
     const { sender, send, error, advance } = setup();
     send.mockResolvedValueOnce({ status: 403, reason: 'InvalidProviderToken' });
-    expect(await sender.send(device, payload)).toEqual({ status: 403, reason: 'InvalidProviderToken' });
-    expect(await sender.send(device, payload)).toEqual({ status: 503, reason: 'ProviderTokenCircuitOpen' });
+    const retryAt = 1_800_000_000_000 + 50 * 60_000;
+    expect(await sender.send(device, payload)).toEqual({ status: 403, reason: 'InvalidProviderToken', retryAt });
+    expect(await sender.send(device, payload)).toEqual({ status: 503, reason: 'ProviderTokenCircuitOpen', retryAt });
     expect(send).toHaveBeenCalledOnce();
     expect(error).toHaveBeenCalledOnce();
     expect(JSON.stringify(error.mock.calls)).not.toContain(device.token);
@@ -88,13 +89,17 @@ describe('APNs sender', () => {
   });
 
   it('contains key read/sign failures without logging credentials or thrown errors', async () => {
-    const { sender, loadKey, send, error } = setup();
+    const { sender, loadKey, send, error, advance } = setup();
     loadKey.mockRejectedValueOnce(new Error('secret-key-path-and-content'));
-    expect(await sender.send(device, payload)).toEqual({ status: 503, reason: 'ProviderCredentialsUnavailable' });
-    expect(await sender.send(device, payload)).toMatchObject({ status: 503, reason: 'ProviderTokenCircuitOpen' });
+    const retryAt = 1_800_000_000_000 + 50 * 60_000;
+    expect(await sender.send(device, payload)).toEqual({ status: 503, reason: 'ProviderCredentialsUnavailable', retryAt });
+    advance(10 * 60_000);
+    expect(await sender.send(device, payload)).toEqual({ status: 503, reason: 'ProviderTokenCircuitOpen', retryAt });
     expect(send).not.toHaveBeenCalled();
     expect(JSON.stringify(error.mock.calls)).not.toContain('secret-key-path-and-content');
     expect(JSON.stringify(error.mock.calls)).not.toContain(config.APNS_KEY_PATH);
+    advance(40 * 60_000);
+    expect(await sender.send(device, payload)).toMatchObject({ status: 200 });
   });
 
   it('returns retryable transport failures without opening the auth circuit', async () => {

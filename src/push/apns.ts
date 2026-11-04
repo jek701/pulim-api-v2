@@ -15,7 +15,13 @@ export interface ApnsDevice {
   environment: 'sandbox' | 'production';
   bundleId: string;
 }
-export interface ApnsResult { status: number; reason?: string; apnsId?: string }
+export interface ApnsResult {
+  status: number;
+  reason?: string;
+  apnsId?: string;
+  /** Epoch milliseconds: defer without consuming delivery attempts during a provider outage. */
+  retryAt?: number;
+}
 export interface ApnsOptions { expiration?: number; collapseId?: string }
 export interface ApnsConfig {
   PUSH_ENABLED?: boolean;
@@ -152,7 +158,7 @@ export function createApnsSender(config: ApnsConfig, dependencies: ApnsDependenc
 
   async function send(device: ApnsDevice, payload: object, options: ApnsOptions = {}): Promise<ApnsResult> {
     if (!configured()) return { status: 503, reason: 'ProviderNotConfigured' };
-    if (now() < circuitUntil) return { status: 503, reason: 'ProviderTokenCircuitOpen' };
+    if (now() < circuitUntil) return { status: 503, reason: 'ProviderTokenCircuitOpen', retryAt: circuitUntil };
     if (!/^(?:[a-fA-F0-9]{2})+$/.test(device.token)) return { status: 400, reason: 'BadDeviceToken' };
     if (!HOSTS[device.environment]) return { status: 400, reason: 'BadEnvironment' };
     if (options.collapseId && Buffer.byteLength(options.collapseId) > 64) return { status: 400, reason: 'BadCollapseId' };
@@ -168,7 +174,7 @@ export function createApnsSender(config: ApnsConfig, dependencies: ApnsDependenc
       circuitUntil = now() + TOKEN_TTL_MS;
       // Never include the key path, credential values, thrown error or device token in logs.
       log.error({ event: 'push.apns.credentials_unavailable' }, 'APNs signing unavailable; sending paused until credential refresh');
-      return { status: 503, reason: 'ProviderCredentialsUnavailable' };
+      return { status: 503, reason: 'ProviderCredentialsUnavailable', retryAt: circuitUntil };
     }
     let result: ApnsResult;
     try {
@@ -187,6 +193,7 @@ export function createApnsSender(config: ApnsConfig, dependencies: ApnsDependenc
     if (result.status === 403) {
       circuitUntil = (cached?.issuedAt ?? now()) + TOKEN_TTL_MS;
       log.error({ event: 'push.apns.auth_rejected', status: 403, reason: safeReason(result.reason) }, 'APNs authentication rejected; sending paused until provider token refresh');
+      return { ...result, retryAt: circuitUntil };
     }
     return result;
   }
