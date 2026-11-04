@@ -199,7 +199,12 @@ beforeEach(() => {
     },
   );
   mocks.defer.mockImplementation(async (_id, until: number) => {
-    Object.assign(mocks.job!, { status: 'pending', nextAttemptAt: until, deferredUntil: until });
+    Object.assign(mocks.job!, {
+      status: 'pending',
+      nextAttemptAt: until,
+      deferredUntil: until,
+      attempts: mocks.job!.attempts - 1,
+    });
   });
 });
 afterEach(() => {
@@ -325,6 +330,70 @@ describe('delivery channel integration with mocked I/O', () => {
     expect(mocks.reserve).toHaveBeenCalledOnce();
     expect(mocks.job!.deliveredDevices).toEqual(['a', 'b']);
     expect(mocks.job!.status).toBe('sent');
+  });
+  it('defers provider auth failures to retryAt without consuming delivery attempts', async () => {
+    mocks.job!.attempts = 8;
+    mocks.sendApns.mockImplementation(async () => ({
+      status: 403,
+      reason: 'InvalidProviderToken',
+      retryAt: Date.now() + 50 * 60_000,
+    }));
+    await runDelivery();
+    expect(mocks.defer).toHaveBeenCalledWith('job', NOW + 50 * 60_000);
+    expect(mocks.job).toMatchObject({ status: 'pending', attempts: 8 });
+    vi.setSystemTime(mocks.job!.nextAttemptAt);
+    await runDelivery();
+    expect(mocks.job).toMatchObject({ status: 'pending', attempts: 8 });
+    expect(mocks.defer).toHaveBeenCalledTimes(2);
+    expect(mocks.release).toHaveBeenCalledTimes(2);
+    expect(mocks.retry).not.toHaveBeenCalled();
+    expect(mocks.finish).not.toHaveBeenCalled();
+  });
+  it('falls back to Telegram on the current job when every native token is invalid', async () => {
+    mocks.profile.mockResolvedValue(profile(true));
+    mocks.devices.mockResolvedValue([device('a'), device('b')]);
+    mocks.sendApns
+      .mockResolvedValueOnce({ status: 410, reason: 'Unregistered' })
+      .mockResolvedValueOnce({ status: 400, reason: 'BadDeviceToken' });
+    await runDelivery();
+    expect(mocks.disableDevice).toHaveBeenCalledTimes(2);
+    expect(mocks.sendTelegram).toHaveBeenCalledWith(
+      '123',
+      'Rendered notification',
+      expect.any(Object),
+    );
+    expect(mocks.channel).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'job' }),
+      undefined,
+      42,
+    );
+    expect(mocks.job).toMatchObject({
+      status: 'sent',
+      safetyCounted: true,
+      telegramDelivered: true,
+    });
+    expect(mocks.retry).not.toHaveBeenCalled();
+    expect(mocks.release).not.toHaveBeenCalled();
+  });
+  it('keeps the safety count after one device succeeds and a sibling permanently fails', async () => {
+    mocks.devices.mockResolvedValue([device('a'), device('b')]);
+    mocks.sendApns
+      .mockResolvedValueOnce({ status: 200 })
+      .mockResolvedValueOnce({ status: 400, reason: 'BadPayload' });
+    await runDelivery();
+    expect(mocks.job).toMatchObject({
+      status: 'failed',
+      safetyCounted: true,
+      deliveredDevices: ['a'],
+    });
+    expect(mocks.finish).toHaveBeenCalledWith('job', 'failed', 'BadPayload');
+    expect(mocks.channel).toHaveBeenCalledOnce();
+    expect(mocks.channel.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.finish.mock.invocationCallOrder[0],
+    );
+    expect(mocks.release).not.toHaveBeenCalled();
+    expect(mocks.retry).not.toHaveBeenCalled();
+    expect(mocks.sent).not.toHaveBeenCalled();
   });
   it('disables invalid tokens without retrying a healthy sibling device', async () => {
     mocks.devices.mockResolvedValue([device('a'), device('b')]);

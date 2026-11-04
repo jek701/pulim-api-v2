@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   remove: vi.fn(),
   active: vi.fn(),
   patch: vi.fn(),
+  anonymous: false,
 }));
 vi.mock('../../src/push/devices.repository', () => ({
   registerDevice: mocks.register,
@@ -24,6 +25,9 @@ describe('authenticated push HTTP contract', () => {
     app.use(express.json());
     app.use((req, _res, next) => {
       req.uid = 'authenticated-user';
+      req.claims = {
+        firebase: { sign_in_provider: mocks.anonymous ? 'anonymous' : 'password' },
+      } as any;
       next();
     });
     app.use('/v1/push', pushRouter);
@@ -38,6 +42,7 @@ describe('authenticated push HTTP contract', () => {
   afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.anonymous = false;
     mocks.register.mockResolvedValue({ id: 'device-id', environment: 'sandbox', disabledAt: null });
     mocks.remove.mockResolvedValue(undefined);
     mocks.patch.mockImplementation(async (_uid, input) => ({ enabled: true, ...input }));
@@ -67,6 +72,17 @@ describe('authenticated push HTTP contract', () => {
       ...body,
       token: body.token.toLowerCase(),
     });
+  });
+  it('rejects authenticated anonymous guest registration before reaching storage', async () => {
+    mocks.anonymous = true;
+    const response = await fetch(`${base}/v1/push/devices`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: { code: 'AUTH_REQUIRED' } });
+    expect(mocks.register).not.toHaveBeenCalled();
   });
   it('rejects invalid registration before reaching storage', async () => {
     const response = await fetch(`${base}/v1/push/devices`, {
