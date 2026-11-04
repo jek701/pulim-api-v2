@@ -2,6 +2,7 @@ import { sql } from 'kysely';
 import { database, closeDatabase } from './database';
 import { tables, relationalTables } from './tables';
 import { projections } from './documents';
+import { migrateCapture } from '../capture/migration';
 
 /** Additive and restartable: DDL is not transactional on MySQL. Never drops data. */
 export async function migrateDatabase(): Promise<void> {
@@ -175,12 +176,14 @@ export async function migrateDatabase(): Promise<void> {
             .on(relationalTables.pushDevices)
             .columns(['uid', 'disabled_at'])
             .execute();
+        await migrateCapture(db);
         // Document tables added after 001 come from `tables` above; the marker records the rollout.
         for (const version of [
           '001_document_tables',
           '002_telegram_login_requests',
           '003_offline_sync',
           '004_push_devices',
+          '005_capture',
         ]) {
           await db
             .insertInto('schema_migrations')
