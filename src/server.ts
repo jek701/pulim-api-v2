@@ -9,6 +9,8 @@ import { setMyCommands, setWebhook } from './telegram/client';
 import { startFxQueue } from './telegram/fxQueue.service';
 import { drainTelegramUpdates, recoverTelegramUpdates } from './routes/telegramWebhook.routes';
 import { startNotificationLoops } from './notifications/loops';
+import { closeApns } from './push/apns';
+import { drainPushKicks } from './push/kick';
 
 async function main(): Promise<void> {
   await checkDatabase();
@@ -68,11 +70,13 @@ async function main(): Promise<void> {
         fxQueue?.stop(),
         notifications?.stop(),
         recoveryRun,
+        drainPushKicks(),
       ]);
       await drainTelegramUpdates();
       await closeDatabase();
       await Promise.all(admin.apps.map((app) => app?.delete()));
     } finally {
+      closeApns();
       clearTimeout(deadline);
     }
   }
@@ -81,6 +85,7 @@ async function main(): Promise<void> {
 }
 void main().catch(async (error) => {
   logger.error({ code: (error as { code?: string }).code }, 'pulim-api.startup_failed');
+  closeApns();
   await closeDatabase();
   process.exitCode = 1;
 });

@@ -4,6 +4,8 @@ import { initOfflineSync } from './db/syncIndex';
 import { startNotificationLoops, type NotificationLoops } from './notifications/loops';
 import { logger } from './utils/logger';
 import { runCommunicationDispatch } from './communications/repository';
+import { closeApns } from './push/apns';
+import { drainPushKicks } from './push/kick';
 
 async function main(): Promise<void> {
   if (!env.BACKGROUND_JOBS_ENABLED || env.MAINTENANCE_MODE) {
@@ -37,15 +39,19 @@ async function main(): Promise<void> {
     stopping = true;
     logger.info({ signal }, 'worker.stopping');
     if (timer) clearInterval(timer);
-    await loops?.stop();
-    await communicationRun;
-    await closeDatabase();
+    try {
+      await Promise.all([loops?.stop(), communicationRun, drainPushKicks()]);
+      await closeDatabase();
+    } finally {
+      closeApns();
+    }
   }
   process.once('SIGINT', () => void shutdown('SIGINT'));
   process.once('SIGTERM', () => void shutdown('SIGTERM'));
 }
 void main().catch(async (error) => {
   logger.error({ code: (error as { code?: string }).code }, 'worker.startup_failed');
+  closeApns();
   await closeDatabase();
   process.exitCode = 1;
 });
