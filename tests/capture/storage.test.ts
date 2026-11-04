@@ -75,12 +75,13 @@ describe('category evidence and privacy', () => {
     store.handler = (query) => ({ rows: query.includes('SELECT standard_key, weight_sum') ? [{ standard_key: 'food', weight_sum: 4, voter_count: 3 }] : [] });
     expect((await inferCaptureCategory({ uid: 'u', tin: '123456789', categories: [food] })).categoryId).toBe(food.id);
   });
-  it('uses IKPU before AI, and keeps AI low confidence and category null', async () => {
+  it('uses IKPU before AI; an AI guess is only a low-confidence suggestion of the user\'s own category', async () => {
     store.handler = (query) => ({ rows: query.includes('SELECT prefix') ? [{ prefix: '010', standard_key: 'food' }] : [] });
     const aiGuess = vi.fn(async () => 'transport');
     expect(await inferCaptureCategory({ uid: 'u', categories: [food, transport], items: [{ ikpu: '01012345', amount: 500 }], aiGuess })).toEqual({ categoryId: food.id, confidence: 'medium', standardKey: 'food' });
     expect(aiGuess).not.toHaveBeenCalled();
-    expect(await inferCaptureCategory({ uid: 'u', categories: [food], aiGuess: async () => 'food' })).toEqual({ categoryId: null, confidence: 'low', standardKey: 'food' });
+    expect(await inferCaptureCategory({ uid: 'u', categories: [food], aiGuess: async () => 'food' })).toEqual({ categoryId: food.id, confidence: 'low', standardKey: 'food' });
+    expect(await inferCaptureCategory({ uid: 'u', categories: [food], aiGuess: async () => 'transport' })).toEqual({ categoryId: null, confidence: 'low', standardKey: 'transport' });
     expect(await inferCaptureCategory({ uid: 'u', categories: [food], aiGuess: async () => 'not_a_category' })).toEqual({ categoryId: null, confidence: 'low', standardKey: null });
   });
   it('claims unknown IKPU classification before model use and stores only validated standard keys', async () => {
@@ -180,6 +181,8 @@ describe('quota, duplicates, safe cache, additive migration', () => {
     expect(store.queries.filter((query) => query.sql.startsWith('CREATE TABLE IF NOT EXISTS'))).toHaveLength(9);
     const ddl = store.queries.map((query) => query.sql).join('\n');
     expect(ddl).toContain('GENERATED ALWAYS AS');
+    expect(ddl).toContain(') VIRTUAL');
+    expect(ddl).not.toMatch(/STORED/);
     expect(ddl).toContain('user_id(512), capture_receipt_key');
     expect(ddl).not.toMatch(/DROP |TRUNCATE /);
     expect(new Set(IKPU_SEEDS.map((seed) => seed.prefix)).size).toBe(IKPU_SEEDS.length);
@@ -209,7 +212,7 @@ describe('owner review', () => {
     expect(summaryWeek(new Date('2026-11-02T05:00:00Z'))).toBe('2026-11-02');
     expect(summaryWeek(new Date('2026-11-02T04:59:00Z'))).toBeNull();
     expect(summaryWeek(new Date('2026-11-03T05:00:00Z'))).toBeNull();
-    expect(renderMerchantSummary([{ tin: '123456789', name: '<Store>', status: 'unknown', seen_count: 1, votes: [] }])).toContain('Store · 123456789');
+    expect(renderMerchantSummary([{ tin: '123456789', name: '<Store>', status: 'unknown', seen_count: 1, first_seen: 0, contested: false, votes: [] }])).toContain('Store · 123456789');
   });
 });
 

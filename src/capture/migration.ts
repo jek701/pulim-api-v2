@@ -54,12 +54,14 @@ export async function migrateCapture(db: Kysely<any>): Promise<void> {
     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'transactions' AND COLUMN_NAME = 'capture_receipt_key'`.execute(db);
   if (!columns.rows.length) {
     // Generated from JSON so old writers and buffered document writes cannot erase the projection.
+    // VIRTUAL keeps the ADD COLUMN instant (no table rebuild on a live table); the value lives in the
+    // index below. utf8mb4_bin (not ascii) so an odd stored value can never fail a transaction write.
     await sql`ALTER TABLE transactions ADD COLUMN capture_receipt_key VARCHAR(64)
-      CHARACTER SET ascii COLLATE ascii_bin GENERATED ALWAYS AS (
+      CHARACTER SET utf8mb4 COLLATE utf8mb4_bin GENERATED ALWAYS AS (
         CASE WHEN JSON_TYPE(JSON_EXTRACT(data_json, '$.capture.receiptKey')) = 'STRING'
           THEN LEFT(JSON_UNQUOTE(JSON_EXTRACT(data_json, '$.capture.receiptKey')), 64)
           ELSE NULL END
-      ) STORED`.execute(db);
+      ) VIRTUAL`.execute(db);
   }
   const indexes = await sql<{ INDEX_NAME: string }>`SELECT INDEX_NAME FROM information_schema.STATISTICS
     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'transactions' AND INDEX_NAME = 'capture_owner_receipt'`.execute(db);

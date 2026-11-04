@@ -117,7 +117,9 @@ export async function inferCaptureCategory(input: InferenceInput): Promise<Categ
   try { aiKey = await input.aiGuess?.() ?? null; } catch { return unresolved(); }
   if (!aiKey || !isStandardCategoryKey(aiKey)) return unresolved();
   if (tin) await recordAiGuess(tin, aiKey);
-  return { categoryId: null, confidence: 'low', standardKey: aiKey };
+  // A model guess is only ever a highlighted suggestion (confidence low), never a trusted default.
+  const suggestion = categoryForStandardKey(aiKey, input.categories);
+  return { categoryId: suggestion?.id ?? null, confidence: 'low', standardKey: aiKey };
 }
 
 async function recordAiGuess(tin: string, key: string): Promise<void> {

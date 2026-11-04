@@ -3,10 +3,19 @@ import { database } from '../db/database';
 import { receiptText } from './privacy';
 
 let readiness: Promise<boolean> | undefined;
-/** A missing rollout is cached until restart, matching the device-registry readiness pattern. */
+let probedAt = 0;
+let known = false;
+const RETRY_MISSING_MS = 30_000;
+/** A positive probe is cached until restart; a negative one is retried after 30 s so a transient
+ * DB error at first use cannot leave the feature dark, while a missing rollout stays cheap. */
 export function isCaptureStorageReady(): Promise<boolean> {
-  return readiness ??= Promise.resolve().then(() => sql`SELECT version FROM schema_migrations WHERE version = '005_capture'`
-    .execute(database())).then((result) => result.rows.length === 1).catch(() => false);
+  if (!readiness || (!known && Date.now() - probedAt > RETRY_MISSING_MS)) {
+    probedAt = Date.now();
+    readiness = Promise.resolve().then(() => sql`SELECT version FROM schema_migrations WHERE version = '005_capture'`
+      .execute(database())).then((result) => result.rows.length === 1).catch(() => false)
+      .then((ready) => { known = ready; return ready; });
+  }
+  return readiness;
 }
 
 export async function getCaptureUsage(uid: string, month: string): Promise<number> {
