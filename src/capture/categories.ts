@@ -74,6 +74,12 @@ export interface InferenceInput {
    * reaches the user's own remembered choice.
    */
   trustedTin?: boolean;
+  /**
+   * The receipt was reported by the phone (Soliq data the server could not re-check). Its TIN may only
+   * feed the shared directory through the normal consensus: it never overwrites a stored merchant
+   * name or address, its AI vote is weaker, and its item codes are never sent for classification.
+   */
+  deviceReported?: boolean;
   aiGuess?: () => Promise<string | null>;
   /** Only passed for Soliq receipts: item codes read from a photo are never sent for classification. */
   classifyIkpu?: (prefix: string) => Promise<string | null>;
@@ -95,8 +101,14 @@ export async function inferCaptureCategory(input: InferenceInput): Promise<Categ
     const safe = safeCachedReceipt({ merchant: { ...input.merchant, tin } }).merchant as { name: string | null; address: string | null };
     // The directory is best effort: a deadlock or DB error here must never fail the scan.
     try {
-      await sql`INSERT INTO merchants (tin, name, address, first_seen, last_seen) VALUES (${tin}, ${safe.name}, ${safe.address}, ${Date.now()}, ${Date.now()})
-        ON DUPLICATE KEY UPDATE name = COALESCE(VALUES(name), name), address = COALESCE(VALUES(address), address)`.execute(db);
+      if (input.deviceReported) {
+        // Fill-only: an unreviewed phone report must not rename a merchant that already has a name.
+        await sql`INSERT INTO merchants (tin, name, address, first_seen, last_seen) VALUES (${tin}, ${safe.name}, ${safe.address}, ${Date.now()}, ${Date.now()})
+          ON DUPLICATE KEY UPDATE name = COALESCE(name, VALUES(name)), address = COALESCE(address, VALUES(address))`.execute(db);
+      } else {
+        await sql`INSERT INTO merchants (tin, name, address, first_seen, last_seen) VALUES (${tin}, ${safe.name}, ${safe.address}, ${Date.now()}, ${Date.now()})
+          ON DUPLICATE KEY UPDATE name = COALESCE(VALUES(name), name), address = COALESCE(VALUES(address), address)`.execute(db);
+      }
     } catch { logger.warn('capture.directory_write_failed'); }
   }
   if (tin) {
@@ -151,7 +163,7 @@ export async function inferCaptureCategory(input: InferenceInput): Promise<Categ
   try { aiKey = await input.aiGuess?.() ?? null; } catch { return unresolved(); }
   if (!aiKey || !isStandardCategoryKey(aiKey)) return unresolved();
   if (tin && input.trustedTin) {
-    try { await recordAiGuess(tin, aiKey); } catch { logger.warn('capture.directory_write_failed'); }
+    try { await recordAiGuess(tin, aiKey, input.deviceReported ? DEVICE_AI_WEIGHT : AI_WEIGHT); } catch { logger.warn('capture.directory_write_failed'); }
   }
   // A model guess is only ever a highlighted suggestion (confidence low), never a trusted default.
   const suggestion = categoryForStandardKey(aiKey, input.categories);
@@ -170,7 +182,11 @@ async function claimIkpuPrefix(db: ReturnType<typeof database>, prefix: string):
   return Number(takeover.numAffectedRows) === 1;
 }
 
-async function recordAiGuess(tin: string, key: string): Promise<void> {
+/** Weight of a model guess in the shared votes; a phone-reported receipt gets less. */
+const AI_WEIGHT = 0.25;
+const DEVICE_AI_WEIGHT = 0.1;
+
+async function recordAiGuess(tin: string, key: string, weight: number): Promise<void> {
   await database().transaction().execute(async (db) => {
     // One statement that takes the exclusive row lock straight away. INSERT IGNORE would take a
     // shared lock on an existing row and the following FOR UPDATE would then deadlock two scans.
@@ -180,8 +196,8 @@ async function recordAiGuess(tin: string, key: string): Promise<void> {
     const existing = await sql`SELECT tin FROM merchant_category_votes WHERE tin = ${tin} AND ai_weight > 0 LIMIT 1`.execute(db);
     if (existing.rows.length) return;
     await sql`INSERT INTO merchant_category_votes (tin, standard_key, weight_sum, voter_count, ai_weight)
-      VALUES (${tin}, ${key}, 0.25, 0, 0.25) ON DUPLICATE KEY UPDATE
-      weight_sum = weight_sum + 0.25, ai_weight = ai_weight + 0.25`.execute(db);
+      VALUES (${tin}, ${key}, ${weight}, 0, ${weight}) ON DUPLICATE KEY UPDATE
+      weight_sum = weight_sum + ${weight}, ai_weight = ai_weight + ${weight}`.execute(db);
     await sql`UPDATE merchants SET status = IF(status = 'unknown', 'ai', status),
       standard_key = IF(status IN ('unknown', 'ai'), ${key}, standard_key) WHERE tin = ${tin}`.execute(db);
   });

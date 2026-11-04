@@ -2,6 +2,7 @@ import { createHash, createHmac } from 'node:crypto';
 import { AppError } from '../utils/AppError';
 import { receiptText } from './privacy';
 
+export const SOLIQ_ENDPOINT = 'https://new-ofd.soliq.uz/api/payment';
 export const SOLIQ_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const SOLIQ_TIMEOUT_MS = 10_000;
 const MAX_RESPONSE_BYTES = 1024 * 1024;
@@ -210,10 +211,55 @@ export function soliqReceiptKey(qr: SoliqQr): string {
     .digest('hex');
 }
 
+/** Largest `raw` body accepted from a device (serialized JSON, bytes). */
+export const SOLIQ_RAW_MAX_BYTES = 256 * 1024;
+const RAW_DATA_KEYS = ['tin', 'terminalId', 'paymentNo', 'paymentDate', 'cashTotal', 'cardTotal', 'isRefund',
+  'refundPaymentId', 'receiptType'] as const;
+const RAW_ITEM_KEYS = ['name', 'productCode', 'price', 'amount', 'discount', 'goodPrice', 'comitentTin', 'vatPercent'] as const;
+const RAW_EXTRA_KEYS = ['companyName', 'merchantTin', 'address', 'fiscalSign'] as const;
+
+const primitive = (value: unknown): string | number | boolean | null | undefined =>
+  value === null || ['string', 'number', 'boolean'].includes(typeof value)
+    ? (value as string | number | boolean | null) : undefined;
+function pick(source: Record<string, unknown>, keys: readonly string[]): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const key of keys) {
+    const value = Object.hasOwn(source, key) ? primitive(source[key]) : undefined;
+    if (value !== undefined) result[key] = value;
+  }
+  return result;
+}
+
+/**
+ * Receipt data reported by a phone. The server never trusts the app to have stripped it: the same
+ * allowlist is applied again, so a phone number, card number, passport, PINFL, coordinates or any other
+ * extraInfo field that slipped through is gone before anything is mapped, cached or stored. Only primitive
+ * values of the allowed keys survive.
+ */
+export function sanitizeSoliqRaw(raw: unknown): Record<string, unknown> {
+  const envelope = record(raw);
+  const data = Object.hasOwn(envelope, 'data') ? record(envelope.data) : envelope;
+  const clean: Record<string, unknown> = pick(data, RAW_DATA_KEYS);
+  if (Array.isArray(data.paymentDetails)) {
+    clean.paymentDetails = data.paymentDetails.slice(0, 5000).map((item) => pick(record(item), RAW_ITEM_KEYS));
+  }
+  clean.extraInfo = pick(record(data.extraInfo), RAW_EXTRA_KEYS);
+  return clean;
+}
+
+/** `raw` must describe the receipt the QR points to: same terminal and (zero-stripped) receipt number. */
+export function rawMatchesQr(raw: Record<string, unknown>, qr: SoliqQr): boolean {
+  const { terminalId, paymentNo } = raw;
+  if ((typeof terminalId !== 'string' && typeof terminalId !== 'number') ||
+    (typeof paymentNo !== 'string' && typeof paymentNo !== 'number')) return false;
+  return String(terminalId) === qr.terminalId && /^\d{1,20}$/.test(String(paymentNo))
+    && String(paymentNo).replace(/^0+(?=\d)/, '') === qr.paymentNo;
+}
+
 const round2 = (value: number): number => Math.round(value * 100) / 100;
 
 /** Σ line paid ≈ total. A mismatch means low confidence on the amount, never an exception. */
-export function receiptItemsAgree(receipt: Pick<SoliqReceipt, 'items' | 'total'>): boolean {
+export function receiptItemsAgree(receipt: { items: Array<{ amount: number }>; total: number }): boolean {
   if (!receipt.items.length) return false;
   const sum = receipt.items.reduce((value, item) => value + item.amount, 0);
   return Math.abs(sum - receipt.total) <= Math.max(1, receipt.total * 0.005);
@@ -344,7 +390,7 @@ export class SoliqClient {
         receipt = await Promise.race([
           (async () => {
             const response = await this.request(
-              `https://new-ofd.soliq.uz/api/payment${qr.fiscalSignHash ? '/mobile-dashboard' : ''}`,
+              `${SOLIQ_ENDPOINT}${qr.fiscalSignHash ? '/mobile-dashboard' : ''}`,
               {
                 method: 'POST',
                 redirect: 'error',

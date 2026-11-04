@@ -7,6 +7,8 @@ import { captureCapabilities } from '../capture/availability';
 import { captureQuota } from '../capture/quota';
 import { captureVoice, capturePhoto, captureSoliq } from '../capture/service';
 import { captureFailure } from '../capture/errors';
+import { SOLIQ_ENDPOINT } from '../capture/soliq';
+import { env } from '../config/env';
 import { readCaptureUpload, validateCaptureMedia } from '../capture/upload';
 import { captureTimezone } from '../capture/time';
 
@@ -39,7 +41,8 @@ router.use((req, res, next) => {
 
 const voiceFields = z.object({ timezone: captureTimezone.optional(), language: z.enum(['uz', 'ru', 'en']).optional() }).strict();
 const photoFields = voiceFields.omit({ language: true });
-const soliqBody = z.object({ url: z.string().max(2048), timezone: captureTimezone.optional() }).strict();
+const soliqBody = z.object({ url: z.string().max(2048), timezone: captureTimezone.optional(),
+  raw: z.record(z.string(), z.unknown()).optional() }).strict();
 
 /**
  * Aborts when the client goes away before the response was written, so the quota slot it paid
@@ -54,6 +57,14 @@ const disconnected = (res: import('express').Response): AbortSignal => {
 router.get('/quota', requires('any'), limiter(60), asyncHandler(async (req, res) => {
   res.json(await captureQuota(req.uid));
 }));
+/**
+ * The prod API server is geo-blocked from *.soliq.uz, so the phone fetches the receipt itself and
+ * uploads it. It signs the request with this key: Soliq's own public web-bundle constant, never logged.
+ */
+router.get('/soliq-config', requires('receipt'), limiter(30), (_req, res) => {
+  if (!env.SOLIQ_OFD_SIGNING_KEY.trim()) throw unavailable();
+  res.json({ signingKey: env.SOLIQ_OFD_SIGNING_KEY, endpoint: SOLIQ_ENDPOINT });
+});
 router.post('/voice', requires('voice'), limiter(20), asyncHandler(async (req, res) => {
   const upload = await readCaptureUpload(req, 'audio');
   const fields = input(voiceFields, upload.fields);
@@ -69,7 +80,7 @@ router.post('/receipt/photo', requires('receipt'), limiter(20), asyncHandler(asy
 // Soft per-user limit on the unofficial Soliq endpoint, tighter than the recognition calls.
 router.post('/receipt/soliq', requires('receipt'), limiter(10), asyncHandler(async (req, res) => {
   const body = input(soliqBody, req.body);
-  res.json(await captureSoliq(req.uid, body.url, body.timezone, disconnected(res)));
+  res.json(await captureSoliq(req.uid, body.url, body.timezone, disconnected(res), body.raw));
 }));
 
 /**

@@ -5,11 +5,11 @@ const mocks = vi.hoisted(() => ({
   env: { CAPTURE_COUNT_SOLIQ: false, SOLIQ_OFD_SIGNING_KEY: 'synthetic-key', SOLIQ_AMOUNT_DIVISOR: 1 } as Record<string, unknown>,
   rows: { categories: [] as any[], cards: [] as any[], transactions: [] as any[] },
   infer: vi.fn(), issue: vi.fn(), allowance: vi.fn(), guess: vi.fn(), duplicate: vi.fn(), cached: vi.fn(), cache: vi.fn(),
-  usage: vi.fn(), reserve: vi.fn(), refund: vi.fn(), premium: vi.fn(),
+  usage: vi.fn(), info: vi.fn(), reserve: vi.fn(), refund: vi.fn(), premium: vi.fn(),
   transcribe: vi.fn(), parse: vi.fn(), photo: vi.fn(), profile: vi.fn(), warn: vi.fn(),
 }));
 vi.mock('../../src/config/env', () => ({ env: mocks.env }));
-vi.mock('../../src/utils/logger', () => ({ logger: { warn: mocks.warn, info: vi.fn() } }));
+vi.mock('../../src/utils/logger', () => ({ logger: { warn: mocks.warn, info: mocks.info } }));
 vi.mock('../../src/db/documents', () => ({
   queryTable: (table: string) => ({ table }), filterQuery: (query: any) => query,
   orderQuery: (query: any) => query, limitQuery: (query: any) => query,
@@ -308,5 +308,121 @@ describe('model context', () => {
     expect(result.merchantNames).toEqual(['merchant-123456789']);
     expect(result).toMatchObject({ language: 'en', timezone: 'Asia/Samarkand' });
     expect((await captureContext('user', 'not/azone')).timezone).toBe('Asia/Tashkent');
+  });
+});
+
+describe('phone-reported Soliq receipts (raw)', () => {
+  const url = 'https://ofd.soliq.uz/epi?t=EPTEST001&r=42&c=20261103123000&s=123456789';
+  const DATA_KEYS = ['paymentId', 'ns10Code', 'ns11Code', 'vatTotal', 'created', 'updated', 'fiscalSignHash', 'terminalStateId',
+    'labels', 'kkmName', 'kkmSerialNumber', 'statusMessage'];
+  const EXTRA_KEYS = ['taxiInfoTin', 'taxiInfoCardNumber', 'phoneNumber', 'qrPaymentId', 'qrPaymentProvider', 'cashedOutFromCard',
+    'pptId', 'cardType', 'pickUpNs10', 'pickUpNs11', 'pickUpAddress', 'paymentType', 'latitude', 'longitude', 'cardNumber',
+    'tripStartLatitude', 'tripStartLongitude', 'tripStartAddress', 'tripEndLatitude', 'tripEndLongitude', 'tripEndAddress',
+    'cadastralNumber', 'accountNumber', 'qrSalePointId', 'flightPassportNumber', 'flightPinfl', 'flightNumber', 'flightSeatNumber'];
+  const ITEM_KEYS = ['id', 'barcode', 'productName', 'labelErrorCode', 'packageCode', 'packageName', 'voucher', 'refundPaymentId',
+    'productErrorCode', 'productGroup', 'remains', 'vat', 'remainingVat', 'other', 'cardRatio'];
+  /** The stripped shape the app uploads, polluted with EVERY forbidden field the server must not keep. */
+  const raw = (over: Record<string, unknown> = {}): any => ({
+    tin: 100000001, terminalId: 'EPTEST001', paymentNo: 42, paymentDate: '03.11.2026 12:30:20', cashTotal: 0, cardTotal: 40000,
+    isRefund: 0, refundPaymentId: '0', receiptType: 1,
+    ...Object.fromEntries(DATA_KEYS.map((key) => [key, `LEAK_${key}`])),
+    extraInfo: { companyName: 'Synthetic market', merchantTin: 100000002, address: 'Test street', fiscalSign: '123456789',
+      ...Object.fromEntries(EXTRA_KEYS.map((key) => [key, `LEAK_${key}`])), latitude: 41.123456, longitude: 69.654321 },
+    paymentDetails: [{ name: 'Synthetic bread', productCode: '01901001001000000', price: 40000, amount: 1, discount: 0,
+      goodPrice: 40000, comitentTin: 100000002, vatPercent: 12,
+      ...Object.fromEntries(ITEM_KEYS.map((key) => [key, `LEAK_${key}`])) }],
+    ...over,
+  });
+  const noNetwork = () => { const request = vi.fn(); vi.stubGlobal('fetch', request); return request; };
+
+  it('never calls Soliq, maps the report like a server fetch and marks it device-reported', async () => {
+    const request = noNetwork();
+    const result = await captureSoliq('user', url, undefined, undefined, raw());
+    expect(request).not.toHaveBeenCalled();
+    expect(result.receipt).toMatchObject({ kind: 'soliq', total: 40000, merchant: { tin: '100000002', name: 'Synthetic market', address: 'Test street' } });
+    expect(result.drafts[0]).toMatchObject({ amount: 40000, type: 'expense' });
+    expect(result.drafts[0].lowConfidenceFields).not.toContain('amount');
+    expect(mocks.issue).toHaveBeenCalledWith('user', '100000002', expect.objectContaining({ source: 'device' }));
+    expect(mocks.cache).toHaveBeenCalledWith(expect.any(String), expect.anything(), 'device');
+    // Not counted by default, exactly like a server-fetched Soliq receipt.
+    expect(mocks.reserve).not.toHaveBeenCalled();
+  });
+
+  it('keeps every forbidden field out of the receipt, the cache, the issued record and the logs', async () => {
+    noNetwork();
+    const result = await captureSoliq('user', url, undefined, undefined, raw());
+    const everything = JSON.stringify([result, mocks.cache.mock.calls, mocks.issue.mock.calls, mocks.warn.mock.calls, mocks.info.mock.calls]);
+    expect(everything).not.toMatch(/LEAK|41\.123456|69\.654321|nested/);
+    for (const key of [...EXTRA_KEYS, ...DATA_KEYS, ...ITEM_KEYS]) expect(everything, key).not.toContain(`LEAK_${key}`);
+    // The only thing logged about the upload is its size.
+    expect(mocks.info).toHaveBeenCalledWith({ bytes: expect.any(Number) }, 'capture.soliq_device_received');
+    const logged = JSON.stringify(mocks.info.mock.calls);
+    expect(logged).not.toMatch(/Synthetic|100000002|40000/);
+  });
+
+  it('rejects data that is not about the QR it came with, before quota, cache or database work', async () => {
+    mocks.env.CAPTURE_COUNT_SOLIQ = true;
+    for (const bad of [raw({ terminalId: 'EPOTHER' }), raw({ paymentNo: 43 }), raw({ terminalId: undefined }), raw({ paymentNo: undefined })]) {
+      await expect(captureSoliq('user', url, undefined, undefined, bad)).rejects.toMatchObject({ statusCode: 422, code: 'receipt_mismatch' });
+    }
+    expect(mocks.reserve).not.toHaveBeenCalled();
+    expect(mocks.cached).not.toHaveBeenCalled();
+    expect(mocks.cache).not.toHaveBeenCalled();
+    expect(mocks.issue).not.toHaveBeenCalled();
+    // A zero-padded receipt number is the same receipt.
+    await expect(captureSoliq('user', url, undefined, undefined, raw({ paymentNo: '000042' }))).resolves.toBeTruthy();
+  });
+
+  it('rejects unreadable or oversized reports with their own codes', async () => {
+    await expect(captureSoliq('user', url, undefined, undefined, raw({ paymentDetails: undefined }))).rejects.toMatchObject({ statusCode: 422, code: 'receipt_invalid' });
+    await expect(captureSoliq('user', url, undefined, undefined, raw({ cardTotal: 'not a number' }))).rejects.toMatchObject({ code: 'receipt_invalid' });
+    const huge = raw({ paymentDetails: Array.from({ length: 4000 }, () => ({ name: 'x'.repeat(100), price: 1, amount: 1, discount: 0, goodPrice: 1 })) });
+    await expect(captureSoliq('user', url, undefined, undefined, huge)).rejects.toMatchObject({ statusCode: 413, code: 'payload_too_large' });
+    expect(mocks.cache).not.toHaveBeenCalled();
+  });
+
+  it('trusts a receipt this server fetched itself over the phone’s version of it', async () => {
+    mocks.cached.mockResolvedValue({ ...receipt(), total: 40000, items: receipt().items });
+    const result = await captureSoliq('user', url, undefined, undefined, raw({ cardTotal: 1 }));
+    expect(mocks.cached).toHaveBeenCalledWith(expect.any(String), 'server');
+    expect(result.receipt.total).toBe(40000);
+    expect(mocks.cache).not.toHaveBeenCalled();
+    expect(mocks.issue).toHaveBeenCalledWith('user', '123456789', expect.objectContaining({ source: 'soliq' }));
+  });
+
+  it('a server fetch only ever reads and writes server-source cache entries', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ success: true, data: {
+      tin: 100000001, paymentDate: '03.11.2026 12:30:20', cardTotal: 40000, cashTotal: 0,
+      extraInfo: { companyName: 'Synthetic market', merchantTin: 100000002, fiscalSign: '123456789' },
+      paymentDetails: [{ name: 'Bread', price: 40000, amount: 1, discount: 0, goodPrice: 40000 }] } }), { status: 200 })));
+    await captureSoliq('user', url);
+    expect(mocks.cached).toHaveBeenCalledWith(expect.any(String), 'server');
+    expect(mocks.cache).toHaveBeenCalledWith(expect.any(String), expect.anything(), 'server');
+    expect(mocks.issue).toHaveBeenCalledWith('user', '100000002', expect.objectContaining({ source: 'soliq' }));
+  });
+
+  it('counts a phone-reported receipt when CAPTURE_COUNT_SOLIQ is set, and refunds when it fails', async () => {
+    mocks.env.CAPTURE_COUNT_SOLIQ = true;
+    expect((await captureSoliq('user', url, undefined, undefined, raw())).quota.used).toBe(2);
+    expect(mocks.reserve).toHaveBeenCalledOnce();
+    mocks.infer.mockRejectedValue(new Error('boom'));
+    await expect(captureSoliq('user', url, undefined, undefined, raw())).rejects.toThrow('boom');
+    expect(mocks.refund).toHaveBeenCalledOnce();
+  });
+
+  it('flags the draft amount low when the phone’s lines do not add up to its total', async () => {
+    const result = await captureSoliq('user', url, undefined, undefined, raw({ cardTotal: 55000 }));
+    expect(result.drafts[0].lowConfidenceFields).toContain('amount');
+  });
+
+  it('does not let a phone report trigger model classification of item codes, and tells inference it is device-reported', async () => {
+    await captureSoliq('user', url, undefined, undefined, raw());
+    for (const [input] of mocks.infer.mock.calls) expect(input.classifyIkpu).toBeUndefined();
+    expect(mocks.infer.mock.calls[0][0]).toMatchObject({ trustedTin: true, deviceReported: true });
+    mocks.infer.mockClear();
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ success: true, data: { paymentDate: '03.11.2026 12:30:20',
+      cardTotal: 100, extraInfo: { merchantTin: 100000002 }, paymentDetails: [{ name: 'x', price: 100, amount: 1, discount: 0, goodPrice: 100 }] } }), { status: 200 })));
+    await captureSoliq('user', url);
+    expect(mocks.infer.mock.calls[0][0]).toMatchObject({ trustedTin: true, deviceReported: false, classifyIkpu: expect.any(Function) });
   });
 });

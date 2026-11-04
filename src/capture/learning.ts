@@ -37,6 +37,8 @@ export async function learnCommittedCapture(uid: string, transactionId: string,
     // The "user changed my suggestion" double vote only counts if it is the suggestion we issued.
     suggestedCategoryId: issued.suggestedCategoryId && capture.suggestedCategoryId === issued.suggestedCategoryId
       ? issued.suggestedCategoryId : undefined,
-    shared: issued.source === 'soliq', ...(capture.receiptKey ? { receiptKey: capture.receiptKey } : {}),
+    // Soliq data fetched by the server or reported by the phone both feed the shared votes (a phone
+    // report only counts through the consensus rule); only OCR text from a photo does not.
+    shared: issued.source === 'soliq' || issued.source === 'device', ...(capture.receiptKey ? { receiptKey: capture.receiptKey } : {}),
   });
 }

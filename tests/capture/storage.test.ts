@@ -30,7 +30,7 @@ vi.mock('../../src/db/documents', () => ({ documentKey: (table: string, id: stri
 import { database } from '../../src/db/database';
 import { migrateCapture } from '../../src/capture/migration';
 import { IKPU_SEEDS } from '../../src/capture/seeds';
-import { cacheReceipt, findReceiptDuplicate, takeCaptureRefund, getIssuedMerchant, receiptSiblings, recordIssuedMerchant, getCaptureUsage, refundCaptureUsage, reserveCaptureUsage, safeCachedReceipt } from '../../src/capture/repository';
+import { cacheReceipt, getCachedReceipt, findReceiptDuplicate, takeCaptureRefund, getIssuedMerchant, receiptSiblings, recordIssuedMerchant, getCaptureUsage, refundCaptureUsage, reserveCaptureUsage, safeCachedReceipt } from '../../src/capture/repository';
 import { categoryForStandardKey, consensusCategory, inferCaptureCategory, ikpuWeightedCategory, isStandardCategoryKey, learnCaptureTransaction, learningWeight, standardCategoryKey, voterHash } from '../../src/capture/categories';
 import { renderMerchantSummary, summaryWeek, verifyMerchant } from '../../src/capture/owner';
 
@@ -388,6 +388,55 @@ describe('quota, duplicates, safe cache, additive migration', () => {
     expect(classify('02105001001000000')).toBe('food');
     expect(classify('10701001001000000')).toBeNull();
 
+  });
+});
+
+describe('phone-reported receipts: cache separation and weaker directory trust', () => {
+  const receipt = { kind: 'soliq', receiptKey: 'b'.repeat(64), merchant: { tin: '123456789', name: 'Shop', address: null }, date: '2026-11-03T12:30:00+05:00', total: 5, items: [] };
+  it('stores a device-reported receipt under its own key with its source, apart from a server fetch', async () => {
+    await cacheReceipt('a'.repeat(64), receipt, 'device');
+    await cacheReceipt('a'.repeat(64), receipt);
+    const [device, server] = store.queries.filter((query) => query.sql.startsWith('INSERT INTO capture_receipt_cache'));
+    expect(device.parameters[0]).not.toBe('a'.repeat(64));
+    expect(device.parameters[0]).toMatch(/^[a-f0-9]{64}$/);
+    expect(JSON.parse(device.parameters[1] as string)).toMatchObject({ receiptSource: 'device' });
+    expect(server.parameters[0]).toBe('a'.repeat(64));
+    expect(JSON.parse(server.parameters[1] as string)).toMatchObject({ receiptSource: 'server' });
+  });
+  it('a server read never returns a device-reported entry, and legacy entries count as server fetches', async () => {
+    const stored = (receiptSource?: string) => ({ ...receipt, ...(receiptSource ? { receiptSource } : {}) });
+    store.handler = () => ({ rows: [{ receipt_json: JSON.stringify(stored('device')) }] });
+    expect(await getCachedReceipt('a'.repeat(64))).toBeUndefined();
+    expect(await getCachedReceipt('a'.repeat(64), 'device')).toMatchObject({ total: 5 });
+    store.handler = () => ({ rows: [{ receipt_json: JSON.stringify(stored()) }] });
+    expect(await getCachedReceipt('a'.repeat(64))).toMatchObject({ total: 5 });
+    expect(await getCachedReceipt('a'.repeat(64), 'device')).toBeUndefined();
+    // The device lookup uses the derived key, never the plain one.
+    expect(store.queries.at(-1)!.parameters[0]).not.toBe('a'.repeat(64));
+  });
+  it('a device-reported TIN fills a merchant name only when empty; a server fetch still refreshes it', async () => {
+    await inferCaptureCategory({ uid: 'u', tin: '123456789', trustedTin: true, deviceReported: true, merchant: { name: 'Phone Name' }, categories: [food] });
+    const device = store.queries.find((query) => query.sql.startsWith('INSERT INTO merchants (tin, name'))!;
+    expect(device.sql).toContain('name = COALESCE(name, VALUES(name))');
+    expect(device.sql).not.toContain('COALESCE(VALUES(name), name)');
+    store.queries = [];
+    await inferCaptureCategory({ uid: 'u', tin: '123456789', trustedTin: true, merchant: { name: 'Server Name' }, categories: [food] });
+    expect(store.queries.find((query) => query.sql.startsWith('INSERT INTO merchants (tin, name'))!.sql).toContain('COALESCE(VALUES(name), name)');
+  });
+  it('a device-reported AI guess votes with less weight than a server-fetched one, and never marks verified', async () => {
+    await inferCaptureCategory({ uid: 'u', tin: '123456789', trustedTin: true, deviceReported: true, categories: [food], aiGuess: async () => 'food' });
+    const device = store.queries.find((query) => query.sql.startsWith('INSERT INTO merchant_category_votes'))!;
+    expect(device.parameters.filter((value) => typeof value === 'number')).toContain(0.1);
+    store.queries = [];
+    await inferCaptureCategory({ uid: 'u', tin: '123456789', trustedTin: true, categories: [food], aiGuess: async () => 'food' });
+    expect(store.queries.find((query) => query.sql.startsWith('INSERT INTO merchant_category_votes'))!.parameters).toContain(0.25);
+    expect(store.queries.map((query) => query.sql).join('\n')).not.toMatch(/status = 'verified'|SET status = 'verified'/);
+  });
+  it('remembers the device source on the issued record', async () => {
+    await recordIssuedMerchant('u', '123456789', { source: 'device', suggestedCategoryId: null, draftId: 'd' });
+    expect(store.queries.find((query) => query.sql.startsWith('INSERT INTO capture_issued'))!.parameters.slice(2, 3)).toEqual(['device']);
+    store.handler = () => ({ rows: [{ source: 'device', suggested_category_id: null, draft_id: 'd' }] });
+    expect(await getIssuedMerchant('u', '123456789')).toMatchObject({ source: 'device' });
   });
 });
 

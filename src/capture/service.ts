@@ -6,8 +6,9 @@ import type { Category } from '../domain/types';
 import { env } from '../config/env';
 import { logger } from '../utils/logger';
 import { STANDARD_CATEGORY_KEYS, inferCaptureCategory } from './categories';
-import { cacheReceipt, findReceiptDuplicate, getCachedReceipt, getCaptureMerchantNames, recordIssuedMerchant } from './repository';
-import { SoliqClient, parseSoliqUrl, receiptItemsAgree } from './soliq';
+import { cacheReceipt, findReceiptDuplicate, getCachedReceipt, getCaptureMerchantNames, recordIssuedMerchant, type ReceiptSource } from './repository';
+import { SoliqClient, mapSoliqReceipt, parseSoliqUrl, rawMatchesQr, receiptItemsAgree, sanitizeSoliqRaw, soliqReceiptKey, SOLIQ_RAW_MAX_BYTES } from './soliq';
+import { AppError } from '../utils/AppError';
 import { extractCapturePhoto, guessCaptureCategory, parseCaptureVoice, transcribeCapture, type CaptureContext } from './models';
 import { captureTimezone, dateInTimezone } from './time';
 import { withCaptureQuota } from './quota';
@@ -69,7 +70,7 @@ export function receiptComment(name: string | null, count: number, language: 'uz
 }
 
 export async function receiptDrafts(uid: string, receipt: CaptureReceipt, context: CaptureContext,
-  options: { currency?: string; amountLow?: boolean; dateLow?: boolean } = {}) {
+  options: { currency?: string; amountLow?: boolean; dateLow?: boolean; receiptSource?: ReceiptSource } = {}) {
   // Receipts are expenses: only expense standard keys may be guessed, only expense categories mapped.
   const expenseKeys = STANDARD_CATEGORY_KEYS.filter(key => DEFAULT_CATEGORIES.some(c =>
     c.type === 'expense' && c.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') === key));
@@ -78,10 +79,13 @@ export async function receiptDrafts(uid: string, receipt: CaptureReceipt, contex
   // Only Soliq receipts carry trustworthy item codes and a server-fetched seller TIN. A photo's TIN and
   // codes are OCR text: they never feed the shared directory or trigger model classification.
   const soliq = receipt.kind === 'soliq';
-  const classifyIkpu = !soliq ? undefined : (prefix: string) => guessCaptureCategory(uid,
+  // A phone-reported Soliq receipt (receiptSource 'device') is not re-checked by the server: its item
+  // codes and names are client data, so they never reach the model-classified shared IKPU map.
+  const device = soliq && options.receiptSource === 'device';
+  const classifyIkpu = !soliq || device ? undefined : (prefix: string) => guessCaptureCategory(uid,
     `IKPU group ${prefix}: ${receipt.items.filter(i => i.ikpu?.startsWith(prefix)).slice(0, 10).map(i => i.name).join(', ')}`, expenseKeys);
   const inferred = await inferCaptureCategory({ uid, tin: receipt.merchant.tin ?? undefined,
-    merchant: receipt.merchant, trustedTin: soliq, categories, items: receipt.items, aiGuess: guess, classifyIkpu });
+    merchant: receipt.merchant, trustedTin: soliq, deviceReported: device, categories, items: receipt.items, aiGuess: guess, classifyIkpu });
   // Item-level inference omits the TIN so a broad merchant category cannot override IKPU.
   // One lookup per distinct IKPU code, not per line.
   const byIkpu = new Map<string, string | null>();
@@ -116,31 +120,68 @@ export async function receiptDrafts(uid: string, receipt: CaptureReceipt, contex
   if (receipt.merchant.tin) {
     try {
       await recordIssuedMerchant(uid, receipt.merchant.tin, {
-        source: soliq ? 'soliq' : 'photo', suggestedCategoryId: draft.categoryId, draftId: draft.draftId });
+        source: !soliq ? 'photo' : device ? 'device' : 'soliq', suggestedCategoryId: draft.categoryId, draftId: draft.draftId });
     } catch { logger.warn('capture.issue_record_failed'); }
   }
   const duplicateOf = await findReceiptDuplicate(uid, receipt.receiptKey);
   return { receipt, drafts: [draft], ...(duplicateOf ? { duplicateOf } : {}) };
 }
 
-export async function captureSoliq(uid: string, url: string, timezone?: string, signal?: AbortSignal) {
+/**
+ * A phone-reported Soliq receipt: the server never calls Soliq. The allowlist is applied again, the
+ * data must belong to the QR that came with it, and nothing but the mapped receipt is kept.
+ */
+function deviceReceipt(url: string, raw: unknown): { receipt: CaptureReceipt; cacheKey: string } {
+  const qr = parseSoliqUrl(url);
+  let bytes = Infinity;
+  try { bytes = Buffer.byteLength(JSON.stringify(raw) ?? ''); } catch { /* not serializable */ }
+  if (bytes > SOLIQ_RAW_MAX_BYTES) throw new AppError(413, 'payload_too_large', 'The receipt data is too large.');
+  const clean = sanitizeSoliqRaw(raw);
+  if (!rawMatchesQr(clean, qr)) throw new AppError(422, 'receipt_mismatch', 'The receipt data does not belong to this QR code.');
+  try {
+    // Size and timing only: neither `raw` nor any field of it is ever logged.
+    return { receipt: mapSoliqReceipt(clean, qr, env.SOLIQ_AMOUNT_DIVISOR) as CaptureReceipt, cacheKey: soliqReceiptKey(qr) };
+  } catch {
+    throw new AppError(422, 'receipt_invalid', 'The receipt data could not be read.');
+  } finally {
+    logger.info({ bytes }, 'capture.soliq_device_received');
+  }
+}
+
+export async function captureSoliq(uid: string, url: string, timezone?: string, signal?: AbortSignal, raw?: unknown) {
   parseSoliqUrl(url); // A malformed URL is rejected before any quota or network work.
+  // Validate a phone-reported body before spending quota or touching the database.
+  const reported = raw === undefined ? undefined : deviceReceipt(url, raw);
   return withCaptureQuota(uid, env.CAPTURE_COUNT_SOLIQ, async () => {
-    const client = new SoliqClient({
-      signingKey: env.SOLIQ_OFD_SIGNING_KEY, amountDivisor: env.SOLIQ_AMOUNT_DIVISOR,
-      cache: {
-        get: async key => {
-          const receipt = await getCachedReceipt<CaptureReceipt>(key);
-          return receipt ? { receipt: receipt as any, expiresAt: Date.now() + 60_000 } : null;
+    let receipt: CaptureReceipt;
+    let receiptSource: ReceiptSource = 'server';
+    if (reported) {
+      // A receipt this server fetched from Soliq itself beats whatever the phone says about it.
+      const verified = await getCachedReceipt<CaptureReceipt>(reported.cacheKey, 'server').catch(() => undefined);
+      if (verified) receipt = verified;
+      else {
+        receipt = reported.receipt;
+        receiptSource = 'device';
+        // Own cache entry (separate key, source stored): a server fetch never reads or trusts it.
+        await cacheReceipt(reported.cacheKey, receipt, 'device').catch(() => logger.warn('capture.cache_write_failed'));
+      }
+    } else {
+      const client = new SoliqClient({
+        signingKey: env.SOLIQ_OFD_SIGNING_KEY, amountDivisor: env.SOLIQ_AMOUNT_DIVISOR,
+        cache: {
+          get: async key => {
+            const cached = await getCachedReceipt<CaptureReceipt>(key, 'server');
+            return cached ? { receipt: cached as any, expiresAt: Date.now() + 60_000 } : null;
+          },
+          set: async (key, value) => { await cacheReceipt(key, value, 'server'); },
         },
-        set: async (key, receipt) => { await cacheReceipt(key, receipt); },
-      },
-      onFailure: event => logger.warn({ statusCode: event.statusCode }, 'capture.soliq_failed'),
-    });
-    const receipt = await client.getReceipt(url);
+        onFailure: event => logger.warn({ statusCode: event.statusCode }, 'capture.soliq_failed'),
+      });
+      receipt = await client.getReceipt(url);
+    }
     const context = await captureContext(uid, timezone);
     // Σ(price - discount) must match the total; if not, say so instead of presenting a clean draft.
-    return receiptDrafts(uid, receipt, context, { amountLow: !receiptItemsAgree(receipt) });
+    return receiptDrafts(uid, receipt, context, { amountLow: !receiptItemsAgree(receipt), receiptSource });
   }, { signal });
 }
 

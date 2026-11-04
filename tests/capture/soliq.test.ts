@@ -5,6 +5,9 @@ import {
   mapSoliqReceipt,
   parseSoliqUrl,
   receiptItemsAgree,
+  rawMatchesQr,
+  sanitizeSoliqRaw,
+  SOLIQ_ENDPOINT,
   SOLIQ_CACHE_TTL_MS,
   SoliqClient,
   soliqReceiptKey,
@@ -286,6 +289,52 @@ describe('Soliq signing and mapping', () => {
     { ...fixture(), paymentDetails: [{ name: 'Test', quantity: 1, price: 100, amount: -1 }] },
   ])('rejects malformed data rather than producing an inaccurate draft', (raw) => {
     expect(() => mapSoliqReceipt(raw, qr)).toThrow();
+  });
+});
+
+describe('phone-reported receipts', () => {
+  const DATA_KEYS = ['paymentId', 'ns10Code', 'ns11Code', 'tin', 'terminalId', 'paymentNo', 'paymentDate', 'cashTotal', 'cardTotal',
+    'vatTotal', 'created', 'updated', 'fiscalSignHash', 'terminalStateId', 'isRefund', 'paymentDetails', 'receiptType',
+    'refundPaymentId', 'extraInfo', 'labels', 'kkmName', 'kkmSerialNumber', 'statusMessage'];
+  const ALLOWED_DATA = ['tin', 'terminalId', 'paymentNo', 'paymentDate', 'cashTotal', 'cardTotal', 'isRefund', 'refundPaymentId', 'receiptType'];
+  const ALLOWED_ITEM = ['name', 'productCode', 'price', 'amount', 'discount', 'goodPrice', 'comitentTin', 'vatPercent'];
+
+  it('re-applies the allowlist: data keys, item keys and extraInfo keys all collapse to the permitted ones', () => {
+    const data = fixture();
+    for (const key of DATA_KEYS) if (!(key in data)) data[key] = `LEAK_${key}`;
+    data.paymentDetails[0].nested = { phoneNumber: 'LEAK_nested' };
+    data.extraInfo.nested = { phoneNumber: 'LEAK_nested' };
+    const clean = sanitizeSoliqRaw(data);
+    expect(Object.keys(clean).filter((key) => key !== 'paymentDetails' && key !== 'extraInfo').every((key) => ALLOWED_DATA.includes(key))).toBe(true);
+    expect(Object.keys(clean.extraInfo as object).sort()).toEqual(['address', 'companyName', 'fiscalSign', 'merchantTin']);
+    for (const item of clean.paymentDetails as object[]) expect(Object.keys(item).every((key) => ALLOWED_ITEM.includes(key))).toBe(true);
+    expect(JSON.stringify(clean)).not.toMatch(/LEAK|41\.123456|69\.654321|nested/);
+  });
+
+  it('accepts either the stripped data object or the whole envelope, and keeps only primitives', () => {
+    expect(sanitizeSoliqRaw(envelope(fixture()))).toEqual(sanitizeSoliqRaw(fixture()));
+    expect(sanitizeSoliqRaw({ tin: { a: 1 }, terminalId: ['x'], paymentNo: 7 })).toEqual({ paymentNo: 7, extraInfo: {} });
+    expect(sanitizeSoliqRaw(null)).toEqual({ extraInfo: {} });
+    expect(sanitizeSoliqRaw({ paymentDetails: 'x' })).not.toHaveProperty('paymentDetails');
+  });
+
+  it('maps a sanitized phone report exactly like a server fetch', () => {
+    expect(mapSoliqReceipt(sanitizeSoliqRaw(fixture()), qr)).toEqual(mapSoliqReceipt(fixture(), qr));
+  });
+
+  it('ties the data to the QR: same terminal and receipt number, zeros stripped', () => {
+    const raw = (over: Record<string, unknown>) => sanitizeSoliqRaw({ ...fixture(), ...over });
+    expect(rawMatchesQr(raw({}), qr)).toBe(true);
+    expect(rawMatchesQr(raw({ paymentNo: '00042' }), qr)).toBe(true);
+    expect(rawMatchesQr(raw({ paymentNo: 43 }), qr)).toBe(false);
+    expect(rawMatchesQr(raw({ terminalId: 'EPOTHER' }), qr)).toBe(false);
+    expect(rawMatchesQr(raw({ terminalId: undefined }), qr)).toBe(false);
+    expect(rawMatchesQr(raw({ paymentNo: undefined }), qr)).toBe(false);
+    expect(rawMatchesQr(raw({ paymentNo: '4 2' }), qr)).toBe(false);
+  });
+
+  it('exposes the fixed endpoint the phone must use', () => {
+    expect(SOLIQ_ENDPOINT).toBe('https://new-ofd.soliq.uz/api/payment');
   });
 });
 

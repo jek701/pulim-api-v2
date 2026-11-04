@@ -62,6 +62,12 @@ describe('learning after commit', () => {
     expect(mocks.learn.mock.calls[0][0].shared).toBe(false);
   });
 
+  it('lets a phone-reported Soliq TIN vote (the consensus rule still decides), unlike a photo TIN', async () => {
+    mocks.issued.mockResolvedValue({ source: 'device', suggestedCategoryId: 'food', draftId: 'd' });
+    await learnCommittedCapture('user', 'tx-1', write);
+    expect(mocks.learn.mock.calls[0][0]).toMatchObject({ shared: true, suggestedCategoryId: 'food' });
+  });
+
   it('votes once per receipt with the category that has the most money when it was split', async () => {
     mocks.siblings.mockResolvedValue([
       { categoryId: 'food', amount: 30000, type: 'expense' },

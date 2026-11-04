@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { sql } from 'kysely';
 import { database } from '../db/database';
 import { receiptText } from './privacy';
@@ -113,19 +114,27 @@ export function safeCachedReceipt(value: unknown): Record<string, unknown> {
   };
 }
 
-export async function getCachedReceipt<T>(receiptKey: string): Promise<T | undefined> {
+export type ReceiptSource = 'server' | 'device';
+/** Device-reported receipts live under their own key: a server fetch never reads (or trusts) them. */
+const cacheKeyFor = (receiptKey: string, source: ReceiptSource): string =>
+  source === 'device' ? createHash('sha256').update(`device:${receiptKey}`).digest('hex') : receiptKey;
+
+/** Reads only an entry of the requested source. Entries from before the source existed were all server fetches. */
+export async function getCachedReceipt<T>(receiptKey: string, source: ReceiptSource = 'server'): Promise<T | undefined> {
   const result = await sql<{ receipt_json: unknown }>`SELECT receipt_json FROM capture_receipt_cache
-    WHERE receipt_key = ${receiptKey} AND expires_at > ${Date.now()}`.execute(database());
+    WHERE receipt_key = ${cacheKeyFor(receiptKey, source)} AND expires_at > ${Date.now()}`.execute(database());
   if (!result.rows[0]) return undefined;
   const value = result.rows[0].receipt_json;
-  return safeCachedReceipt(typeof value === 'string' ? JSON.parse(value) : value) as T;
+  const stored = (typeof value === 'string' ? JSON.parse(value) : value) as { receiptSource?: unknown } | null;
+  if ((stored?.receiptSource ?? 'server') !== source) return undefined;
+  return safeCachedReceipt(stored) as T;
 }
 
-export async function cacheReceipt(receiptKey: string, receipt: unknown): Promise<void> {
-  const safe = JSON.stringify(safeCachedReceipt(receipt));
+export async function cacheReceipt(receiptKey: string, receipt: unknown, source: ReceiptSource = 'server'): Promise<void> {
+  const safe = JSON.stringify({ ...safeCachedReceipt(receipt), receiptSource: source });
   const expires = Date.now() + 30 * 24 * 60 * 60 * 1000;
   await sql`INSERT INTO capture_receipt_cache (receipt_key, receipt_json, expires_at)
-    VALUES (${receiptKey}, ${safe}, ${expires}) ON DUPLICATE KEY UPDATE
+    VALUES (${cacheKeyFor(receiptKey, source)}, ${safe}, ${expires}) ON DUPLICATE KEY UPDATE
     receipt_json = VALUES(receipt_json), expires_at = VALUES(expires_at)`.execute(database());
   // Bounded housekeeping; cache lifetime does not depend on an optional worker.
   await sql`DELETE FROM capture_receipt_cache WHERE expires_at <= ${Date.now()} LIMIT 100`.execute(database());
@@ -139,7 +148,8 @@ export async function getCaptureMerchantNames(tins: string[]): Promise<string[]>
 }
 
 export const ISSUED_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-export interface IssuedMerchant { source: 'soliq' | 'photo'; suggestedCategoryId: string | null; draftId: string }
+/** soliq = fetched by the server, device = Soliq data reported by the phone, photo = OCR text. */
+export interface IssuedMerchant { source: 'soliq' | 'device' | 'photo'; suggestedCategoryId: string | null; draftId: string }
 
 /** Remember what this server suggested to this user for a merchant (see capture_issued). */
 export async function recordIssuedMerchant(uid: string, tin: string, issued: IssuedMerchant): Promise<void> {
@@ -156,8 +166,8 @@ export async function getIssuedMerchant(uid: string, tin: string): Promise<Issue
   const result = await sql<{ source: string; suggested_category_id: Buffer | string | null; draft_id: string }>`SELECT source, suggested_category_id, draft_id
     FROM capture_issued WHERE uid = ${uid} AND tin = ${tin} AND issued_at > ${Date.now() - ISSUED_TTL_MS}`.execute(database());
   const row = result.rows[0];
-  if (!row || (row.source !== 'soliq' && row.source !== 'photo')) return undefined;
-  return { source: row.source, draftId: row.draft_id,
+  if (!row || !['soliq', 'device', 'photo'].includes(row.source)) return undefined;
+  return { source: row.source as IssuedMerchant['source'], draftId: row.draft_id,
     suggestedCategoryId: row.suggested_category_id === null ? null : row.suggested_category_id.toString() };
 }
 

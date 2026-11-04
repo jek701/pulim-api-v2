@@ -6,8 +6,9 @@ import { syntheticJpeg, syntheticM4a } from './helpers';
 
 const mocks = vi.hoisted(() => ({
   anonymous: false, caps: vi.fn(), quota: vi.fn(), voice: vi.fn(), photo: vi.fn(), soliq: vi.fn(),
-  warn: vi.fn(),
+  warn: vi.fn(), env: { SOLIQ_OFD_SIGNING_KEY: 'synthetic-signing-key' } as Record<string, string>,
 }));
+vi.mock('../../src/config/env', () => ({ env: mocks.env }));
 vi.mock('../../src/capture/availability', () => ({ captureCapabilities: mocks.caps }));
 vi.mock('../../src/capture/quota', () => ({ captureQuota: mocks.quota }));
 vi.mock('../../src/capture/service', () => ({
@@ -24,7 +25,7 @@ beforeAll(async () => {
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => {
-    req.uid = 'user-1';
+    req.uid = req.get('x-test-uid') ?? 'user-1';
     req.claims = { firebase: { sign_in_provider: mocks.anonymous ? 'anonymous' : 'password' } } as any;
     next();
   });
@@ -50,8 +51,10 @@ const form = (parts: Record<string, string | Blob>) => {
   for (const [name, value] of Object.entries(parts)) data.append(name, value, ...(value instanceof Blob ? ['file'] : []) as []);
   return data;
 };
+// Each Soliq call gets its own user so the 10/min per-user limiter (tested by its own behaviour) never interferes.
+let caller = 0;
 const json = (path: string, body: unknown) => fetch(`${base}/v1/capture${path}`, {
-  method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  method: 'POST', headers: { 'content-type': 'application/json', 'x-test-uid': `caller-${caller++}` }, body: JSON.stringify(body) });
 
 describe('capture HTTP contract', () => {
   it('is not for guests', async () => {
@@ -135,8 +138,8 @@ describe('capture HTTP contract', () => {
   it('POST /receipt/soliq validates the body and passes url and timezone', async () => {
     const url = 'https://ofd.soliq.uz/epi?t=EPTEST&r=1&c=20261103123000&s=1';
     expect((await json('/receipt/soliq', { url, timezone: 'Asia/Tashkent' })).status).toBe(200);
-    expect(mocks.soliq).toHaveBeenCalledWith('user-1', url, 'Asia/Tashkent', expect.any(AbortSignal));
-    for (const body of [{}, { url: 5 }, { url, extra: 1 }, { url, timezone: 'bad' }]) {
+    expect(mocks.soliq).toHaveBeenCalledWith(expect.stringMatching(/^caller-/), url, 'Asia/Tashkent', expect.any(AbortSignal), undefined);
+    for (const body of [{}, { url: 5 }, { url, extra: 1 }, { url, timezone: 'bad' }, { url, raw: 'text' }, { url, raw: [1] }]) {
       expect((await json('/receipt/soliq', body)).status).toBe(400);
     }
   });
@@ -164,6 +167,20 @@ describe('capture HTTP contract', () => {
     expect((await fetch(`${base}/v1/capture/voice`, { method: 'POST', body: form({ audio: audio() }) })).status).toBe(200);
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(signal.aborted).toBe(false);
+  });
+
+  it('passes a phone-reported raw object to the service', async () => {
+    const url = 'https://ofd.soliq.uz/epi?t=EPTEST&r=1&c=20261103123000&s=1';
+    const raw = { terminalId: 'EPTEST', paymentNo: 1, paymentDetails: [] };
+    expect((await json('/receipt/soliq', { url, raw })).status).toBe(200);
+    expect(mocks.soliq).toHaveBeenCalledWith(expect.stringMatching(/^caller-/), url, undefined, expect.any(AbortSignal), raw);
+  });
+
+  it('receipt_mismatch and receipt_invalid are 422s with their codes', async () => {
+    mocks.soliq.mockRejectedValue(new AppError(422, 'receipt_mismatch', 'x'));
+    const response = await json('/receipt/soliq', { url: 'https://ofd.soliq.uz/epi?t=EPTEST&r=1&c=20261103123000&s=1', raw: {} });
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({ code: 'receipt_mismatch', error: { code: 'receipt_mismatch' } });
   });
 
   it('402 carries code and quota in the contract shape, plus the usual error envelope', async () => {
@@ -194,5 +211,31 @@ describe('capture HTTP contract', () => {
     // A ZodError from the model's output is a server-side failure, never the caller's 400.
     mocks.voice.mockRejectedValue(new z.ZodError([]));
     expect((await fetch(`${base}/v1/capture/voice`, { method: 'POST', body: form({ audio: audio() }) })).status).toBe(502);
+  });
+
+  describe('GET /soliq-config', () => {
+    it('returns the signing key and the fixed endpoint, never cached', async () => {
+      const response = await fetch(`${base}/v1/capture/soliq-config`);
+      expect(response.status).toBe(200);
+      expect(response.headers.get('cache-control')).toBe('no-store');
+      expect(await response.json()).toEqual({ signingKey: 'synthetic-signing-key', endpoint: 'https://new-ofd.soliq.uz/api/payment' });
+    });
+    it('is 503 capture_disabled without a configured key, and without the receipt capability', async () => {
+      mocks.env.SOLIQ_OFD_SIGNING_KEY = '  ';
+      const empty = await fetch(`${base}/v1/capture/soliq-config`);
+      expect(empty.status).toBe(503);
+      const body = await empty.text();
+      expect(JSON.parse(body)).toMatchObject({ code: 'capture_disabled' });
+      expect(body).not.toContain('signingKey');
+      mocks.env.SOLIQ_OFD_SIGNING_KEY = 'synthetic-signing-key';
+      mocks.caps.mockResolvedValue({ voice: true, receipt: false });
+      expect((await fetch(`${base}/v1/capture/soliq-config`)).status).toBe(503);
+    });
+    it('is not for guests', async () => {
+      mocks.anonymous = true;
+      const response = await fetch(`${base}/v1/capture/soliq-config`);
+      expect(response.status).toBe(401);
+      expect(await response.text()).not.toContain('synthetic-signing-key');
+    });
   });
 });
