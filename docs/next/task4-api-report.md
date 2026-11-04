@@ -132,3 +132,22 @@ An independent review found the defects below; each has regression tests (parser
 New tables from the review: `capture_issued` and `capture_refunds` (now eleven new tables in total).
 
 Verified after the fixes: typecheck, full suite and build (77 test files, 876 tests passed, 53 skipped MySQL integration tests), 351 capture tests. Not verified: the same items as before (no real MySQL, no OpenAI or Soliq call); in addition, the new SQL (exclusive-lock upsert, `ALGORITHM=INSTANT` / `INPLACE`, `IF(count > 0, ...)`) has run only against the recording mock, so rehearse the migration and a concurrent double-tap reservation on a real MySQL before launch.
+
+## Phone-reported Soliq receipts (branch `claude/soliq-device`, cut from 9ca10bc)
+
+Why: the prod server (France) cannot reach `*.soliq.uz`. The phone fetches the receipt, strips buyer data and uploads it; the API maps, categorises and dedupes it as before. Spec: `docs/next/task4-soliq-device.md` (pulim-react-native repo).
+
+What was added:
+- `GET /v1/capture/soliq-config` returns `{ signingKey, endpoint }` (authenticated, guests rejected, `requires('receipt')`, `no-store`, rate limited). Empty `SOLIQ_OFD_SIGNING_KEY` gives 503 `capture_disabled` with no key in the body.
+- `POST /v1/capture/receipt/soliq` accepts `{ url, raw?, timezone? }`. With `raw` the server does not call Soliq: it re-applies the allowlist (`sanitizeSoliqRaw`), checks `terminalId` and `paymentNo` against the QR (422 `receipt_mismatch`), maps with `mapSoliqReceipt` (422 `receipt_invalid` if unreadable), and continues unchanged (category inference, duplicates, drafts, quota). Bad or oversized (256 KB, 413 `payload_too_large`) input is rejected before any quota, cache or database work. Without `raw` the old server fetch is untouched. The response shape is unchanged.
+- Trust (`receiptSource: device | server`): see below.
+- Privacy: `raw` and its fields are never logged (only `bytes`), never cached or stored beyond the mapped receipt. A synthetic `raw` with every forbidden field filled (all `data`, item and `extraInfo` keys, coordinates, nested objects) is asserted absent from the response, the cache writes, the issued record and the logs.
+
+Trust decisions:
+- `capture_issued.source` gets the value `device` (the column is VARCHAR(8); `photo` and `soliq` unchanged). The cache keeps device-reported receipts under a separate derived key (`sha256('device:' + receiptKey)`) with `receiptSource` inside the JSON. A server fetch reads and writes only `server` entries; a receipt the server fetched itself and cached takes precedence over the phone's version of the same receipt.
+- Device TINs feed the shared votes only through the existing consensus rule. They never set `verified`, never overwrite a merchant's stored name or address (fill-only upsert), their AI-guess vote weighs 0.1 (server-fetched 0.25), and their item codes are never sent for model classification of the shared IKPU map (the names and codes are client-reported, so they could otherwise poison it). Reading the IKPU map and the user's own `merchant_user_category` work as before.
+- Not checked: that the data is really Soliq's. A phone can fabricate a receipt for a QR it has; the consequences are limited to that user's own transaction, one vote per TIN under the consensus rule, and fill-only directory fields.
+
+**Migration: none needed.** The source lives in the existing `capture_issued.source` column and in the cache's JSON, so `005_capture` is enough and no `006` was created.
+
+Verified: typecheck, full suite (77 files, 901 tests passed, 53 skipped MySQL integration tests) and build all pass; 376 capture tests including the new tests in `soliq`, `routes`, `service`, `storage` and `learning`. Not verified: the phone side (Part B), and a real Soliq response uploaded by a device.
