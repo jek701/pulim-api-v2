@@ -27,11 +27,11 @@
 ## Что реализовано
 
 - `POST /v1/push/devices` возвращает ровно `{device:{id,environment,enabled}}`. Hex token нормализуется; unique-token upsert переносит владельца, сбрасывает disable-state, обновляет lastSeenAt. Язык/часовой пояс профиля записываются атомарно с устройством. Устаревший владелец не может удалить переданный токен. DELETE идемпотентен, 204. Anonymous Firebase users не допускаются.
-- `GET /v1/profile` и PATCH уведомлений соответствуют общему контракту. `pushActive` вычисляется из включённых устройств. Старый PATCH `{enabled}` работает; частичные group/quietHours updates не сбрасывают соседние поля. Дефолты: money/family/premium/habit=true, familyExpenses=false, alsoTelegram=false, 22:00–08:00, Asia/Tashkent. Язык и timezone валидируются. Capability: `pushNotifications:true`.
+- `GET /v1/profile` и PATCH уведомлений соответствуют общему контракту. `pushActive` вычисляется из включённых устройств. Старый PATCH `{enabled}` работает; частичные group/quietHours updates не сбрасывают соседние поля. GET/PATCH профиля всегда возвращают полный прежний объект notifications, включая telegram. Дефолты: money/family/premium/habit=true, familyExpenses=false, alsoTelegram=false, 22:00–08:00, Asia/Tashkent. Язык и timezone валидируются. Capability `pushNotifications` зависит от включённого push, готовности APNs и таблицы устройств.
 - ES256 JWT кешируется 50 минут. HTTP/2 sessions переиспользуются отдельно для production/sandbox и пересоздаются после разрыва/GOAWAY. Есть topic, alert type, priority 10, expiration, hash collapse id для бюджета. Невалидные токены выключаются с reason; lastSeenAt защищает свежую перерегистрацию от запоздалого ответа. 429/5xx используют существующий backoff; 403/signing failure ставят provider circuit до refresh, без расходования попыток задания.
 - Активное устройство и настроенный sender выбирают push, Telegram добавляется только при alsoTelegram. При отсутствующей конфигурации/миграции остаётся Telegram. После отказа всех токенов текущая доставка тоже может перейти в Telegram. Digest для Telegram-only сохранён. Push-события индивидуальные; при alsoTelegram старый digest покрывает плановые поводы, поэтому отдельный push-план не создаёт второй Telegram digest. Рассылки используют этот же выбор канала и маркетинговые предпочтения; существующие campaign counters с названиями `telegram*` учитывают выбранную внешнюю доставку, включая push.
 - В `SqlTransaction.flush` события достижения цели, вступления в семью, семейного расхода и платного Premium сохраняются в notifications на том же SQL executor, что и исходная запись. Доставка вызывается только после commit и использует общую claim/lease с worker. Повторы транзакции не отправляют внешние запросы. События одной транзакции дедуплицируются в памяти и по постоянному id.
-- Бюджетные задачи записываются вместе с транзакцией по uid/category, с debounce 25 секунд. Учитываются обе категории при переносе операции. API timer будит доставку после commit, а 5-секундный worker обрабатывает задачи независимо от 15-минутного планировщика. Месячные ключи порогов сохранены.
+- Для владельцев включённых устройств бюджетные задачи записываются вместе с транзакцией по uid/category, с debounce 25 секунд; legacy-задача для такого uid не создаётся. Telegram-only сохраняет прежний debounce 300 секунд. Учитываются обе категории при переносе операции. API timer будит доставку после commit, а 5-секундный worker обрабатывает задачи независимо от 15-минутного планировщика. Месячные ключи порогов сохранены.
 - Планировщик обходит enabled-device owners без требования Telegram chat. Планирует сегодня/завтра по локальному времени: 10:00 для сроков/итогов и 21:00 для вечернего напоминания. Проверяет текущие данные перед отправкой, отменяет неактуальные поводы, обновляет данные/язык, переносит ещё не начатые слоты после смены timezone на следующем проходе. Нет дублирования local planned-expense reminders. Вечерние напоминания ограничены первыми 14 локальными календарными днями и отсутствием личных записей за день. Итоги приоритетнее вечернего напоминания; monthly приоритетнее weekly при совпадении.
 - Quiet hours с минутной точностью и timezone, включая DST. Только budget_100 и apple_billing_failed имеют time-sensitive. Шесть логических сообщений в локальный день максимум; habit — не чаще одного. Первый принятый канал атомарно учитывается в лимите. Успешные устройства/Telegram записываются отдельно и не отправляются заново при retry другого получателя.
 - Все 21 шаблон uz/ru/en и три категории действий присутствуют. Русские тексты взяты из плана; текст ограничен 50/150 Unicode characters без разрыва emoji. Apple billing failure — только тип/шаблон, источника события нет по брифу.
@@ -73,9 +73,9 @@ ON DUPLICATE KEY UPDATE version = VALUES(version);
 | `APNS_KEY_ID` | пусто; Apple signing key id |
 | `APNS_TEAM_ID` | пусто; Apple developer team id |
 | `APNS_KEY_PATH` | пусто; путь к runtime signing key |
-| `APNS_BUNDLE_ID` | `com.izik.pulim`; sender fallback topic; реальное устройство передаёт свой bundleId |
+| `APNS_BUNDLE_ID` | `com.izik.pulim`; bundleId при регистрации обязан совпадать с настройкой |
 
-Существующие `NOTIFICATIONS_ENABLED`, `NOTIFY_ALLOWED_UIDS`, background/maintenance gates сохранены. Дефолт `NOTIFY_BUDGET_DEBOUNCE_MS` изменён с 300000 на 25000; явно заданное старое значение в конфигурации продолжит действовать. Никакая реальная конфигурация не изменялась.
+Существующие `NOTIFICATIONS_ENABLED`, `NOTIFY_ALLOWED_UIDS`, background/maintenance gates сохранены. Дефолт `NOTIFY_BUDGET_DEBOUNCE_MS` восстановлен до 300000 для Telegram-only; отдельный per-category push путь использует 25000. Никакая реальная конфигурация не изменялась.
 
 ## Проверки
 
@@ -87,7 +87,7 @@ DOTENV_CONFIG_PATH=/dev/null WEB_APP_URL=https://example.test FIREBASE_PROJECT_I
 DOTENV_CONFIG_PATH=/dev/null npm run build
 ```
 
-Все три проверки зелёные: **457 passed, 53 skipped; 55 test files passed, 3 skipped**. Skipped — opt-in MySQL integration suites, намеренно не запускались. Дополнительно ESLint изменённых модулей и push tests, а также whitespace diff check — зелёные.
+Все три проверки зелёные после review fixes: **525 passed, 53 skipped; 63 test files passed, 3 skipped**. Skipped — opt-in MySQL integration suites, намеренно не запускались. Дополнительно ESLint изменённых модулей и push tests, а также whitespace diff check — зелёные.
 
 Покрыты: контракт HTTP/валидация и guest rejection, upsert/move/unregister, default/partial preferences, missing migration fallback, APNs headers/cache/errors/reconnect через injected transport, маршрутизация/quiet hours/timezones/DST, месячная дедупликация порогов, debounce/leases, transaction outbox и rollback, две конкурентные claim, дневной cap/частичные ack, локализации всех типов, расписание и revalidation. APNs tests не обращаются в сеть; HTTP endpoint tests используют только локальный fake server.
 
@@ -95,7 +95,39 @@ DOTENV_CONFIG_PATH=/dev/null npm run build
 
 - Не выполнялись реальные SQL миграции или end-to-end MySQL concurrency tests. Атомарность SQL кода проверена unit/mock tests и чтением существующего механизма транзакций; реальный DDL/locking требует отдельно разрешённой локальной rehearsal БД.
 - Не использовались Apple credentials и реальные APNs sandbox/production. Реальная доставка, permission UI, cold-start tap, action buttons и взаимодействие с Part B требуют проверки владельцем/исполнителем приложения. Сервер использует plural links общего контракта (`/accounts/…`, `/debts/…`, `/subscriptions/…`, `/goals/…`); существующие app routes singular, их преобразует Part B.
-- В модели нет суммы минимального платежа кредитки и ссылки счёта у пользовательской подписки. У кредитки отображается `—` вместо выдуманной суммы, у подписки — локализованное общее обозначение счёта. Расчёт начисления процентов опирается на существующую модель капитализации; это уведомление о расчётном дне, не новая банковская проводка.
+- В модели нет суммы минимального платежа кредитки и ссылки счёта у пользовательской подписки. У кредитки используется текст без суммы, у подписки — локализованное общее обозначение счёта. Расчёт начисления процентов опирается на существующую модель капитализации; это уведомление о расчётном дне, не новая банковская проводка.
 - Регистрация устройства и commit изменений сроков, языка или timezone запускают перепланирование пользователя без ожидания периодического сканирования. Заранее поставленные задания обслуживает 5-секундный цикл; периодический скан остаётся страховкой после перезапуска. При полном простое API/worker точное время доставки не гарантируется; действуют stale-window и bounded retries.
 - Существующая консервативная политика неизвестного исхода lease сохранена: истёкшая sending lease становится failed, не переотправляется вслепую. Падение между reservation и первым ack может оставить резерв до локальной полуночи. После принятия APNs и до сохранения ack распределённую exactly-once гарантию дать нельзя. Cap считается по первому принятому каналу логического уведомления, а не повторно для второго устройства после полуночи.
 - Production migration, установка ключа и включение PUSH_ENABLED/расширение allowlist остаются вне этой задачи и не выполнялись.
+
+## Review fixes
+
+Все 14 пунктов из `push-api-fixes.md` исправлены 2026-11-04. Общий HTTP/payload контракт сохранён. Основной принцип: для пользователей без включённого устройства сохранены прежние Telegram-события, тайминги, quiet hours и рассылки.
+
+| № | Исправление и регрессионные тесты |
+|---|---|
+| 1 | `documents.ts` больше не импортирует app env; boot инжектирует switch в отдельный модуль без зависимостей. `tests/migration/import.test.ts` импортирует migrator в отдельном процессе только с MYSQL_* и пустым cwd, без выхода/подключения к БД. |
+| 2 | GET/PATCH профиля объединяют notificationDefaults, сохранённые поля и push-настройки, включая nested telegram. `tests/push/profile.test.ts` проверяет superset старого ответа для обоих HTTP handlers и сохранение legacy overrides. |
+| 3 | Immediate outbox проверяет включённое устройство у каждого получателя; новые goal_reached/family_joined/premium_activated не попадают Telegram-only пользователям. Покрыто `tests/push/outbox.test.ts`. |
+| 4 | Time-sensitive обходит quiet hours только на APNs; Telegram копия/fallback откладывается, уже принятые push не повторяются. Legacy Telegram window сохранён. Покрыто delivery/routing tests. |
+| 5 | Campaigns снова обходят reminder master switch и резервируют слот с allowReminderDisabled=true. Marketing consent применяется до подавления Telegram устройством; при inApp=false и telegram=true выбирается Telegram. Покрыто delivery/routing tests. |
+| 6 | Чужой bundleId получает 400. BadTopic/TopicDisallowed/DeviceTokenNotForTopic отключают устройство с reason и разрешают Telegram fallback той же доставки, включая topic-403 без provider circuit. Покрыто routes/apns/delivery tests. |
+| 7 | Notifications используют INSERT с no-op duplicate update без pre-read. Задача сначала вставляется тем же способом, затем читается/обновляется уже существующая строка; прежний debounce/lease сохранён. Non-lock ошибки hook логируются и поглощаются, deadlock/lock timeout передаются retry. Покрыто outbox/writeHook tests. |
+| 8 | Capability требует PUSH_ENABLED, APNs с читаемым ключом (одна проверка при создании sender) и таблицу (кешированный first-use probe). Регистрация при выключенном push/нет таблицы возвращает 503 PUSH_UNAVAILABLE; unreadable key сохраняет Telegram routing. Покрыто availability/capabilities/routes/devices/apns tests. |
+| 9 | Legacy debounce восстановлен до 300000ms, включая тест реальной env schema. Per-category путь 25000ms только с включённым устройством; legacy-задача для него не создаётся. Новые task docs имеют expiresAt на 90 дней. Покрыто budgetTiming/outbox tests. |
+| 10 | HTTP/2 sessions unref'ed. API и worker закрывают APNs при shutdown; новые kicks прекращаются, текущие planning/delivery ожидаются максимум 5 секунд. Покрыто apns/kick/shutdown tests, включая зависший kick и обе process entrypoints. |
+| 11 | Восстановлены notify.sent/skipped/blocked/failed/safety_cap и jitter 0–1000ms для Telegram 429. APNs stats имеют отдельный apns:hour id; Telegram forbidden-rate denominator не включает push. Покрыто delivery/stats tests. |
+| 12 | trial_started и уже queued daily без push template идут в Telegram даже с активным устройством и alsoTelegram=false. Покрыто delivery/routing tests. |
+| 13 | Регистрации сериализуются по строке профиля; при превышении 10 enabled devices старейшие last_seen_at отключаются с DeviceLimitExceeded. Покрыто devices tests: последовательная/конкурентная регистрация, обновление и смена владельца. |
+| 14 | Кредитка без minimum amount получает утверждённый вариант без суммы (uz/ru/en), uz/en month капитализируется, ru остаётся lowercase genitive, weekly без top category опускает clause. Поддержаны старые queued placeholders. Покрыто templates/scheduled tests. |
+
+Коммиты review fixes:
+
+- `0ce5b3b` — legacy notifications в профиле.
+- `88874e1` — корректные тексты без недостающих данных.
+- `5186b35` — readiness, bundle/topic errors, device cap и HTTP/2 unref.
+- `b19d459` — Telegram compatibility, кампании и наблюдаемость.
+- `57f8a89` — env-independent storage, безопасный outbox и разделение budget timing.
+- `7ec01c9` — bounded drain и закрытие APNs при shutdown.
+
+Финальная последовательность команд из review выполнена без изменений: typecheck → npm test → build с DOTENV_CONFIG_PATH=/dev/null и тестовыми app vars только для тестов. Результат: 525 passed, 53 skipped; ESLint затронутых модулей/тестов и git diff --check также зелёные. Обновлён `docs/ai/api.md`. Реальные миграции, APNs, push/merge/deploy и чтение реальных env/ключей не выполнялись. Проверка SQL locking остаётся unit/mock: живые MySQL concurrency suites намеренно не запускались.
