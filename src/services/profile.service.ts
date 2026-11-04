@@ -93,3 +93,19 @@ export async function bootstrap(
   await ensureNotificationDefaults(uid);
   return getProfile(uid);
 }
+
+/** Runtime device status is deliberately absent from the stored/synced profile. */
+export async function profileWithPushStatus(uid: string) {
+  const profile = await getProfile(uid);
+  if (!profile) return null;
+  const { pushActive } = await import('../push/devices.repository');
+  const { normalizePushSettings } = await import('../push/settings');
+  return {
+    ...profile,
+    notifications: {
+      ...profile.notifications,
+      ...normalizePushSettings(profile.notifications, profile.timezone),
+      pushActive: await pushActive(uid),
+    },
+  };
+}

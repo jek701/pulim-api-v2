@@ -47,3 +47,6 @@ export function entity(name: string): Entity {
   if (!Object.hasOwn(tables, name)) throw new Error(`Unsupported storage entity: ${name}`);
   return name as Entity;
 }
+
+/** Relational tables have their own schemas and never enter the document-table loop. */
+export const relationalTables = { pushDevices: 'push_devices' } as const;

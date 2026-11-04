@@ -74,8 +74,22 @@ export interface AiForecast {
 
 export type TelegramNotificationStatus = 'unknown' | 'reachable' | 'unreachable' | 'blocked';
 
+export interface NotificationGroups {
+  money: boolean;
+  family: boolean;
+  familyExpenses: boolean;
+  premium: boolean;
+  habit: boolean;
+}
+
 export interface NotificationSettings {
   enabled: boolean;
+  groups?: NotificationGroups;
+  alsoTelegram?: boolean;
+  quietHours?: { start: string; end: string };
+  timezone?: string;
+  /** Computed in API responses; never accepted from client writes. */
+  pushActive?: boolean;
   telegram: {
     chatId: string | null;
     status: TelegramNotificationStatus;
@@ -110,6 +124,7 @@ export interface UserProfile {
   authMethodsUpdatedAt?: number;
   homeWidgets?: HomeWidgetSetting[];
   language?: 'en' | 'ru' | 'uz';
+  timezone?: string;
   telegramQuickEntryEnabled?: boolean;
   isPremium?: boolean;
   subscription?: SubscriptionState;

@@ -1,3 +1,4 @@
+import { languageSchema, timezoneSchema, pushSettingsPatchSchema } from '../push/schemas';
 import { z } from 'zod';
 import { CURRENCIES } from './types';
 import { clientIdSchema } from './clientId';
@@ -99,13 +100,14 @@ export const profilePatchSchema = z
     onboardingComplete: z.boolean().optional(),
     homeWidgets: z.array(homeWidgetSchema).optional(),
     telegramLinkPromptDismissed: z.boolean().optional(),
-    language: z.enum(['en', 'ru', 'uz']).optional(),
+    language: languageSchema.optional(),
+    timezone: timezoneSchema.optional(),
     telegramQuickEntryEnabled: z.boolean().optional(),
     notificationsPromptDismissed: z.boolean().optional(),
   })
   .strip();
 
-export const notificationSettingsPatchSchema = z.object({ enabled: z.boolean() }).strip();
+export const notificationSettingsPatchSchema = pushSettingsPatchSchema;
 
 export const homeWidgetsSchema = z.object({ homeWidgets: z.array(homeWidgetSchema) });
 

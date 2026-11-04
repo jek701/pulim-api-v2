@@ -29,6 +29,7 @@ import { shortcutTokenRouter } from './shortcutToken.routes';
 import { communicationsRouter } from './communications.routes';
 import { householdsRouter } from './households.routes';
 import { syncRouter } from './sync.routes';
+import { pushRouter } from './push';
 
 /** Mounts every router. Public routes first, then the authenticated `/v1` tree. */
 export function mountRoutes(app: Express): void {
@@ -64,6 +65,7 @@ export function mountRoutes(app: Express): void {
   v1.use('/households', householdsRouter);
   v1.use('/shortcut-token', shortcutTokenRouter);
   v1.use('/sync', syncRouter);
+  v1.use('/push', pushRouter);
 
   app.use('/v1', v1);
 }

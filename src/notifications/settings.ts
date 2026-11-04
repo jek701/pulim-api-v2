@@ -11,6 +11,9 @@ import { env } from '../config/env';
 import type { NotificationSettings, UserProfile } from '../domain/types';
 import { profileRef } from '../repositories/profile.repository';
 import { nextDailySlot } from './schedule';
+import { normalizePushSettings } from '../push/settings';
+import type { NotificationSettingsPatch } from '../push/schemas';
+import { AppError } from '../utils/AppError';
 function latestChatId(profile: Partial<UserProfile>): string | null {
   const ids = profile.telegramChatIds ?? [];
   return ids.length ? String(ids[ids.length - 1]) : null;
@@ -20,7 +23,7 @@ export function notificationDefaults(
   now = Date.now(),
 ): NotificationSettings {
   return {
-    enabled: true,
+    ...normalizePushSettings(undefined, profile.timezone),
     telegram: {
       chatId: latestChatId(profile),
       status: 'unknown',
@@ -87,22 +90,51 @@ async function cancelPending(uid: string, reason: string, includeCampaign = true
     if (snapshot.size < 400 || cancellable.length < snapshot.size) return;
   }
 }
+export async function patchNotificationSettings(
+  uid: string,
+  input: NotificationSettingsPatch,
+): Promise<NotificationSettings> {
+  const ref = profileRef(uid);
+  const settings = await runSqlTransaction(async (transaction) => {
+    const snap = await transaction.read(ref);
+    if (!snap.exists) throw AppError.notFound('Profile not found.');
+    const data = snap.data as UserProfile;
+    const now = Date.now();
+    const current = data.notifications ?? notificationDefaults(data, now);
+    const normalized = normalizePushSettings(current, data.timezone);
+    const next: NotificationSettings = {
+      ...current,
+      ...normalized,
+      ...input,
+      groups: { ...normalized.groups, ...input.groups },
+      quietHours: { ...normalized.quietHours, ...input.quietHours },
+    };
+    // Read-only state is derived from the current device registry, never persisted.
+    delete next.pushActive;
+    if (input.enabled !== undefined) {
+      next.nextDailyAt = input.enabled
+        ? nextDailySlot(now, env.NOTIFY_DIGEST_HOUR, env.NOTIFY_TIMEZONE)
+        : 0;
+    }
+    transaction.save(
+      ref,
+      {
+        notifications: next,
+        ...(input.timezone ? { timezone: input.timezone } : {}),
+        updatedAt: now,
+      },
+      { merge: true },
+    );
+    return next;
+  });
+  if (input.enabled === false) await cancelPending(uid, 'disabled', false);
+  return settings;
+}
 export async function setNotificationsEnabled(
   uid: string,
   enabled: boolean,
 ): Promise<NotificationSettings> {
-  await ensureNotificationDefaults(uid);
-  const now = Date.now();
-  await patchDocument(profileRef(uid), {
-    'notifications.enabled': enabled,
-    'notifications.nextDailyAt': enabled
-      ? nextDailySlot(now, env.NOTIFY_DIGEST_HOUR, env.NOTIFY_TIMEZONE)
-      : 0,
-    updatedAt: now,
-  });
-  if (!enabled) await cancelPending(uid, 'disabled', false);
-  const snap = await readDocument(profileRef(uid));
-  return snap.data!.notifications as NotificationSettings;
+  return patchNotificationSettings(uid, { enabled });
 }
 export async function markTelegramReachable(uid: string, chatId: string): Promise<void> {
   await ensureNotificationDefaults(uid);
@@ -128,5 +160,6 @@ export async function markTelegramUnavailable(
     'notifications.telegram.checkedAt': now,
     updatedAt: now,
   });
-  await cancelPending(uid, status);
+  const { pushActive } = await import('../push/devices.repository');
+  if (!(await pushActive(uid))) await cancelPending(uid, status);
 }

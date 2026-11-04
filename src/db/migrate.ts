@@ -1,6 +1,6 @@
 import { sql } from 'kysely';
 import { database, closeDatabase } from './database';
-import { tables } from './tables';
+import { tables, relationalTables } from './tables';
 import { projections } from './documents';
 
 /** Additive and restartable: DDL is not transactional on MySQL. Never drops data. */
@@ -139,10 +139,49 @@ export async function migrateDatabase(): Promise<void> {
             db,
           );
           if (!found.rows.length)
-            await db.schema.createIndex(name).on(table).columns([...columns]).execute();
+            await db.schema
+              .createIndex(name)
+              .on(table)
+              .columns([...columns])
+              .execute();
         }
+        // 004: native APNs device registry; timestamps are epoch milliseconds.
+        await db.schema
+          .createTable(relationalTables.pushDevices)
+          .ifNotExists()
+          .addColumn('id', 'char(64)', (column) => column.primaryKey())
+          .addColumn('uid', sql`VARBINARY(512)`, (column) => column.notNull())
+          .addColumn('token', sql`VARCHAR(512) CHARACTER SET ascii COLLATE ascii_bin`, (column) =>
+            column.notNull().unique(),
+          )
+          .addColumn('platform', 'varchar(16)', (column) => column.notNull())
+          .addColumn('environment', 'varchar(16)', (column) => column.notNull())
+          .addColumn('bundle_id', 'varchar(255)', (column) => column.notNull())
+          .addColumn('app_version', 'varchar(64)', (column) => column.notNull())
+          .addColumn('build_number', 'varchar(64)', (column) => column.notNull())
+          .addColumn('created_at', 'bigint', (column) => column.notNull())
+          .addColumn('last_seen_at', 'bigint', (column) => column.notNull())
+          .addColumn('disabled_at', 'bigint')
+          .addColumn('disabled_reason', 'varchar(255)')
+          .execute();
+        const pushIndexes = await sql<{
+          INDEX_NAME: string;
+        }>`SELECT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'push_devices' AND INDEX_NAME = 'push_owner_enabled'`.execute(
+          db,
+        );
+        if (!pushIndexes.rows.length)
+          await db.schema
+            .createIndex('push_owner_enabled')
+            .on(relationalTables.pushDevices)
+            .columns(['uid', 'disabled_at'])
+            .execute();
         // Document tables added after 001 come from `tables` above; the marker records the rollout.
-        for (const version of ['001_document_tables', '002_telegram_login_requests', '003_offline_sync']) {
+        for (const version of [
+          '001_document_tables',
+          '002_telegram_login_requests',
+          '003_offline_sync',
+          '004_push_devices',
+        ]) {
           await db
             .insertInto('schema_migrations')
             .values({ version, applied_at: new Date() })
