@@ -14,7 +14,7 @@ import { deriveAuthMetadata } from '../domain/authMetadata';
 import { profileRef, getProfile } from '../repositories/profile.repository';
 import { getTrialBlockCode, TRIAL_MS } from '../domain/trial';
 import { AppError } from '../utils/AppError';
-import { ensureNotificationDefaults } from '../notifications/settings';
+import { ensureNotificationDefaults, notificationDefaults } from '../notifications/settings';
 import { queueTrialStarted } from '../notifications/queue.repository';
 /**
  * Starts the user's one-time trial. The transaction makes concurrent requests
@@ -100,10 +100,13 @@ export async function profileWithPushStatus(uid: string) {
   if (!profile) return null;
   const { pushActive } = await import('../push/devices.repository');
   const { normalizePushSettings } = await import('../push/settings');
+  const defaults = notificationDefaults(profile);
   return {
     ...profile,
     notifications: {
+      ...defaults,
       ...profile.notifications,
+      telegram: { ...defaults.telegram, ...profile.notifications?.telegram },
       ...normalizePushSettings(profile.notifications, profile.timezone),
       pushActive: await pushActive(uid),
     },
