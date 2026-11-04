@@ -74,6 +74,17 @@ export const pushTemplates: Record<SupportedLanguage, Record<PushType, Template>
   },
 };
 
+const creditDueWithoutAmount: Record<SupportedLanguage, string> = {
+  ru: 'Срок платежа — {date}',
+  uz: 'To‘lov muddati — {date}',
+  en: 'Payment due {date}',
+};
+const weeklyWithoutCategory: Record<SupportedLanguage, string> = {
+  ru: 'Расходы {expense}. {change}',
+  uz: 'Xarajatlar {expense}. {change}',
+  en: 'Expenses {expense}. {change}',
+};
+
 export function truncatePushText(text: string, limit: number): string {
   const graphemes = Array.from(new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text), part => part.segment);
   // APNs clients also count code points, so keep both limits even for compound emoji.
@@ -96,19 +107,26 @@ export function truncatePushText(text: string, limit: number): string {
 
 export function renderPush(payload: PushPayload, language: SupportedLanguage, notificationId: string): ApnsPayload {
   const values = { ...payload.values };
+  if (payload.type === 'monthly_summary' && language !== 'ru' && typeof values.month === 'string') {
+    values.month = values.month.charAt(0).toLocaleUpperCase(language) + values.month.slice(1);
+  }
   if (payload.type === 'trial_ending') {
     values.when = Number(values.days) === 1
       ? { ru: 'завтра', uz: 'ertaga', en: 'tomorrow' }[language]
       : { ru: 'через 3 дня', uz: '3 kundan keyin', en: 'in 3 days' }[language];
   }
   const replace = (text: string) => text.replace(/\{(\w+)\}/g, (_, key: string) => String(values[key] ?? ''));
-  const [title, body] = pushTemplates[language][payload.type];
+  const [title, defaultBody] = pushTemplates[language][payload.type];
+  const missing = (value: string | number | undefined) => value === undefined || String(value).trim() === '' || value === '—';
+  const body = payload.type === 'credit_card_due' && missing(values.amount) ? creditDueWithoutAmount[language]
+    : payload.type === 'weekly_summary' && missing(values.category) ? weeklyWithoutCategory[language]
+      : defaultBody;
   const category: ApnsPayload['aps']['category'] = payload.type === 'subscription_due' ? 'SUBSCRIPTION_DUE'
     : ['debt_3d', 'debt_due', 'debt_overdue'].includes(payload.type) ? 'DEBT_DUE'
       : payload.type === 'evening_log' ? 'EVENING_LOG' : undefined;
   return {
     aps: {
-      alert: { title: truncatePushText(replace(title), 50), body: truncatePushText(replace(body), 150) },
+      alert: { title: truncatePushText(replace(title), 50), body: truncatePushText(replace(body).trim(), 150) },
       sound: 'default', 'thread-id': payload.group,
       ...(category ? { category } : {}),
       'interruption-level': payload.type === 'budget_100' || payload.type === 'apple_billing_failed' ? 'time-sensitive' : 'active',

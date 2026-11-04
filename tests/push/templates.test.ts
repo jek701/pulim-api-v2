@@ -31,6 +31,30 @@ describe('push templates', () => {
     });
   });
 
+  it.each(['uz', 'ru', 'en'] as const)('omits an unavailable credit minimum amount in %s', language => {
+    for (const amount of [undefined, '', '—']) {
+      const result = renderPush({ ...payload, type: 'credit_card_due', values: { name: 'Visa', date: '7/11', ...(amount === undefined ? {} : { amount }) } }, language, 'n');
+      expect(result.aps.alert.body).toBe({ ru: 'Срок платежа — 7/11', uz: 'To‘lov muddati — 7/11', en: 'Payment due 7/11' }[language]);
+    }
+    expect(renderPush({ ...payload, type: 'credit_card_due' }, language, 'n').aps.alert.body).toContain(values.amount);
+  });
+
+  it.each([
+    ['uz', 'oktabr', 'Oktabr yakuni'],
+    ['en', 'october', 'Your October summary'],
+    ['ru', 'октября', 'Итоги октября'],
+  ] as const)('uses the correct monthly title capitalization in %s', (language, month, title) => {
+    expect(renderPush({ ...payload, type: 'monthly_summary', values: { ...values, month } }, language, 'n').aps.alert.title).toBe(title);
+  });
+
+  it.each(['uz', 'ru', 'en'] as const)('omits the missing weekly category clause in %s', language => {
+    for (const category of [undefined, '', '—']) {
+      const result = renderPush({ ...payload, type: 'weekly_summary', values: { expense: '100', change: '', ...(category === undefined ? {} : { category }) } }, language, 'n');
+      expect(result.aps.alert.body).toBe({ ru: 'Расходы 100.', uz: 'Xarajatlar 100.', en: 'Expenses 100.' }[language]);
+    }
+    expect(renderPush({ ...payload, type: 'weekly_summary', values: { expense: '100', change: '10% less', category: '' } }, language, 'n').aps.alert.body).toContain('10% less');
+  });
+
   it('has time-sensitive interruption only for exceeded budgets and Apple billing failure', () => {
     for (const type of PUSH_TYPES) {
       expect(renderPush({ ...payload, type }, 'ru', 'n1').aps['interruption-level'])

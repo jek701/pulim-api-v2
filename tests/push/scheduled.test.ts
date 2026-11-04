@@ -72,7 +72,7 @@ describe('scheduled push candidates', () => {
   it('handles month-end credit due days without inventing a minimum payment', () => {
     const rows = collectScheduledPushes({ ...base, now: Date.parse('2026-11-28T03:00:00Z'),
       cards: [{ id: 'c', cardType: 'credit', dueDay: 31, balance: 100, name: 'Visa', currency: 'UZS' } as Card] });
-    expect(rows.find(candidate => candidate.type === 'credit_card_due')?.values.amount).toBe('—');
+    expect(rows.find(candidate => candidate.type === 'credit_card_due')?.values).not.toHaveProperty('amount');
     expect(rows.find(candidate => candidate.type === 'credit_card_due')?.dedupeKey).toContain('2026-11-30');
   });
 
@@ -104,5 +104,19 @@ describe('scheduled push candidates', () => {
     const rows = collectScheduledPushes({ ...base, now: Date.parse('2027-02-01T03:00:00Z') });
     expect(rows.filter(candidate => candidate.group === 'habit').map(candidate => candidate.type)).toEqual(['monthly_summary']);
     expect(rows.find(candidate => candidate.type === 'monthly_summary')?.values.month).toBe('января');
+  });
+
+  it('omits the weekly category when there is no matching category', () => {
+    const rows = collectScheduledPushes({ ...base, now: Date.parse('2026-11-09T03:00:00Z'),
+      transactions: [transaction({})], categories: [] });
+    const summary = rows.find(candidate => candidate.type === 'weekly_summary')!;
+    expect(summary.values.expense).toBe('100 сум');
+    expect(summary.values).not.toHaveProperty('category');
+  });
+
+  it('keeps an explicit credit minimum payment when it exists', () => {
+    const rows = collectScheduledPushes({ ...base, cards: [{ id: 'c', cardType: 'credit', dueDay: 6,
+      balance: 100, minimumPayment: 20, name: 'Visa', currency: 'UZS' } as Card & { minimumPayment: number }] });
+    expect(rows.find(candidate => candidate.type === 'credit_card_due')?.values.amount).toBe('20 сум');
   });
 });

@@ -96,9 +96,9 @@ export function collectScheduledPushes(input: ScheduledPushSnapshot): ScheduledP
       if (card.scope === 'household' || card.cardType !== 'credit' || !card.dueDay || card.balance <= 0
         || Math.min(card.dueDay, dueLastDay) !== dueParts.day) continue;
       // The current Card model has no minimum payment: never present its balance as that amount.
-      const amount = typeof card.minimumPayment === 'number' ? money(card.minimumPayment, card.currency) : '—';
       append('credit_card_due', 'money', card.id, `/accounts/${encodeURIComponent(card.id)}`,
-        { name: card.name, amount, date: date(cardDue) }, dateKey(cardDue, timeZone));
+        { name: card.name, ...(typeof card.minimumPayment === 'number' ? { amount: money(card.minimumPayment, card.currency) } : {}),
+          date: date(cardDue) }, dateKey(cardDue, timeZone));
     }
 
     for (const deposit of input.deposits ?? []) {
@@ -159,7 +159,8 @@ export function collectScheduledPushes(input: ScheduledPushSnapshot): ScheduledP
               : `${Math.abs(change)}% ${change < 0 ? 'less' : 'more'} than the previous week`;
         }
         append('weekly_summary', 'habit', undefined, '/(tabs)/history', {
-          expense: money(weekly.payload.expense, 'UZS'), category: weekly.payload.topCategories[0]?.name ?? '—', change: comparison,
+          expense: money(weekly.payload.expense, 'UZS'),
+          ...(weekly.payload.topCategories[0] ? { category: weekly.payload.topCategories[0].name } : {}), change: comparison,
         }, dateKey(weekly.payload.from, timeZone));
       }
     }
