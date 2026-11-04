@@ -142,6 +142,85 @@ describe('capture deterministic amounts', () => {
   });
 });
 
+describe('review regressions: never a confident wrong number', () => {
+  it.each([
+    ['миллион с половиной', 1_500_000], ['тысяча с половиной', 1_500], ['две тысячи с половиной', 2_500],
+    ['ming yarim', 1_500], ['million yarim', 1_500_000], ['bir million yarim', 1_500_000],
+    ['миллион ярим', 1_500_000], ['a million and a half', 1_500_000],
+    // The half BEFORE the scale keeps its old meaning.
+    ['bir yarim million', 1_500_000], ['yarim million', 500_000], ['half a million', 500_000],
+    ['пол миллиона', 500_000], ['пол тысячи', 500], ['пол-миллиона', 500_000], ['пол-тысячи', 500],
+    ['полтора миллиона', 1_500_000], ['полторы тысячи', 1_500],
+  ])('reads the half in %s as %i', (text, amount) => {
+    expect(parseAmount(text)).toMatchObject({ amount, confidence: 'high' });
+  });
+
+  it.each([
+    'сто тысяч с половиной', 'двадцать тысяч с половиной', '1,2 млн с половиной', 'пол 5', 'ming yarim yarim',
+  ])('does not guess the half in %s', (text) => {
+    expect(parseAmount(text).amount).toBeNull();
+  });
+
+  it.each(['к ужину', 'потратил к', 'м', 'b', 'тысяч', 'тысячи', 'миллиона', 'млн', 'тыс'])(
+    'does not treat the bare scale word in "%s" as an amount', (text) => {
+      const result = parseAmount(text);
+      expect(result.amount === null || result.confidence === 'low').toBe(true);
+      expect(result.amount).not.toBe(1_000);
+      expect(result.amount).not.toBe(1_000_000);
+    });
+
+  it('keeps a short alias out of an amount that ends before it', () => {
+    expect(parseAmounts('30 минг к ужину').map((a) => [a.amount, a.text])).toEqual([[30_000, '30 минг']]);
+    expect(parseAmounts('5 тысяч к ужину').map((a) => a.amount)).toEqual([5_000]);
+    expect(parseAmount('25 к')).toMatchObject({ amount: 25_000, confidence: 'high' });
+    expect(parseAmount('25k')).toMatchObject({ amount: 25_000, confidence: 'high' });
+  });
+
+  it('flags a lone stand-alone scale word as low confidence', () => {
+    for (const text of ['тысяча', 'миллион', 'ming', 'thousand']) {
+      expect(parseAmount(text)).toMatchObject({ confidence: 'low' });
+    }
+  });
+
+  it.each(['10-15 тысяч', '50-60 минг', '10 - 15 тысяч', '10–15 тыс', '2-3 млн', '100-200 k'])(
+    'never reads the range %s as one confident amount', (text) => {
+      const result = parseAmount(text);
+      expect(result.amount).toBeNull();
+      expect(result.confidence).toBe('low');
+    });
+
+  it.each([
+    ['тысячу двести', 1_200], ['одну тысячу', 1_000], ['двух тысяч', 2_000], ['трёх тысяч', 3_000],
+    ['трех тысяч', 3_000], ['четырёх тысяч', 4_000], ['пяти тысяч', 5_000], ['шести тысяч', 6_000],
+    ['двадцати пяти тысяч', 25_000], ['ста тысяч', 100_000], ['двухсот тысяч', 200_000],
+    ['пятисот тысяч', 500_000], ['двух миллионов', 2_000_000], ['пяти миллионов', 5_000_000],
+    ['двумя тысячами', 2_000], ['тысячи двести', null],
+  ])('reads the case forms in "%s"', (text, amount) => {
+    expect(parseAmount(text).amount).toBe(amount);
+  });
+
+  it('returns null when an unknown word sits inside a number phrase', () => {
+    for (const text of ['двадцать пять абв тысяч', 'сто двадцать несколько тысяч', 'two zorp thousand']) {
+      expect(parseAmount(text).amount).toBeNull();
+    }
+  });
+
+  it.each(['1.250 млн', '1,250 million', '2.500 млн', '1.250 млрд', '3,500 k'])(
+    'reads "%s" as a decimal, but only as a guess', (text) => {
+      const result = parseAmount(text);
+      expect(result.confidence).toBe('low');
+      expect(result.reason).toBe('ambiguous');
+    });
+  it('uses the decimal meaning of a lone group before a scale word', () => {
+    expect(parseAmount('1.250 млн').amount).toBe(1_250_000);
+    expect(parseAmount('1,250 million').amount).toBe(1_250_000);
+    expect(parseAmount('2.500 млн').amount).toBe(2_500_000);
+    // Without a scale word the group is still thousands, with full confidence.
+    expect(parseAmount('1.250')).toMatchObject({ amount: 1_250, currency: 'UZS' });
+    expect(parseAmount('25.000 сум')).toMatchObject({ amount: 25_000, confidence: 'high' });
+  });
+});
+
 describe('synthetic capture evaluation corpus', () => {
   it('covers every supported speech language and multi-operation phrases', () => {
     expect(phrases.length).toBeGreaterThanOrEqual(120);
@@ -178,6 +257,9 @@ describe('synthetic capture evaluation corpus', () => {
           amount: operation.amount,
           currency: operation.currency,
         });
+        if ((operation as { lowConfidence?: boolean }).lowConfidence) {
+          expect(amount.confidence, `${phrase.id}: must be flagged`).toBe('low');
+        }
       });
     }
     expect({ accuracy: correct / count, failures }).toEqual({ accuracy: 1, failures: [] });

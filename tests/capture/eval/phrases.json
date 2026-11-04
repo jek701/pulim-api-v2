@@ -2336,5 +2336,383 @@
         "lowConfidence": true
       }
     ]
+  },
+  {
+    "id": "rev-ru-half-1",
+    "language": "ru",
+    "text": "аренда миллион с половиной",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 1500000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "housing",
+        "amountSpan": "миллион с половиной"
+      }
+    ]
+  },
+  {
+    "id": "rev-ru-half-2",
+    "language": "ru",
+    "text": "кофе тысяча с половиной",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 1500,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "тысяча с половиной"
+      }
+    ]
+  },
+  {
+    "id": "rev-ru-half-3",
+    "language": "ru",
+    "text": "обед две тысячи с половиной",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 2500,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "две тысячи с половиной"
+      }
+    ]
+  },
+  {
+    "id": "rev-ru-pol-1",
+    "language": "ru",
+    "text": "пол миллиона на ремонт",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 500000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "housing",
+        "amountSpan": "пол миллиона"
+      }
+    ]
+  },
+  {
+    "id": "rev-ru-pol-2",
+    "language": "ru",
+    "text": "такси пол тысячи",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 500,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "transport",
+        "amountSpan": "пол тысячи"
+      }
+    ]
+  },
+  {
+    "id": "rev-ru-pol-3",
+    "language": "ru",
+    "text": "ремонт пол-миллиона",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 500000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "housing",
+        "amountSpan": "пол-миллиона"
+      }
+    ]
+  },
+  {
+    "id": "rev-ru-acc-1",
+    "language": "ru",
+    "text": "купил куртку за тысячу двести",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 1200,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "shopping",
+        "amountSpan": "тысячу двести"
+      }
+    ]
+  },
+  {
+    "id": "rev-ru-acc-2",
+    "language": "ru",
+    "text": "на такси ушло не больше двух тысяч",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 2000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "transport",
+        "amountSpan": "двух тысяч"
+      }
+    ]
+  },
+  {
+    "id": "rev-ru-acc-3",
+    "language": "ru",
+    "text": "заплатил за свет трёх тысяч",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 3000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "bills",
+        "amountSpan": "трёх тысяч"
+      }
+    ]
+  },
+  {
+    "id": "rev-ru-acc-4",
+    "language": "ru",
+    "text": "подарок на пять тысяч",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 5000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "gift",
+        "amountSpan": "пять тысяч"
+      }
+    ]
+  },
+  {
+    "id": "rev-ru-acc-5",
+    "language": "ru",
+    "text": "обед на пяти тысяч",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 5000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "пяти тысяч"
+      }
+    ]
+  },
+  {
+    "id": "rev-ru-acc-6",
+    "language": "ru",
+    "text": "такси за одну тысячу",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 1000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "transport",
+        "amountSpan": "одну тысячу"
+      }
+    ]
+  },
+  {
+    "id": "rev-ru-acc-7",
+    "language": "ru",
+    "text": "курсы двадцати пяти тысяч",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 25000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "education",
+        "amountSpan": "двадцати пяти тысяч"
+      }
+    ]
+  },
+  {
+    "id": "rev-uz-lat-half-1",
+    "language": "uz-Latn",
+    "text": "ijara million yarim",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 1500000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "housing",
+        "amountSpan": "million yarim"
+      }
+    ]
+  },
+  {
+    "id": "rev-uz-lat-half-2",
+    "language": "uz-Latn",
+    "text": "kofe ming yarim",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 1500,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "ming yarim"
+      }
+    ]
+  },
+  {
+    "id": "rev-uz-lat-half-3",
+    "language": "uz-Latn",
+    "text": "taksi bir million yarim",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 1500000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "transport",
+        "amountSpan": "bir million yarim"
+      }
+    ]
+  },
+  {
+    "id": "rev-uz-cyr-half-1",
+    "language": "uz-Cyrl",
+    "text": "ижара миллион ярим",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 1500000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "housing",
+        "amountSpan": "миллион ярим"
+      }
+    ]
+  },
+  {
+    "id": "rev-uz-cyr-half-2",
+    "language": "uz-Cyrl",
+    "text": "кофе минг ярим",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 1500,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "минг ярим"
+      }
+    ]
+  },
+  {
+    "id": "rev-en-half-1",
+    "language": "en",
+    "text": "rent a million and a half",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 1500000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "housing",
+        "amountSpan": "million and a half"
+      }
+    ]
+  },
+  {
+    "id": "rev-en-half-2",
+    "language": "en",
+    "text": "coffee a thousand and a half",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 1500,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "thousand and a half"
+      }
+    ]
+  },
+  {
+    "id": "rev-mixed-pol",
+    "language": "mixed",
+    "text": "taxi пол тысячи",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 500,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "transport",
+        "amountSpan": "пол тысячи"
+      }
+    ]
+  },
+  {
+    "id": "rev-ru-dec-1",
+    "language": "ru",
+    "text": "аренда 1.250 млн",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 1250000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "housing",
+        "amountSpan": "1.250 млн",
+        "lowConfidence": true
+      }
+    ]
+  },
+  {
+    "id": "rev-en-dec-1",
+    "language": "en",
+    "text": "rent 1,250 million",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 1250000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "housing",
+        "amountSpan": "1,250 million",
+        "lowConfidence": true
+      }
+    ]
+  },
+  {
+    "id": "rev-mixed-dec-1",
+    "language": "mixed",
+    "text": "ремонт 2.500 млн",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 2500000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "housing",
+        "amountSpan": "2.500 млн",
+        "lowConfidence": true
+      }
+    ]
+  },
+  {
+    "id": "rev-ru-preposition-k",
+    "language": "ru",
+    "text": "отдал 30 минг к ужину",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 30000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "30 минг"
+      }
+    ]
   }
 ]
