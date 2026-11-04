@@ -1,0 +1,2340 @@
+[
+  {
+    "id": "ru-01",
+    "language": "ru",
+    "text": "кофе 25 тысяч",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 25000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "25 тысяч"
+      }
+    ]
+  },
+  {
+    "id": "ru-02",
+    "language": "ru",
+    "text": "такси 30 минг",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 30000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "transport",
+        "amountSpan": "30 минг"
+      }
+    ]
+  },
+  {
+    "id": "ru-03",
+    "language": "ru",
+    "text": "продукты 25k",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 25000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "25k"
+      }
+    ]
+  },
+  {
+    "id": "ru-04",
+    "language": "ru",
+    "text": "обед 25 000",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 25000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "25 000"
+      }
+    ]
+  },
+  {
+    "id": "ru-05",
+    "language": "ru",
+    "text": "аптека 25.000",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 25000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "health",
+        "amountSpan": "25.000"
+      }
+    ]
+  },
+  {
+    "id": "ru-06",
+    "language": "ru",
+    "text": "аренда 1,2 млн",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 1200000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "housing",
+        "amountSpan": "1,2 млн"
+      }
+    ]
+  },
+  {
+    "id": "ru-07",
+    "language": "ru",
+    "text": "зарплата полтора миллиона",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 1500000,
+        "currency": "UZS",
+        "type": "income",
+        "categoryKey": "salary",
+        "amountSpan": "полтора миллиона"
+      }
+    ]
+  },
+  {
+    "id": "ru-08",
+    "language": "ru",
+    "text": "ремонт два миллиона триста тысяч",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 2300000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "housing",
+        "amountSpan": "два миллиона триста тысяч"
+      }
+    ]
+  },
+  {
+    "id": "ru-09",
+    "language": "ru",
+    "text": "билет сто двадцать пять тысяч",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 125000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "travel",
+        "amountSpan": "сто двадцать пять тысяч"
+      }
+    ]
+  },
+  {
+    "id": "ru-10",
+    "language": "ru",
+    "text": "получил подарок 100 баксов",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 100,
+        "currency": "USD",
+        "type": "income",
+        "categoryKey": "gift",
+        "amountSpan": "100 баксов"
+      }
+    ]
+  },
+  {
+    "id": "ru-11",
+    "language": "ru",
+    "text": "книга $20",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 20,
+        "currency": "USD",
+        "type": "expense",
+        "categoryKey": "education",
+        "amountSpan": "$20"
+      }
+    ]
+  },
+  {
+    "id": "ru-12",
+    "language": "ru",
+    "text": "подписка 12,99 долларов",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 12.99,
+        "currency": "USD",
+        "type": "expense",
+        "categoryKey": "bills",
+        "amountSpan": "12,99 долларов"
+      }
+    ]
+  },
+  {
+    "id": "ru-13",
+    "language": "ru",
+    "text": "такси тридцать тысяч сум",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 30000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "transport",
+        "amountSpan": "тридцать тысяч сум"
+      }
+    ]
+  },
+  {
+    "id": "ru-14",
+    "language": "ru",
+    "text": "обед сорок пять тысяч",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 45000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "сорок пять тысяч"
+      }
+    ]
+  },
+  {
+    "id": "ru-15",
+    "language": "ru",
+    "text": "аптека двести пятьдесят тысяч",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 250000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "health",
+        "amountSpan": "двести пятьдесят тысяч"
+      }
+    ]
+  },
+  {
+    "id": "ru-16",
+    "language": "ru",
+    "text": "зарплата восемь миллионов",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 8000000,
+        "currency": "UZS",
+        "type": "income",
+        "categoryKey": "salary",
+        "amountSpan": "восемь миллионов"
+      }
+    ]
+  },
+  {
+    "id": "ru-17",
+    "language": "ru",
+    "text": "кофе полторы тысячи",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 1500,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "полторы тысячи"
+      }
+    ]
+  },
+  {
+    "id": "ru-18",
+    "language": "ru",
+    "text": "аренда два с половиной миллиона",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 2500000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "housing",
+        "amountSpan": "два с половиной миллиона"
+      }
+    ]
+  },
+  {
+    "id": "ru-19",
+    "language": "ru",
+    "text": "покупки 2 345 678 сум",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 2345678,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "shopping",
+        "amountSpan": "2 345 678 сум"
+      }
+    ]
+  },
+  {
+    "id": "ru-20",
+    "language": "ru",
+    "text": "билет 99 евро",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 99,
+        "currency": "EUR",
+        "type": "expense",
+        "categoryKey": "travel",
+        "amountSpan": "99 евро"
+      }
+    ]
+  },
+  {
+    "id": "ru-21",
+    "language": "ru",
+    "text": "получил подарок 500 рублей",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 500,
+        "currency": "RUB",
+        "type": "income",
+        "categoryKey": "gift",
+        "amountSpan": "500 рублей"
+      }
+    ]
+  },
+  {
+    "id": "ru-22",
+    "language": "ru",
+    "text": "интернет 75 тыс. сум",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 75000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "bills",
+        "amountSpan": "75 тыс. сум"
+      }
+    ]
+  },
+  {
+    "id": "ru-23",
+    "language": "ru",
+    "text": "ужин 45.5к",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 45500,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "45.5к"
+      }
+    ]
+  },
+  {
+    "id": "ru-24",
+    "language": "ru",
+    "text": "вода 500 сум",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 500,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "500 сум"
+      }
+    ]
+  },
+  {
+    "id": "ru-25",
+    "language": "ru",
+    "text": "автобус 2 тысячи",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 2000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "transport",
+        "amountSpan": "2 тысячи"
+      }
+    ]
+  },
+  {
+    "id": "uz-Latn-01",
+    "language": "uz-Latn",
+    "text": "qahva yigirma besh ming",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 25000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "yigirma besh ming"
+      }
+    ]
+  },
+  {
+    "id": "uz-Latn-02",
+    "language": "uz-Latn",
+    "text": "taksi o'ttiz ming",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 30000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "transport",
+        "amountSpan": "o'ttiz ming"
+      }
+    ]
+  },
+  {
+    "id": "uz-Latn-03",
+    "language": "uz-Latn",
+    "text": "oziq ovqat 25 000 so'm",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 25000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "25 000 so'm"
+      }
+    ]
+  },
+  {
+    "id": "uz-Latn-04",
+    "language": "uz-Latn",
+    "text": "tushlik qirq besh ming",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 45000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "qirq besh ming"
+      }
+    ]
+  },
+  {
+    "id": "uz-Latn-05",
+    "language": "uz-Latn",
+    "text": "dorixona ikki yuz ming",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 200000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "health",
+        "amountSpan": "ikki yuz ming"
+      }
+    ]
+  },
+  {
+    "id": "uz-Latn-06",
+    "language": "uz-Latn",
+    "text": "ijara bir yarim million",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 1500000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "housing",
+        "amountSpan": "bir yarim million"
+      }
+    ]
+  },
+  {
+    "id": "uz-Latn-07",
+    "language": "uz-Latn",
+    "text": "maosh sakkiz million",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 8000000,
+        "currency": "UZS",
+        "type": "income",
+        "categoryKey": "salary",
+        "amountSpan": "sakkiz million"
+      }
+    ]
+  },
+  {
+    "id": "uz-Latn-08",
+    "language": "uz-Latn",
+    "text": "oldim: sovg'a yuz dollar",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 100,
+        "currency": "USD",
+        "type": "income",
+        "categoryKey": "gift",
+        "amountSpan": "yuz dollar"
+      }
+    ]
+  },
+  {
+    "id": "uz-Latn-09",
+    "language": "uz-Latn",
+    "text": "kitob yigirma dollar",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 20,
+        "currency": "USD",
+        "type": "expense",
+        "categoryKey": "education",
+        "amountSpan": "yigirma dollar"
+      }
+    ]
+  },
+  {
+    "id": "uz-Latn-10",
+    "language": "uz-Latn",
+    "text": "internet yetmish besh ming",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 75000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "bills",
+        "amountSpan": "yetmish besh ming"
+      }
+    ]
+  },
+  {
+    "id": "uz-Latn-11",
+    "language": "uz-Latn",
+    "text": "kiyim uch yuz ellik ming",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 350000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "shopping",
+        "amountSpan": "uch yuz ellik ming"
+      }
+    ]
+  },
+  {
+    "id": "uz-Latn-12",
+    "language": "uz-Latn",
+    "text": "yoqilg'i ikki yuz qirq ming",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 240000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "transport",
+        "amountSpan": "ikki yuz qirq ming"
+      }
+    ]
+  },
+  {
+    "id": "uz-Latn-13",
+    "language": "uz-Latn",
+    "text": "bozor bir million ikki yuz ming",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 1200000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "bir million ikki yuz ming"
+      }
+    ]
+  },
+  {
+    "id": "uz-Latn-14",
+    "language": "uz-Latn",
+    "text": "qahva o'n besh ming",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 15000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "o'n besh ming"
+      }
+    ]
+  },
+  {
+    "id": "uz-Latn-15",
+    "language": "uz-Latn",
+    "text": "avtobus ikki ming soʻm",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 2000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "transport",
+        "amountSpan": "ikki ming soʻm"
+      }
+    ]
+  },
+  {
+    "id": "uz-Latn-16",
+    "language": "uz-Latn",
+    "text": "ijara ikki yarim million",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 2500000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "housing",
+        "amountSpan": "ikki yarim million"
+      }
+    ]
+  },
+  {
+    "id": "uz-Latn-17",
+    "language": "uz-Latn",
+    "text": "non besh ming",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 5000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "besh ming"
+      }
+    ]
+  },
+  {
+    "id": "uz-Latn-18",
+    "language": "uz-Latn",
+    "text": "suv 500 so’m",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 500,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "500 so’m"
+      }
+    ]
+  },
+  {
+    "id": "uz-Latn-19",
+    "language": "uz-Latn",
+    "text": "chipta ellik yevro",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 50,
+        "currency": "EUR",
+        "type": "expense",
+        "categoryKey": "travel",
+        "amountSpan": "ellik yevro"
+      }
+    ]
+  },
+  {
+    "id": "uz-Latn-20",
+    "language": "uz-Latn",
+    "text": "oldim: sovg'a 100 USD",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 100,
+        "currency": "USD",
+        "type": "income",
+        "categoryKey": "gift",
+        "amountSpan": "100 USD"
+      }
+    ]
+  },
+  {
+    "id": "uz-Latn-21",
+    "language": "uz-Latn",
+    "text": "ta'mirlash to'qqiz yuz ming",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 900000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "housing",
+        "amountSpan": "to'qqiz yuz ming"
+      }
+    ]
+  },
+  {
+    "id": "uz-Latn-22",
+    "language": "uz-Latn",
+    "text": "tushlik 45k",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 45000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "45k"
+      }
+    ]
+  },
+  {
+    "id": "uz-Latn-23",
+    "language": "uz-Latn",
+    "text": "ijara 1,2 million",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 1200000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "housing",
+        "amountSpan": "1,2 million"
+      }
+    ]
+  },
+  {
+    "id": "uz-Latn-24",
+    "language": "uz-Latn",
+    "text": "meva oltmish ming",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 60000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "oltmish ming"
+      }
+    ]
+  },
+  {
+    "id": "uz-Latn-25",
+    "language": "uz-Latn",
+    "text": "kurs bir yuz sakson ming",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 180000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "education",
+        "amountSpan": "bir yuz sakson ming"
+      }
+    ]
+  },
+  {
+    "id": "uz-Cyrl-01",
+    "language": "uz-Cyrl",
+    "text": "қаҳва йигирма беш минг",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 25000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "йигирма беш минг"
+      }
+    ]
+  },
+  {
+    "id": "uz-Cyrl-02",
+    "language": "uz-Cyrl",
+    "text": "такси ўттиз минг",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 30000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "transport",
+        "amountSpan": "ўттиз минг"
+      }
+    ]
+  },
+  {
+    "id": "uz-Cyrl-03",
+    "language": "uz-Cyrl",
+    "text": "озиқ овқат 25 000 сўм",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 25000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "25 000 сўм"
+      }
+    ]
+  },
+  {
+    "id": "uz-Cyrl-04",
+    "language": "uz-Cyrl",
+    "text": "тушлик қирқ беш минг",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 45000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "қирқ беш минг"
+      }
+    ]
+  },
+  {
+    "id": "uz-Cyrl-05",
+    "language": "uz-Cyrl",
+    "text": "дорихона икки юз минг",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 200000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "health",
+        "amountSpan": "икки юз минг"
+      }
+    ]
+  },
+  {
+    "id": "uz-Cyrl-06",
+    "language": "uz-Cyrl",
+    "text": "ижара бир ярим миллион",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 1500000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "housing",
+        "amountSpan": "бир ярим миллион"
+      }
+    ]
+  },
+  {
+    "id": "uz-Cyrl-07",
+    "language": "uz-Cyrl",
+    "text": "маош саккиз миллион",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 8000000,
+        "currency": "UZS",
+        "type": "income",
+        "categoryKey": "salary",
+        "amountSpan": "саккиз миллион"
+      }
+    ]
+  },
+  {
+    "id": "uz-Cyrl-08",
+    "language": "uz-Cyrl",
+    "text": "олдим: совға юз доллар",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 100,
+        "currency": "USD",
+        "type": "income",
+        "categoryKey": "gift",
+        "amountSpan": "юз доллар"
+      }
+    ]
+  },
+  {
+    "id": "uz-Cyrl-09",
+    "language": "uz-Cyrl",
+    "text": "китоб йигирма доллар",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 20,
+        "currency": "USD",
+        "type": "expense",
+        "categoryKey": "education",
+        "amountSpan": "йигирма доллар"
+      }
+    ]
+  },
+  {
+    "id": "uz-Cyrl-10",
+    "language": "uz-Cyrl",
+    "text": "интернет етмиш беш минг",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 75000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "bills",
+        "amountSpan": "етмиш беш минг"
+      }
+    ]
+  },
+  {
+    "id": "uz-Cyrl-11",
+    "language": "uz-Cyrl",
+    "text": "кийим уч юз эллик минг",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 350000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "shopping",
+        "amountSpan": "уч юз эллик минг"
+      }
+    ]
+  },
+  {
+    "id": "uz-Cyrl-12",
+    "language": "uz-Cyrl",
+    "text": "ёқилғи икки юз қирқ минг",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 240000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "transport",
+        "amountSpan": "икки юз қирқ минг"
+      }
+    ]
+  },
+  {
+    "id": "uz-Cyrl-13",
+    "language": "uz-Cyrl",
+    "text": "бозор бир миллион икки юз минг",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 1200000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "бир миллион икки юз минг"
+      }
+    ]
+  },
+  {
+    "id": "uz-Cyrl-14",
+    "language": "uz-Cyrl",
+    "text": "қаҳва ўн беш минг",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 15000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "ўн беш минг"
+      }
+    ]
+  },
+  {
+    "id": "uz-Cyrl-15",
+    "language": "uz-Cyrl",
+    "text": "автобус икки минг сўм",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 2000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "transport",
+        "amountSpan": "икки минг сўм"
+      }
+    ]
+  },
+  {
+    "id": "uz-Cyrl-16",
+    "language": "uz-Cyrl",
+    "text": "ижара икки ярим миллион",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 2500000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "housing",
+        "amountSpan": "икки ярим миллион"
+      }
+    ]
+  },
+  {
+    "id": "uz-Cyrl-17",
+    "language": "uz-Cyrl",
+    "text": "нон беш минг",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 5000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "беш минг"
+      }
+    ]
+  },
+  {
+    "id": "uz-Cyrl-18",
+    "language": "uz-Cyrl",
+    "text": "сув 500 сўм",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 500,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "500 сўм"
+      }
+    ]
+  },
+  {
+    "id": "uz-Cyrl-19",
+    "language": "uz-Cyrl",
+    "text": "чипта эллик евро",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 50,
+        "currency": "EUR",
+        "type": "expense",
+        "categoryKey": "travel",
+        "amountSpan": "эллик евро"
+      }
+    ]
+  },
+  {
+    "id": "uz-Cyrl-20",
+    "language": "uz-Cyrl",
+    "text": "олдим: совға 100 USD",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 100,
+        "currency": "USD",
+        "type": "income",
+        "categoryKey": "gift",
+        "amountSpan": "100 USD"
+      }
+    ]
+  },
+  {
+    "id": "uz-Cyrl-21",
+    "language": "uz-Cyrl",
+    "text": "таъмир тўққиз юз минг",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 900000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "housing",
+        "amountSpan": "тўққиз юз минг"
+      }
+    ]
+  },
+  {
+    "id": "uz-Cyrl-22",
+    "language": "uz-Cyrl",
+    "text": "тушлик 45к",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 45000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "45к"
+      }
+    ]
+  },
+  {
+    "id": "uz-Cyrl-23",
+    "language": "uz-Cyrl",
+    "text": "ижара 1,2 миллион",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 1200000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "housing",
+        "amountSpan": "1,2 миллион"
+      }
+    ]
+  },
+  {
+    "id": "uz-Cyrl-24",
+    "language": "uz-Cyrl",
+    "text": "мева олтмиш минг",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 60000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "олтмиш минг"
+      }
+    ]
+  },
+  {
+    "id": "uz-Cyrl-25",
+    "language": "uz-Cyrl",
+    "text": "курс бир юз саксон минг",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 180000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "education",
+        "amountSpan": "бир юз саксон минг"
+      }
+    ]
+  },
+  {
+    "id": "en-01",
+    "language": "en",
+    "text": "coffee twenty five thousand",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 25000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "twenty five thousand"
+      }
+    ]
+  },
+  {
+    "id": "en-02",
+    "language": "en",
+    "text": "taxi thirty thousand",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 30000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "transport",
+        "amountSpan": "thirty thousand"
+      }
+    ]
+  },
+  {
+    "id": "en-03",
+    "language": "en",
+    "text": "groceries 25,000 UZS",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 25000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "25,000 UZS"
+      }
+    ]
+  },
+  {
+    "id": "en-04",
+    "language": "en",
+    "text": "lunch forty-five thousand",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 45000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "forty-five thousand"
+      }
+    ]
+  },
+  {
+    "id": "en-05",
+    "language": "en",
+    "text": "pharmacy two hundred thousand",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 200000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "health",
+        "amountSpan": "two hundred thousand"
+      }
+    ]
+  },
+  {
+    "id": "en-06",
+    "language": "en",
+    "text": "rent one and a half million",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 1500000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "housing",
+        "amountSpan": "one and a half million"
+      }
+    ]
+  },
+  {
+    "id": "en-07",
+    "language": "en",
+    "text": "salary eight million",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 8000000,
+        "currency": "UZS",
+        "type": "income",
+        "categoryKey": "salary",
+        "amountSpan": "eight million"
+      }
+    ]
+  },
+  {
+    "id": "en-08",
+    "language": "en",
+    "text": "received gift one hundred dollars",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 100,
+        "currency": "USD",
+        "type": "income",
+        "categoryKey": "gift",
+        "amountSpan": "one hundred dollars"
+      }
+    ]
+  },
+  {
+    "id": "en-09",
+    "language": "en",
+    "text": "book $20",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 20,
+        "currency": "USD",
+        "type": "expense",
+        "categoryKey": "education",
+        "amountSpan": "$20"
+      }
+    ]
+  },
+  {
+    "id": "en-10",
+    "language": "en",
+    "text": "internet seventy five thousand",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 75000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "bills",
+        "amountSpan": "seventy five thousand"
+      }
+    ]
+  },
+  {
+    "id": "en-11",
+    "language": "en",
+    "text": "clothes three hundred fifty thousand",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 350000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "shopping",
+        "amountSpan": "three hundred fifty thousand"
+      }
+    ]
+  },
+  {
+    "id": "en-12",
+    "language": "en",
+    "text": "fuel two hundred forty thousand",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 240000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "transport",
+        "amountSpan": "two hundred forty thousand"
+      }
+    ]
+  },
+  {
+    "id": "en-13",
+    "language": "en",
+    "text": "groceries one million two hundred thousand",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 1200000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "one million two hundred thousand"
+      }
+    ]
+  },
+  {
+    "id": "en-14",
+    "language": "en",
+    "text": "coffee fifteen thousand",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 15000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "fifteen thousand"
+      }
+    ]
+  },
+  {
+    "id": "en-15",
+    "language": "en",
+    "text": "bus two thousand som",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 2000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "transport",
+        "amountSpan": "two thousand som"
+      }
+    ]
+  },
+  {
+    "id": "en-16",
+    "language": "en",
+    "text": "rent two and a half million",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 2500000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "housing",
+        "amountSpan": "two and a half million"
+      }
+    ]
+  },
+  {
+    "id": "en-17",
+    "language": "en",
+    "text": "bread five thousand",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 5000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "five thousand"
+      }
+    ]
+  },
+  {
+    "id": "en-18",
+    "language": "en",
+    "text": "water 500 UZS",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 500,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "500 UZS"
+      }
+    ]
+  },
+  {
+    "id": "en-19",
+    "language": "en",
+    "text": "ticket fifty euros",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 50,
+        "currency": "EUR",
+        "type": "expense",
+        "categoryKey": "travel",
+        "amountSpan": "fifty euros"
+      }
+    ]
+  },
+  {
+    "id": "en-20",
+    "language": "en",
+    "text": "received gift 100 USD",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 100,
+        "currency": "USD",
+        "type": "income",
+        "categoryKey": "gift",
+        "amountSpan": "100 USD"
+      }
+    ]
+  },
+  {
+    "id": "en-21",
+    "language": "en",
+    "text": "repairs nine hundred thousand",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 900000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "housing",
+        "amountSpan": "nine hundred thousand"
+      }
+    ]
+  },
+  {
+    "id": "en-22",
+    "language": "en",
+    "text": "lunch 45k",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 45000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "45k"
+      }
+    ]
+  },
+  {
+    "id": "en-23",
+    "language": "en",
+    "text": "rent 1.2 million",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 1200000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "housing",
+        "amountSpan": "1.2 million"
+      }
+    ]
+  },
+  {
+    "id": "en-24",
+    "language": "en",
+    "text": "fruit sixty thousand",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 60000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "sixty thousand"
+      }
+    ]
+  },
+  {
+    "id": "en-25",
+    "language": "en",
+    "text": "subscription 12.99 dollars",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 12.99,
+        "currency": "USD",
+        "type": "expense",
+        "categoryKey": "bills",
+        "amountSpan": "12.99 dollars"
+      }
+    ]
+  },
+  {
+    "id": "mixed-01",
+    "language": "mixed",
+    "text": "кофе yigirma besh ming",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 25000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "yigirma besh ming"
+      }
+    ]
+  },
+  {
+    "id": "mixed-02",
+    "language": "mixed",
+    "text": "taksi тридцать тысяч",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 30000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "transport",
+        "amountSpan": "тридцать тысяч"
+      }
+    ]
+  },
+  {
+    "id": "mixed-03",
+    "language": "mixed",
+    "text": "продукты 25 ming so'm",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 25000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "25 ming so'm"
+      }
+    ]
+  },
+  {
+    "id": "mixed-04",
+    "language": "mixed",
+    "text": "lunch қирқ беш минг",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 45000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "қирқ беш минг"
+      }
+    ]
+  },
+  {
+    "id": "mixed-05",
+    "language": "mixed",
+    "text": "аптека two hundred thousand",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 200000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "health",
+        "amountSpan": "two hundred thousand"
+      }
+    ]
+  },
+  {
+    "id": "mixed-06",
+    "language": "mixed",
+    "text": "rent бир ярим миллион",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 1500000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "housing",
+        "amountSpan": "бир ярим миллион"
+      }
+    ]
+  },
+  {
+    "id": "mixed-07",
+    "language": "mixed",
+    "text": "зарплата eight million",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 8000000,
+        "currency": "UZS",
+        "type": "income",
+        "categoryKey": "salary",
+        "amountSpan": "eight million"
+      }
+    ]
+  },
+  {
+    "id": "mixed-08",
+    "language": "mixed",
+    "text": "получил sovg'a сто долларов",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 100,
+        "currency": "USD",
+        "type": "income",
+        "categoryKey": "gift",
+        "amountSpan": "сто долларов"
+      }
+    ]
+  },
+  {
+    "id": "mixed-09",
+    "language": "mixed",
+    "text": "книга twenty dollars",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 20,
+        "currency": "USD",
+        "type": "expense",
+        "categoryKey": "education",
+        "amountSpan": "twenty dollars"
+      }
+    ]
+  },
+  {
+    "id": "mixed-10",
+    "language": "mixed",
+    "text": "интернет yetmish besh ming",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 75000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "bills",
+        "amountSpan": "yetmish besh ming"
+      }
+    ]
+  },
+  {
+    "id": "mixed-11",
+    "language": "mixed",
+    "text": "kiyim триста пятьдесят тысяч",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 350000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "shopping",
+        "amountSpan": "триста пятьдесят тысяч"
+      }
+    ]
+  },
+  {
+    "id": "mixed-12",
+    "language": "mixed",
+    "text": "fuel икки юз қирқ минг",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 240000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "transport",
+        "amountSpan": "икки юз қирқ минг"
+      }
+    ]
+  },
+  {
+    "id": "mixed-13",
+    "language": "mixed",
+    "text": "бозор one million two hundred thousand",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 1200000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "one million two hundred thousand"
+      }
+    ]
+  },
+  {
+    "id": "mixed-14",
+    "language": "mixed",
+    "text": "coffee o'n besh ming",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 15000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "o'n besh ming"
+      }
+    ]
+  },
+  {
+    "id": "mixed-15",
+    "language": "mixed",
+    "text": "автобус 2 ming сум",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 2000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "transport",
+        "amountSpan": "2 ming сум"
+      }
+    ]
+  },
+  {
+    "id": "mixed-16",
+    "language": "mixed",
+    "text": "ижара ikki yarim million",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 2500000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "housing",
+        "amountSpan": "ikki yarim million"
+      }
+    ]
+  },
+  {
+    "id": "mixed-17",
+    "language": "mixed",
+    "text": "bread беш минг",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 5000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "беш минг"
+      }
+    ]
+  },
+  {
+    "id": "mixed-18",
+    "language": "mixed",
+    "text": "water 500 сўм",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 500,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "500 сўм"
+      }
+    ]
+  },
+  {
+    "id": "mixed-19",
+    "language": "mixed",
+    "text": "chipta fifty euros",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 50,
+        "currency": "EUR",
+        "type": "expense",
+        "categoryKey": "travel",
+        "amountSpan": "fifty euros"
+      }
+    ]
+  },
+  {
+    "id": "mixed-20",
+    "language": "mixed",
+    "text": "получил подарок $100",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 100,
+        "currency": "USD",
+        "type": "income",
+        "categoryKey": "gift",
+        "amountSpan": "$100"
+      }
+    ]
+  },
+  {
+    "id": "mixed-21",
+    "language": "mixed",
+    "text": "repairs тўққиз юз минг",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 900000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "housing",
+        "amountSpan": "тўққиз юз минг"
+      }
+    ]
+  },
+  {
+    "id": "mixed-22",
+    "language": "mixed",
+    "text": "обед 45k UZS",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 45000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "45k UZS"
+      }
+    ]
+  },
+  {
+    "id": "mixed-23",
+    "language": "mixed",
+    "text": "ijara 1,2 млн",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 1200000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "housing",
+        "amountSpan": "1,2 млн"
+      }
+    ]
+  },
+  {
+    "id": "mixed-24",
+    "language": "mixed",
+    "text": "fruit олтмиш минг",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 60000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "олтмиш минг"
+      }
+    ]
+  },
+  {
+    "id": "mixed-25",
+    "language": "mixed",
+    "text": "подписка 12.99 USD",
+    "operationCount": 1,
+    "operations": [
+      {
+        "amount": 12.99,
+        "currency": "USD",
+        "type": "expense",
+        "categoryKey": "bills",
+        "amountSpan": "12.99 USD"
+      }
+    ]
+  },
+  {
+    "id": "multi-01",
+    "language": "ru",
+    "text": "кофе 25 тысяч и ремонт два миллиона триста тысяч",
+    "operationCount": 2,
+    "operations": [
+      {
+        "amount": 25000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "25 тысяч"
+      },
+      {
+        "amount": 2300000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "housing",
+        "amountSpan": "два миллиона триста тысяч"
+      }
+    ]
+  },
+  {
+    "id": "multi-02",
+    "language": "uz-Latn",
+    "text": "tushlik qirq besh ming va kiyim uch yuz ellik ming",
+    "operationCount": 2,
+    "operations": [
+      {
+        "amount": 45000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "qirq besh ming"
+      },
+      {
+        "amount": 350000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "shopping",
+        "amountSpan": "uch yuz ellik ming"
+      }
+    ]
+  },
+  {
+    "id": "multi-03",
+    "language": "uz-Cyrl",
+    "text": "маош саккиз миллион ва қаҳва ўн беш минг",
+    "operationCount": 2,
+    "operations": [
+      {
+        "amount": 8000000,
+        "currency": "UZS",
+        "type": "income",
+        "categoryKey": "salary",
+        "amountSpan": "саккиз миллион"
+      },
+      {
+        "amount": 15000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "ўн беш минг"
+      }
+    ]
+  },
+  {
+    "id": "multi-04",
+    "language": "en",
+    "text": "internet seventy five thousand and bread five thousand",
+    "operationCount": 2,
+    "operations": [
+      {
+        "amount": 75000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "bills",
+        "amountSpan": "seventy five thousand"
+      },
+      {
+        "amount": 5000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "five thousand"
+      }
+    ]
+  },
+  {
+    "id": "multi-05",
+    "language": "mixed",
+    "text": "бозор one million two hundred thousand и получил подарок $100",
+    "operationCount": 2,
+    "operations": [
+      {
+        "amount": 1200000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "one million two hundred thousand"
+      },
+      {
+        "amount": 100,
+        "currency": "USD",
+        "type": "income",
+        "categoryKey": "gift",
+        "amountSpan": "$100"
+      }
+    ]
+  },
+  {
+    "id": "multi-06",
+    "language": "ru",
+    "text": "зарплата восемь миллионов и ужин 45.5к",
+    "operationCount": 2,
+    "operations": [
+      {
+        "amount": 8000000,
+        "currency": "UZS",
+        "type": "income",
+        "categoryKey": "salary",
+        "amountSpan": "восемь миллионов"
+      },
+      {
+        "amount": 45500,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "45.5к"
+      }
+    ]
+  },
+  {
+    "id": "multi-07",
+    "language": "uz-Latn",
+    "text": "chipta ellik yevro va qahva yigirma besh ming",
+    "operationCount": 2,
+    "operations": [
+      {
+        "amount": 50,
+        "currency": "EUR",
+        "type": "expense",
+        "categoryKey": "travel",
+        "amountSpan": "ellik yevro"
+      },
+      {
+        "amount": 25000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "yigirma besh ming"
+      }
+    ]
+  },
+  {
+    "id": "multi-08",
+    "language": "uz-Cyrl",
+    "text": "тушлик 45к ва тушлик қирқ беш минг",
+    "operationCount": 2,
+    "operations": [
+      {
+        "amount": 45000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "45к"
+      },
+      {
+        "amount": 45000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "қирқ беш минг"
+      }
+    ]
+  },
+  {
+    "id": "multi-09",
+    "language": "en",
+    "text": "subscription 12.99 dollars and salary eight million",
+    "operationCount": 2,
+    "operations": [
+      {
+        "amount": 12.99,
+        "currency": "USD",
+        "type": "expense",
+        "categoryKey": "bills",
+        "amountSpan": "12.99 dollars"
+      },
+      {
+        "amount": 8000000,
+        "currency": "UZS",
+        "type": "income",
+        "categoryKey": "salary",
+        "amountSpan": "eight million"
+      }
+    ]
+  },
+  {
+    "id": "multi-10",
+    "language": "mixed",
+    "text": "продукты 25 ming so'm и интернет yetmish besh ming",
+    "operationCount": 2,
+    "operations": [
+      {
+        "amount": 25000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "25 ming so'm"
+      },
+      {
+        "amount": 75000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "bills",
+        "amountSpan": "yetmish besh ming"
+      }
+    ]
+  },
+  {
+    "id": "multi-11",
+    "language": "ru",
+    "text": "аренда 1,2 млн и такси тридцать тысяч сум",
+    "operationCount": 2,
+    "operations": [
+      {
+        "amount": 1200000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "housing",
+        "amountSpan": "1,2 млн"
+      },
+      {
+        "amount": 30000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "transport",
+        "amountSpan": "тридцать тысяч сум"
+      }
+    ]
+  },
+  {
+    "id": "multi-12",
+    "language": "uz-Latn",
+    "text": "kitob yigirma dollar va ijara ikki yarim million",
+    "operationCount": 2,
+    "operations": [
+      {
+        "amount": 20,
+        "currency": "USD",
+        "type": "expense",
+        "categoryKey": "education",
+        "amountSpan": "yigirma dollar"
+      },
+      {
+        "amount": 2500000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "housing",
+        "amountSpan": "ikki yarim million"
+      }
+    ]
+  },
+  {
+    "id": "multi-13",
+    "language": "uz-Cyrl",
+    "text": "ёқилғи икки юз қирқ минг ва чипта эллик евро",
+    "operationCount": 2,
+    "operations": [
+      {
+        "amount": 240000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "transport",
+        "amountSpan": "икки юз қирқ минг"
+      },
+      {
+        "amount": 50,
+        "currency": "EUR",
+        "type": "expense",
+        "categoryKey": "travel",
+        "amountSpan": "эллик евро"
+      }
+    ]
+  },
+  {
+    "id": "multi-14",
+    "language": "en",
+    "text": "bus two thousand som and lunch 45k",
+    "operationCount": 2,
+    "operations": [
+      {
+        "amount": 2000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "transport",
+        "amountSpan": "two thousand som"
+      },
+      {
+        "amount": 45000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "45k"
+      }
+    ]
+  },
+  {
+    "id": "multi-15",
+    "language": "mixed",
+    "text": "water 500 сўм и подписка 12.99 USD",
+    "operationCount": 2,
+    "operations": [
+      {
+        "amount": 500,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "500 сўм"
+      },
+      {
+        "amount": 12.99,
+        "currency": "USD",
+        "type": "expense",
+        "categoryKey": "bills",
+        "amountSpan": "12.99 USD"
+      }
+    ]
+  },
+  {
+    "id": "multi-16",
+    "language": "ru",
+    "text": "получил подарок 500 рублей и продукты 25k",
+    "operationCount": 2,
+    "operations": [
+      {
+        "amount": 500,
+        "currency": "RUB",
+        "type": "income",
+        "categoryKey": "gift",
+        "amountSpan": "500 рублей"
+      },
+      {
+        "amount": 25000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "25k"
+      }
+    ]
+  },
+  {
+    "id": "multi-17",
+    "language": "uz-Latn",
+    "text": "meva oltmish ming va ijara bir yarim million",
+    "operationCount": 2,
+    "operations": [
+      {
+        "amount": 60000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "oltmish ming"
+      },
+      {
+        "amount": 1500000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "housing",
+        "amountSpan": "bir yarim million"
+      }
+    ]
+  },
+  {
+    "id": "multi-18",
+    "language": "uz-Cyrl",
+    "text": "такси ўттиз минг ва китоб йигирма доллар",
+    "operationCount": 2,
+    "operations": [
+      {
+        "amount": 30000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "transport",
+        "amountSpan": "ўттиз минг"
+      },
+      {
+        "amount": 20,
+        "currency": "USD",
+        "type": "expense",
+        "categoryKey": "education",
+        "amountSpan": "йигирма доллар"
+      }
+    ]
+  },
+  {
+    "id": "multi-19",
+    "language": "en",
+    "text": "pharmacy two hundred thousand and fuel two hundred forty thousand",
+    "operationCount": 2,
+    "operations": [
+      {
+        "amount": 200000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "health",
+        "amountSpan": "two hundred thousand"
+      },
+      {
+        "amount": 240000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "transport",
+        "amountSpan": "two hundred forty thousand"
+      }
+    ]
+  },
+  {
+    "id": "multi-20",
+    "language": "mixed",
+    "text": "получил sovg'a сто долларов и автобус 2 ming сум",
+    "operationCount": 2,
+    "operations": [
+      {
+        "amount": 100,
+        "currency": "USD",
+        "type": "income",
+        "categoryKey": "gift",
+        "amountSpan": "сто долларов"
+      },
+      {
+        "amount": 2000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "transport",
+        "amountSpan": "2 ming сум"
+      }
+    ]
+  },
+  {
+    "id": "multi-omitted-scale",
+    "language": "mixed",
+    "text": "такси 30 минг и обед 45",
+    "operationCount": 2,
+    "operations": [
+      {
+        "amount": 30000,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "transport",
+        "amountSpan": "30 минг"
+      },
+      {
+        "amount": 45,
+        "currency": "UZS",
+        "type": "expense",
+        "categoryKey": "food",
+        "amountSpan": "45",
+        "lowConfidence": true
+      }
+    ]
+  }
+]
