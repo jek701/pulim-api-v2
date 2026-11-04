@@ -4,7 +4,7 @@ import { DEFAULT_CATEGORIES, defaultCategoryId } from '../../src/domain/defaultC
 const mocks = vi.hoisted(() => ({
   env: { CAPTURE_COUNT_SOLIQ: false, SOLIQ_OFD_SIGNING_KEY: 'synthetic-key', SOLIQ_AMOUNT_DIVISOR: 1 } as Record<string, unknown>,
   rows: { categories: [] as any[], cards: [] as any[], transactions: [] as any[] },
-  infer: vi.fn(), guess: vi.fn(), duplicate: vi.fn(), cached: vi.fn(), cache: vi.fn(),
+  infer: vi.fn(), issue: vi.fn(), guess: vi.fn(), duplicate: vi.fn(), cached: vi.fn(), cache: vi.fn(),
   usage: vi.fn(), reserve: vi.fn(), refund: vi.fn(), premium: vi.fn(),
   transcribe: vi.fn(), parse: vi.fn(), photo: vi.fn(), profile: vi.fn(), warn: vi.fn(),
 }));
@@ -24,7 +24,7 @@ vi.mock('../../src/capture/categories', async (original) => ({
 vi.mock('../../src/capture/repository', () => ({
   findReceiptDuplicate: mocks.duplicate, getCachedReceipt: mocks.cached, cacheReceipt: mocks.cache,
   getCaptureMerchantNames: async (tins: string[]) => tins.map((tin) => `merchant-${tin}`),
-  getCaptureUsage: mocks.usage, reserveCaptureUsage: mocks.reserve, refundCaptureUsage: mocks.refund,
+  recordIssuedMerchant: mocks.issue, getCaptureUsage: mocks.usage, reserveCaptureUsage: mocks.reserve, refundCaptureUsage: mocks.refund,
 }));
 vi.mock('../../src/services/entitlement.service', () => ({ getIsPremium: mocks.premium }));
 vi.mock('../../src/capture/models', () => ({
@@ -56,6 +56,7 @@ beforeEach(() => {
   mocks.rows.categories = categories; mocks.rows.cards = []; mocks.rows.transactions = [];
   mocks.profile.mockResolvedValue({ language: 'ru', timezone: 'Asia/Tashkent' });
   mocks.duplicate.mockResolvedValue(undefined);
+  mocks.issue.mockResolvedValue(undefined);
   mocks.cached.mockResolvedValue(undefined); mocks.cache.mockResolvedValue(undefined);
   mocks.usage.mockResolvedValue(1); mocks.reserve.mockResolvedValue(true); mocks.refund.mockResolvedValue(undefined);
   mocks.premium.mockResolvedValue(false);
@@ -98,6 +99,21 @@ describe('receipt drafts', () => {
     mocks.infer.mockClear();
     await receiptDrafts('user', receipt(), context());
     expect(mocks.infer.mock.calls[0][0]).toMatchObject({ trustedTin: true, classifyIkpu: expect.any(Function) });
+  });
+
+  it('records what it suggested for the seller, so learning can verify the TIN and the suggestion later', async () => {
+    const result = await receiptDrafts('user', receipt(), context());
+    expect(mocks.issue).toHaveBeenCalledWith('user', '123456789', {
+      source: 'soliq', suggestedCategoryId: food.id, draftId: result.drafts[0].draftId });
+    await receiptDrafts('user', { ...receipt(), kind: 'photo' }, context());
+    expect(mocks.issue.mock.calls[1][2]).toMatchObject({ source: 'photo' });
+    // A seller without a TIN, or a failing bookkeeping write, never affects the scan.
+    mocks.issue.mockClear();
+    await receiptDrafts('user', { ...receipt(), merchant: { tin: null, name: 'x', address: null } }, context());
+    expect(mocks.issue).not.toHaveBeenCalled();
+    mocks.issue.mockRejectedValue(new Error('deadlock'));
+    expect((await receiptDrafts('user', receipt(), context())).drafts).toHaveLength(1);
+    expect(mocks.warn).toHaveBeenCalledWith('capture.issue_record_failed');
   });
 
   it('shows an AI suggestion as a highlighted low-confidence category, and null when the user lacks it', async () => {

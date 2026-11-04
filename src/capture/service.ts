@@ -6,7 +6,7 @@ import type { Category } from '../domain/types';
 import { env } from '../config/env';
 import { logger } from '../utils/logger';
 import { STANDARD_CATEGORY_KEYS, inferCaptureCategory } from './categories';
-import { cacheReceipt, findReceiptDuplicate, getCachedReceipt, getCaptureMerchantNames } from './repository';
+import { cacheReceipt, findReceiptDuplicate, getCachedReceipt, getCaptureMerchantNames, recordIssuedMerchant } from './repository';
 import { SoliqClient, parseSoliqUrl, receiptItemsAgree } from './soliq';
 import { extractCapturePhoto, guessCaptureCategory, parseCaptureVoice, transcribeCapture, type CaptureContext } from './models';
 import { captureTimezone, dateInTimezone } from './time';
@@ -111,6 +111,14 @@ export async function receiptDrafts(uid: string, receipt: CaptureReceipt, contex
     comment: receiptComment(receipt.merchant.name, receipt.items.length, context.language),
     lowConfidenceFields: low, items: receipt.items,
   };
+  // Remember what we suggested for this seller: learning later accepts only this TIN, and a "changed
+  // my suggestion" claim only against this category. Best effort: without it nothing is learned.
+  if (receipt.merchant.tin) {
+    try {
+      await recordIssuedMerchant(uid, receipt.merchant.tin, {
+        source: soliq ? 'soliq' : 'photo', suggestedCategoryId: draft.categoryId, draftId: draft.draftId });
+    } catch { logger.warn('capture.issue_record_failed'); }
+  }
   const duplicateOf = await findReceiptDuplicate(uid, receipt.receiptKey);
   return { receipt, drafts: [draft], ...(duplicateOf ? { duplicateOf } : {}) };
 }

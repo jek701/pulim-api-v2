@@ -102,3 +102,37 @@ export async function getCaptureMerchantNames(tins: string[]): Promise<string[]>
   const result = await sql<{ name: string | null }>`SELECT name FROM merchants WHERE tin IN (${sql.join(valid)})`.execute(database());
   return result.rows.map((row) => row.name).filter((name): name is string => Boolean(name));
 }
+
+export const ISSUED_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+export interface IssuedMerchant { source: 'soliq' | 'photo'; suggestedCategoryId: string | null; draftId: string }
+
+/** Remember what this server suggested to this user for a merchant (see capture_issued). */
+export async function recordIssuedMerchant(uid: string, tin: string, issued: IssuedMerchant): Promise<void> {
+  if (!/^(?:\d{9}|\d{14})$/.test(tin)) return;
+  const now = Date.now();
+  await sql`INSERT INTO capture_issued (uid, tin, source, suggested_category_id, draft_id, issued_at)
+    VALUES (${uid}, ${tin}, ${issued.source}, ${issued.suggestedCategoryId}, ${issued.draftId.slice(0, 128)}, ${now})
+    ON DUPLICATE KEY UPDATE source = VALUES(source), suggested_category_id = VALUES(suggested_category_id),
+    draft_id = VALUES(draft_id), issued_at = VALUES(issued_at)`.execute(database());
+  await sql`DELETE FROM capture_issued WHERE issued_at < ${now - ISSUED_TTL_MS} LIMIT 100`.execute(database());
+}
+
+export async function getIssuedMerchant(uid: string, tin: string): Promise<IssuedMerchant | undefined> {
+  const result = await sql<{ source: string; suggested_category_id: Buffer | string | null; draft_id: string }>`SELECT source, suggested_category_id, draft_id
+    FROM capture_issued WHERE uid = ${uid} AND tin = ${tin} AND issued_at > ${Date.now() - ISSUED_TTL_MS}`.execute(database());
+  const row = result.rows[0];
+  if (!row || (row.source !== 'soliq' && row.source !== 'photo')) return undefined;
+  return { source: row.source, draftId: row.draft_id,
+    suggestedCategoryId: row.suggested_category_id === null ? null : row.suggested_category_id.toString() };
+}
+
+/** The user's saved transactions that carry this receiptKey (split drafts share it). */
+export async function receiptSiblings(uid: string, receiptKey: string): Promise<Array<{ categoryId: string; amount: number; type: string }>> {
+  const result = await sql<{ data_json: unknown }>`SELECT data_json FROM transactions
+    WHERE user_id = ${uid} AND capture_receipt_key = ${receiptKey} LIMIT 200`.execute(database());
+  return result.rows.flatMap((row) => {
+    const data = (typeof row.data_json === 'string' ? JSON.parse(row.data_json) : row.data_json) as Record<string, unknown>;
+    return typeof data.categoryId === 'string' && typeof data.amount === 'number'
+      ? [{ categoryId: data.categoryId, amount: data.amount, type: String(data.type) }] : [];
+  });
+}

@@ -188,12 +188,19 @@ async function recordAiGuess(tin: string, key: string): Promise<void> {
 }
 
 export interface CaptureLearningInput {
-  transactionId: string; uid: string; categoryId: string; suggestedCategoryId?: string;
-  merchantTin: string; categories: Category[]; merchantName?: string; merchantAddress?: string;
+  transactionId: string; uid: string; categoryId: string;
+  /** Only the suggestion this server issued; the caller has already verified it. */
+  suggestedCategoryId?: string;
+  merchantTin: string; categories: Category[];
+  /** The TIN came from Soliq: it may feed the shared directory. Otherwise only the user's own memory. */
+  shared?: boolean;
+  /** Saved drafts of one receipt share it: seen_count moves once per receipt. */
+  receiptKey?: string;
 }
-export function voterHash(uid: string, salt: string): string {
+/** Keyed by TIN as well as uid, so one person's votes cannot be linked across merchants. */
+export function voterHash(uid: string, tin: string, salt: string): string {
   if (!salt || salt.length < 16) throw new Error('Capture voter salt is not configured');
-  return createHmac('sha256', salt).update(uid).digest('hex');
+  return createHmac('sha256', salt).update(`${tin}:${uid}`).digest('hex');
 }
 export const learningWeight = (chosen: string, suggested?: string): number => suggested && chosen !== suggested ? 2 : 1;
 
@@ -202,19 +209,30 @@ export async function learnCaptureTransaction(input: CaptureLearningInput): Prom
   if (!isMerchantTin(input.merchantTin) || !await isCaptureStorageReady()) return;
   const category = input.categories.find((candidate) => candidate.id === input.categoryId);
   if (!category) return;
+  const now = Date.now();
+  if (!input.shared) {
+    // Untrusted (photo) TIN: the user's own memory only. No merchant row, no vote, no counters.
+    await sql`INSERT INTO merchant_user_category (uid, tin, category_id, updated_at)
+      VALUES (${input.uid}, ${input.merchantTin}, ${input.categoryId}, ${now})
+      ON DUPLICATE KEY UPDATE category_id = VALUES(category_id), updated_at = VALUES(updated_at)`.execute(database());
+    return;
+  }
   const key = standardCategoryKey(category);
   const salt = process.env.CAPTURE_VOTER_SALT ?? '';
   // Personal choices still work without a salt; shared voting fails closed.
-  const hash = salt.length >= 16 ? voterHash(input.uid, salt) : null;
+  const hash = salt.length >= 16 ? voterHash(input.uid, input.merchantTin, salt) : null;
   const weight = learningWeight(input.categoryId, input.suggestedCategoryId);
-  const event = createHash('sha256').update(`${input.uid}\0${input.transactionId}`).digest('hex');
-  const now = Date.now();
+  const event = createHash('sha256').update(input.receiptKey
+    ? `${input.uid}\0receipt\0${input.receiptKey}` : `${input.uid}\0${input.transactionId}`).digest('hex');
   await database().transaction().execute(async (db) => {
     const claimed = await sql`INSERT IGNORE INTO capture_learning (transaction_hash, learned_at) VALUES (${event}, ${now})`.execute(db);
-    if (Number(claimed.numAffectedRows) !== 1) return;
-    await sql`INSERT INTO merchants (tin, first_seen, last_seen, seen_count) VALUES (${input.merchantTin}, ${now}, ${now}, 1)
-      ON DUPLICATE KEY UPDATE last_seen = VALUES(last_seen), seen_count = seen_count + 1`.execute(db);
-    // All learning for a TIN serializes on the merchant row, including the AI writer and CLI.
+    const first = Number(claimed.numAffectedRows) === 1;
+    // A plain transaction learns once. A receipt re-evaluates (its dominant category can change as
+    // more split drafts are saved) but counts as one sighting and replaces, never adds, its vote.
+    if (!first && !input.receiptKey) return;
+    // Exclusive lock in the same statement; all learning for a TIN serializes on this row.
+    await sql`INSERT INTO merchants (tin, first_seen, last_seen, seen_count) VALUES (${input.merchantTin}, ${now}, ${now}, ${first ? 1 : 0})
+      ON DUPLICATE KEY UPDATE last_seen = VALUES(last_seen), seen_count = seen_count + ${first ? 1 : 0}`.execute(db);
     await sql`SELECT tin FROM merchants WHERE tin = ${input.merchantTin} FOR UPDATE`.execute(db);
     await sql`INSERT INTO merchant_user_category (uid, tin, category_id, updated_at)
       VALUES (${input.uid}, ${input.merchantTin}, ${input.categoryId}, ${now})
@@ -223,8 +241,9 @@ export async function learnCaptureTransaction(input: CaptureLearningInput): Prom
       FROM merchant_latest_votes WHERE tin = ${input.merchantTin} AND voter_hash = ${hash}`.execute(db) : undefined;
     const old = previous?.rows[0];
     if (old) {
+      // Unsigned-safe: voter_count is INT UNSIGNED, so no GREATEST(x - 1, 0) (it errors below zero).
       await sql`UPDATE merchant_category_votes SET weight_sum = GREATEST(weight_sum - ${Number(old.weight)}, ai_weight),
-        voter_count = GREATEST(voter_count - 1, 0) WHERE tin = ${input.merchantTin} AND standard_key = ${old.standard_key}`.execute(db);
+        voter_count = IF(voter_count > 0, voter_count - 1, 0) WHERE tin = ${input.merchantTin} AND standard_key = ${old.standard_key}`.execute(db);
     }
     if (hash && !key) {
       await sql`DELETE FROM merchant_latest_votes WHERE tin = ${input.merchantTin} AND voter_hash = ${hash}`.execute(db);

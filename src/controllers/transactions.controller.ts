@@ -13,7 +13,10 @@ export const listTransactions = asyncHandler(async (req, res) => {
 });
 
 export const createTransaction = asyncHandler(async (req, res) => {
-  res.status(201).json(await txService.createTransaction(req.uid, req.body));
+  // Guests (anonymous Firebase users) never feed capture learning: their capture metadata is dropped.
+  const { capture: _capture, ...rest } = req.body;
+  const guest = req.claims?.firebase?.sign_in_provider === 'anonymous';
+  res.status(201).json(await txService.createTransaction(req.uid, guest ? rest : req.body));
 });
 
 export const updateTransaction = asyncHandler(async (req, res) => {

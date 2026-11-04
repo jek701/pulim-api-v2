@@ -27,6 +27,14 @@ export async function migrateCapture(db: Kysely<any>): Promise<void> {
     category_id VARBINARY(2048) NOT NULL, updated_at BIGINT NOT NULL,
     PRIMARY KEY (uid, tin)
   ) ENGINE=InnoDB`.execute(db);
+  // What the server itself suggested to this user for a merchant. Learning only accepts a TIN (and a
+  // "user changed my suggestion" claim) that matches a row here, so the client cannot invent either.
+  await sql`CREATE TABLE IF NOT EXISTS capture_issued (
+    uid VARBINARY(512) NOT NULL, tin VARCHAR(14) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    source VARCHAR(8) CHARACTER SET ascii NOT NULL, suggested_category_id VARBINARY(2048) NULL,
+    draft_id VARCHAR(128) CHARACTER SET ascii NOT NULL, issued_at BIGINT NOT NULL,
+    PRIMARY KEY (uid, tin), INDEX capture_issued_age (issued_at)
+  ) ENGINE=InnoDB`.execute(db);
   await sql`CREATE TABLE IF NOT EXISTS ikpu_category_map (
     prefix VARCHAR(17) CHARACTER SET ascii COLLATE ascii_bin PRIMARY KEY,
     standard_key VARCHAR(64) NULL, source VARCHAR(16) NOT NULL,

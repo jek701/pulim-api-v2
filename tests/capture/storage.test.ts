@@ -30,7 +30,7 @@ vi.mock('../../src/db/documents', () => ({ documentKey: (table: string, id: stri
 import { database } from '../../src/db/database';
 import { migrateCapture } from '../../src/capture/migration';
 import { IKPU_SEEDS } from '../../src/capture/seeds';
-import { cacheReceipt, findReceiptDuplicate, getCaptureUsage, refundCaptureUsage, reserveCaptureUsage, safeCachedReceipt } from '../../src/capture/repository';
+import { cacheReceipt, findReceiptDuplicate, getIssuedMerchant, receiptSiblings, recordIssuedMerchant, getCaptureUsage, refundCaptureUsage, reserveCaptureUsage, safeCachedReceipt } from '../../src/capture/repository';
 import { categoryForStandardKey, consensusCategory, inferCaptureCategory, ikpuWeightedCategory, isStandardCategoryKey, learnCaptureTransaction, learningWeight, standardCategoryKey, voterHash } from '../../src/capture/categories';
 import { renderMerchantSummary, summaryWeek, verifyMerchant } from '../../src/capture/owner';
 
@@ -94,12 +94,14 @@ describe('category evidence and privacy', () => {
     expect(store.queries.find((query) => query.sql.startsWith('UPDATE ikpu_category_map'))?.parameters).toContain('food');
   });
   it('hashes voters with a salt and never includes raw uid in shared votes', async () => {
-    expect(voterHash('buyer', 'synthetic-salt-one')).not.toBe(voterHash('buyer', 'synthetic-salt-two'));
-    expect(() => voterHash('buyer', '')).toThrow();
+    expect(voterHash('buyer', '123456789', 'synthetic-salt-one')).not.toBe(voterHash('buyer', '123456789', 'synthetic-salt-two'));
+    expect(() => voterHash('buyer', '123456789', '')).toThrow();
+    // Keyed by TIN as well: the same person is not linkable across merchants.
+    expect(voterHash('buyer', '123456789', 'synthetic-salt-one')).not.toBe(voterHash('buyer', '987654321', 'synthetic-salt-one'));
     const previousSalt = process.env.CAPTURE_VOTER_SALT;
     process.env.CAPTURE_VOTER_SALT = 'synthetic-salt-one';
     try {
-      await learnCaptureTransaction({ uid: 'buyer', transactionId: 'tx1', categoryId: food.id, suggestedCategoryId: transport.id, merchantTin: '123456789', categories: [food] });
+      await learnCaptureTransaction({ uid: 'buyer', transactionId: 'tx1', categoryId: food.id, suggestedCategoryId: transport.id, merchantTin: '123456789', categories: [food], shared: true });
       const sharedQueries = store.queries.filter((query) => /(?:INSERT|UPDATE).*merchant_(?:latest|category)_votes/.test(query.sql));
       expect(sharedQueries.length).toBe(2);
       expect(sharedQueries.flatMap((query) => query.parameters)).not.toContain('buyer');
@@ -117,15 +119,16 @@ describe('category evidence and privacy', () => {
     store.handler = (query) => ({ rows: query.startsWith('SELECT standard_key, weight FROM merchant_latest_votes')
       ? [{ standard_key: 'transport', weight: '2.00' }] : [], numAffectedRows: 1n });
     try {
-      await learnCaptureTransaction({ uid: 'buyer', transactionId: 'new-tx', categoryId: food.id, suggestedCategoryId: food.id, merchantTin: '123456789', categories: [food] });
+      await learnCaptureTransaction({ uid: 'buyer', transactionId: 'new-tx', categoryId: food.id, suggestedCategoryId: food.id, merchantTin: '123456789', categories: [food], shared: true });
       const subtraction = store.queries.find((query) => query.sql.startsWith('UPDATE merchant_category_votes'))!;
       expect(subtraction.parameters).toEqual([2, '123456789', 'transport']);
-      expect(subtraction.sql).toContain('voter_count = GREATEST(voter_count - 1, 0)');
+      expect(subtraction.sql).toContain('voter_count = IF(voter_count > 0, voter_count - 1, 0)');
+      expect(subtraction.sql).not.toMatch(/GREATEST\(voter_count/);
       const replacement = store.queries.find((query) => query.sql.startsWith('INSERT INTO merchant_latest_votes'))!;
       expect(replacement.parameters.slice(2, 4)).toEqual(['food', 1]);
       const custom = category('Coffee', '☕', 'personal');
       store.queries = [];
-      await learnCaptureTransaction({ uid: 'buyer', transactionId: 'personal-tx', categoryId: custom.id, merchantTin: '123456789', categories: [custom] });
+      await learnCaptureTransaction({ uid: 'buyer', transactionId: 'personal-tx', categoryId: custom.id, merchantTin: '123456789', categories: [custom], shared: true });
       expect(store.queries.some((query) => query.sql.startsWith('DELETE FROM merchant_latest_votes'))).toBe(true);
       expect(store.queries.some((query) => query.sql.startsWith('INSERT INTO merchant_category_votes'))).toBe(false);
     } finally {
@@ -135,12 +138,12 @@ describe('category evidence and privacy', () => {
   });
   it('does no learning writes when the transaction marker already exists', async () => {
     store.handler = (query) => ({ rows: [], numAffectedRows: query.startsWith('INSERT IGNORE INTO capture_learning') ? 0n : 1n });
-    await learnCaptureTransaction({ uid: 'u', transactionId: 'tx1', categoryId: food.id, merchantTin: '123456789', categories: [food] });
+    await learnCaptureTransaction({ uid: 'u', transactionId: 'tx1', categoryId: food.id, merchantTin: '123456789', categories: [food], shared: true });
     expect(store.queries.filter((query) => !query.sql.includes('schema_migrations'))).toHaveLength(1);
   });
   it('never creates a shared vote for a personal category', async () => {
     const custom = category('Coffee', '☕', 'personal');
-    await learnCaptureTransaction({ uid: 'u', transactionId: 'tx1', categoryId: custom.id, merchantTin: '123456789', categories: [custom] });
+    await learnCaptureTransaction({ uid: 'u', transactionId: 'tx1', categoryId: custom.id, merchantTin: '123456789', categories: [custom], shared: true });
     expect(store.queries.some((query) => query.sql.startsWith('INSERT INTO merchant_user_category'))).toBe(true);
     expect(store.queries.some((query) => query.sql.startsWith('INSERT INTO merchant_category_votes'))).toBe(false);
   });
@@ -228,6 +231,69 @@ describe('review fixes: untrusted TINs, IKPU classification, best-effort directo
   });
 });
 
+describe('review fixes: learning scope', () => {
+  const salt = 'synthetic-salt-one';
+  const withSalt = async (work: () => Promise<void>) => {
+    const previous = process.env.CAPTURE_VOTER_SALT;
+    process.env.CAPTURE_VOTER_SALT = salt;
+    try { await work(); } finally { if (previous === undefined) delete process.env.CAPTURE_VOTER_SALT; else process.env.CAPTURE_VOTER_SALT = previous; }
+  };
+  it('an untrusted TIN updates only the user’s own memory: no merchant row, counters, claim or vote', async () => {
+    await withSalt(() => learnCaptureTransaction({ uid: 'u', transactionId: 'tx', categoryId: food.id, merchantTin: '123456789', categories: [food] }));
+    const writes = store.queries.filter((query) => !query.sql.includes('schema_migrations')).map((query) => query.sql);
+    expect(writes).toHaveLength(1);
+    expect(writes[0]).toMatch(/^INSERT INTO merchant_user_category/);
+  });
+  it('counts a receipt once however many split drafts are saved, and never adds a second vote', async () => {
+    await withSalt(async () => {
+      store.handler = (query) => ({ rows: [], numAffectedRows: query.startsWith('INSERT IGNORE INTO capture_learning') ? 1n : 1n });
+      await learnCaptureTransaction({ uid: 'u', transactionId: 'a', receiptKey: 'a'.repeat(64), categoryId: food.id, merchantTin: '123456789', categories: [food], shared: true });
+      const first = store.queries.find((query) => query.sql.startsWith('INSERT INTO merchants'))!;
+      expect(first.parameters.slice(-2)).toEqual([1, 1]);
+      store.queries = [];
+      store.handler = (query) => ({ rows: query.startsWith('SELECT standard_key, weight FROM merchant_latest_votes') ? [{ standard_key: 'food', weight: '1.00' }] : [],
+        numAffectedRows: query.startsWith('INSERT IGNORE INTO capture_learning') ? 0n : 1n });
+      await learnCaptureTransaction({ uid: 'u', transactionId: 'b', receiptKey: 'a'.repeat(64), categoryId: transport.id, merchantTin: '123456789', categories: [food, transport], shared: true });
+      const second = store.queries.find((query) => query.sql.startsWith('INSERT INTO merchants'))!;
+      expect(second.parameters.slice(-2)).toEqual([0, 0]);
+      // The earlier vote is taken back before the dominant category is cast: still one voter.
+      expect(store.queries.some((query) => query.sql.startsWith('UPDATE merchant_category_votes SET weight_sum'))).toBe(true);
+      expect(store.queries.find((query) => query.sql.startsWith('INSERT INTO merchant_latest_votes'))!.parameters.slice(2, 4)).toEqual(['transport', 1]);
+    });
+  });
+  it('a plain transaction that was already learned does nothing more', async () => {
+    await withSalt(async () => {
+      store.handler = (query) => ({ rows: [], numAffectedRows: query.startsWith('INSERT IGNORE INTO capture_learning') ? 0n : 1n });
+      await learnCaptureTransaction({ uid: 'u', transactionId: 'a', categoryId: food.id, merchantTin: '123456789', categories: [food], shared: true });
+      expect(store.queries.filter((query) => !query.sql.includes('schema_migrations'))).toHaveLength(1);
+    });
+  });
+});
+
+describe('issued merchants and receipt siblings', () => {
+  it('stores what was suggested per user and TIN, and only reads fresh rows of the same user', async () => {
+    await recordIssuedMerchant('u', '123456789', { source: 'soliq', suggestedCategoryId: food.id, draftId: 'd1' });
+    const insert = store.queries.find((query) => query.sql.startsWith('INSERT INTO capture_issued'))!;
+    expect(insert.parameters.slice(0, 5)).toEqual(['u', '123456789', 'soliq', food.id, 'd1']);
+    store.queries = [];
+    await recordIssuedMerchant('u', 'not-a-tin', { source: 'photo', suggestedCategoryId: null, draftId: 'd' });
+    expect(store.queries).toHaveLength(0);
+    store.handler = () => ({ rows: [{ source: 'photo', suggested_category_id: null, draft_id: 'd2' }] });
+    expect(await getIssuedMerchant('u', '123456789')).toEqual({ source: 'photo', suggestedCategoryId: null, draftId: 'd2' });
+    const select = store.queries.at(-1)!;
+    expect(select.sql).toContain('WHERE uid = ? AND tin = ? AND issued_at > ?');
+    store.handler = () => ({ rows: [] });
+    expect(await getIssuedMerchant('u', '123456789')).toBeUndefined();
+    store.handler = () => ({ rows: [{ source: 'other', suggested_category_id: null, draft_id: 'x' }] });
+    expect(await getIssuedMerchant('u', '123456789')).toBeUndefined();
+  });
+  it('reads the user’s own transactions of one receipt through the projection', async () => {
+    store.handler = () => ({ rows: [{ data_json: JSON.stringify({ categoryId: 'a', amount: 5, type: 'expense' }) }, { data_json: JSON.stringify({ amount: 1 }) }] });
+    expect(await receiptSiblings('u', 'k'.repeat(64))).toEqual([{ categoryId: 'a', amount: 5, type: 'expense' }]);
+    expect(store.queries.at(-1)!.sql).toContain('WHERE user_id = ? AND capture_receipt_key = ?');
+  });
+});
+
 describe('quota, duplicates, safe cache, additive migration', () => {
   it('reserves with a conditional atomic update and refunds without going below zero', async () => {
     store.handler = (query) => ({ rows: query.startsWith('SELECT count') ? [{ count: '4' }] : [], numAffectedRows: 1n });
@@ -266,7 +332,7 @@ describe('quota, duplicates, safe cache, additive migration', () => {
   });
   it('creates additive tables and a generated owner/receipt projection, and seeds valid defaults', async () => {
     await migrateCapture(database());
-    expect(store.queries.filter((query) => query.sql.startsWith('CREATE TABLE IF NOT EXISTS'))).toHaveLength(9);
+    expect(store.queries.filter((query) => query.sql.startsWith('CREATE TABLE IF NOT EXISTS'))).toHaveLength(10);
     const ddl = store.queries.map((query) => query.sql).join('\n');
     expect(ddl).toContain('GENERATED ALWAYS AS');
     expect(ddl).toContain(') VIRTUAL');
