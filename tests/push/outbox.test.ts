@@ -7,7 +7,8 @@ const mocks = vi.hoisted(() => ({
   allowed: new Set(['owner', 'partner']),
   documents: new Map<string, Record<string, any>>(),
   constructors: vi.fn(), reads: vi.fn(), inserts: vi.fn(), saves: vi.fn(), flush: vi.fn(),
-  createNotification: vi.fn(), sendApns: vi.fn(), sendTelegram: vi.fn(), kick: vi.fn(), armBudgetCheck: vi.fn(),
+  createNotification: vi.fn(), sendApns: vi.fn(), sendTelegram: vi.fn(), kick: vi.fn(),
+  kickPushPlanning: vi.fn(), armBudgetCheck: vi.fn(),
   operations: [] as string[],
 }));
 
@@ -41,7 +42,7 @@ vi.mock('../../src/notifications/queue.repository', () => ({
 }));
 vi.mock('../../src/push/apns', () => ({ sendApns: mocks.sendApns }));
 vi.mock('../../src/telegram/client', () => ({ sendMessage: mocks.sendTelegram }));
-vi.mock('../../src/push/kick', () => ({ kickDelivery: mocks.kick }));
+vi.mock('../../src/push/kick', () => ({ kickDelivery: mocks.kick, kickPushPlanning: mocks.kickPushPlanning }));
 
 import { enqueueWriteEvents } from '../../src/push/outbox';
 
@@ -75,6 +76,7 @@ describe('transactional push outbox', () => {
     expect(mocks.sendApns).not.toHaveBeenCalled();
     expect(mocks.sendTelegram).not.toHaveBeenCalled();
     expect(mocks.kick).not.toHaveBeenCalled();
+    expect(mocks.kickPushPlanning).not.toHaveBeenCalled();
   });
 
   it('skips an existing notification without another insert or flush', async () => {
@@ -150,9 +152,11 @@ describe('transactional push outbox', () => {
       { merge: true });
     expect(mocks.flush).toHaveBeenCalledExactlyOnceWith(executor);
     expect(mocks.armBudgetCheck).not.toHaveBeenCalled();
-    expect(callbacks).toHaveLength(1);
-    callbacks[0]!();
+    expect(mocks.kickPushPlanning).not.toHaveBeenCalled();
+    expect(callbacks).toHaveLength(2);
+    callbacks.forEach(callback => callback());
     expect(mocks.armBudgetCheck).toHaveBeenCalledExactlyOnceWith('owner:food');
+    expect(mocks.kickPushPlanning).toHaveBeenCalledExactlyOnceWith('owner');
     expect(mocks.sendApns).not.toHaveBeenCalled();
   });
 
@@ -193,6 +197,7 @@ describe('transactional push outbox', () => {
       after: { userId: 'owner', categoryId: 'food' } }], afterCommit)).rejects.toThrow('rollback');
     expect(afterCommit).not.toHaveBeenCalled();
     expect(mocks.armBudgetCheck).not.toHaveBeenCalled();
+    expect(mocks.kickPushPlanning).not.toHaveBeenCalled();
   });
 
   it('does not plan personal budget tasks for household expenses, transfers or unapproved users', async () => {
@@ -201,5 +206,51 @@ describe('transactional push outbox', () => {
       { key: { table: 'transactions', id: 'other' }, after: { userId: 'outsider', categoryId: 'food' } },
     ]);
     expect(mocks.saves).not.toHaveBeenCalled();
+  });
+
+  it('refreshes subscription schedules only after commit without flushing another durable row', async () => {
+    const callbacks: Array<() => void> = [];
+    const subscription: WriteChange = { key: { table: 'subscriptions', id: 'sub' }, after: {
+      userId: 'owner', name: 'Music', isActive: true, nextBillingDate: now, amount: 100,
+    } };
+    expect(await enqueueWriteEvents(executor, [subscription, subscription], callback => callbacks.push(callback))).toBe(false);
+    expect(mocks.reads).not.toHaveBeenCalled();
+    expect(mocks.inserts).not.toHaveBeenCalled();
+    expect(mocks.saves).not.toHaveBeenCalled();
+    expect(mocks.flush).not.toHaveBeenCalled();
+    expect(mocks.kickPushPlanning).not.toHaveBeenCalled();
+    expect(mocks.kick).not.toHaveBeenCalled();
+    expect(callbacks).toHaveLength(1);
+    callbacks[0]!();
+    expect(mocks.kickPushPlanning).toHaveBeenCalledExactlyOnceWith('owner');
+    expect(mocks.sendApns).not.toHaveBeenCalled();
+    expect(mocks.sendTelegram).not.toHaveBeenCalled();
+  });
+
+  it('does not schedule planning when only profile delivery counters change', async () => {
+    const before = { language: 'ru', timezone: 'Asia/Tashkent', notifications: {
+      enabled: true, timezone: 'Asia/Tashkent', groups: { money: true },
+      quietHours: { start: '22:00', end: '08:00' }, sentCount: 1, reservedCount: 1,
+    } };
+    const afterCommit = vi.fn();
+    expect(await enqueueWriteEvents(executor, [{ key: { table: 'profiles', id: 'owner' }, before,
+      after: { ...before, updatedAt: now, notifications: { ...before.notifications, sentCount: 2,
+        reservedCount: 0, lastSentAt: now, habitSentDay: '2026-11-04' } },
+    }], afterCommit)).toBe(false);
+    expect(afterCommit).not.toHaveBeenCalled();
+    expect(mocks.kickPushPlanning).not.toHaveBeenCalled();
+    expect(mocks.constructors).not.toHaveBeenCalled();
+  });
+
+  it('refreshes profile timezone changes after commit using the profile id', async () => {
+    const callbacks: Array<() => void> = [];
+    await enqueueWriteEvents(executor, [{ key: { table: 'profiles', id: 'owner' },
+      before: { timezone: 'Asia/Tashkent' }, after: { timezone: 'Europe/London' },
+    }], callback => callbacks.push(callback));
+    expect(mocks.kickPushPlanning).not.toHaveBeenCalled();
+    expect(callbacks).toHaveLength(1);
+    callbacks[0]!();
+    expect(mocks.kickPushPlanning).toHaveBeenCalledExactlyOnceWith('owner');
+    expect(mocks.flush).not.toHaveBeenCalled();
   });
 });
