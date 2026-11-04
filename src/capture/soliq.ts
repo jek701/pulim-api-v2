@@ -51,6 +51,8 @@ interface SoliqClientOptions {
   cache?: SoliqCache;
   now?: () => number;
   onFailure?: (event: SoliqFailure) => void;
+  /** Soliq money fields divided by this give currency units. 1 = already sum; 100 = tiyin. */
+  amountDivisor?: number;
 }
 
 function invalidQr(): never {
@@ -204,7 +206,10 @@ export function soliqReceiptKey(qr: SoliqQr): string {
 }
 
 /** Only allowlisted receipt fields cross this boundary; raw upstream objects never enter the cache. */
-export function mapSoliqReceipt(raw: unknown, qr: SoliqQr): SoliqReceipt {
+export function mapSoliqReceipt(raw: unknown, qr: SoliqQr, amountDivisor = 1): SoliqReceipt {
+  const divisor = Number.isFinite(amountDivisor) && amountDivisor > 0 ? amountDivisor : 1;
+  const money = (value: number | undefined): number | undefined =>
+    value === undefined || divisor === 1 ? value : Math.round((value / divisor) * 100) / 100;
   const envelope = record(raw);
   const data = Object.hasOwn(envelope, 'data') ? record(envelope.data) : envelope;
   const payment = Object.hasOwn(data, 'payment') ? record(data.payment) : data;
@@ -213,8 +218,8 @@ export function mapSoliqReceipt(raw: unknown, qr: SoliqQr): SoliqReceipt {
     throw new Error('Invalid Soliq receipt shape.');
   }
   const details = payment.paymentDetails.map(record);
-  const cardTotal = numeric(payment.cardTotal);
-  const cashTotal = numeric(payment.cashTotal);
+  const cardTotal = money(numeric(payment.cardTotal));
+  const cashTotal = money(numeric(payment.cashTotal));
   if (
     (payment.cardTotal !== undefined && cardTotal === undefined) ||
     (payment.cashTotal !== undefined && cashTotal === undefined)
@@ -224,7 +229,7 @@ export function mapSoliqReceipt(raw: unknown, qr: SoliqQr): SoliqReceipt {
   const total =
     cardTotal !== undefined || cashTotal !== undefined
       ? (cardTotal ?? 0) + (cashTotal ?? 0)
-      : numeric(payment.total);
+      : money(numeric(payment.total));
   const date = receiptDate(payment.paymentDate ?? payment.date ?? qr.paymentDate);
   if (total === undefined || !Number.isFinite(total) || total > Number.MAX_SAFE_INTEGER || !date) {
     throw new Error('Invalid Soliq receipt totals or date.');
@@ -232,9 +237,9 @@ export function mapSoliqReceipt(raw: unknown, qr: SoliqQr): SoliqReceipt {
   const items = details.map((item): SoliqReceiptItem => {
     const name = text(item.name);
     const quantity = numeric(item.quantity ?? item.count ?? 1);
-    const price = numeric(item.price);
-    const discount = numeric(item.discount ?? 0);
-    const amount = numeric(item.amount);
+    const price = money(numeric(item.price));
+    const discount = money(numeric(item.discount ?? 0));
+    const amount = money(numeric(item.amount));
     if (
       !name ||
       quantity === undefined ||
@@ -347,7 +352,7 @@ export class SoliqClient {
               await response.body?.cancel();
               throw new Error('Soliq upstream failure.');
             }
-            return mapSoliqReceipt(await responseJson(response), qr);
+            return mapSoliqReceipt(await responseJson(response), qr, this.options.amountDivisor);
           })(),
           new Promise<never>((_, reject) => {
             timer = setTimeout(() => {

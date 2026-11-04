@@ -77,6 +77,10 @@ type UsageFeature =
   | 'telegram_parse'
   | 'telegram_voice'
   | 'telegram_receipt'
+  | 'capture_voice'
+  | 'capture_parse'
+  | 'capture_receipt'
+  | 'capture_category'
   | 'weekly_report'
   | 'monthly_report';
 const MODEL_PRICING_PER_MILLION: Record<
