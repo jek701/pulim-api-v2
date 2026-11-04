@@ -66,7 +66,7 @@ describe('capture HTTP contract', () => {
     mocks.caps.mockResolvedValue({ voice: false, receipt: true });
     const response = await fetch(`${base}/v1/capture/voice`, { method: 'POST', body: form({ audio: audio() }) });
     expect(response.status).toBe(503);
-    expect(await response.json()).toMatchObject({ code: 'capture_unavailable' });
+    expect(await response.json()).toMatchObject({ code: 'capture_disabled' });
     expect(mocks.voice).not.toHaveBeenCalled();
     expect((await json('/receipt/soliq', { url: 'https://ofd.soliq.uz/epi' })).status).toBe(200);
     mocks.caps.mockResolvedValue({ voice: false, receipt: false });
@@ -102,6 +102,19 @@ describe('capture HTTP contract', () => {
     const response = await fetch(`${base}/v1/capture/voice`, { method: 'POST', body: body() });
     expect(response.status).toBe(400);
     expect(mocks.voice).not.toHaveBeenCalled();
+  });
+
+  it('stops reading an oversized body and drops the socket after the 400 instead of draining it', async () => {
+    const body = form({ audio: audio(Buffer.alloc(6 * 1024 * 1024)) });
+    const outcome = await fetch(`${base}/v1/capture/voice`, { method: 'POST', body }).then((response) => response, () => undefined);
+    // Either the 400 arrives, or the socket was already dropped while the client was still sending.
+    if (outcome) {
+      expect(outcome.status).toBe(400);
+      expect(outcome.headers.get('connection')).toBe('close');
+    }
+    expect(mocks.voice).not.toHaveBeenCalled();
+    // The server is still healthy for the next request.
+    expect((await fetch(`${base}/v1/capture/quota`)).status).toBe(200);
   });
 
   it('rejects a non-multipart voice request', async () => {
@@ -176,7 +189,7 @@ describe('capture HTTP contract', () => {
     const response = await fetch(`${base}/v1/capture/receipt/photo`, { method: 'POST', body });
     expect(response.status).toBe(502);
     const text = await response.text();
-    expect(JSON.parse(text)).toMatchObject({ code: 'capture_unavailable' });
+    expect(JSON.parse(text)).toMatchObject({ code: 'capture_provider_failed' });
     expect(text).not.toMatch(/LEAK|Buyer|998901/);
     // A ZodError from the model's output is a server-side failure, never the caller's 400.
     mocks.voice.mockRejectedValue(new z.ZodError([]));

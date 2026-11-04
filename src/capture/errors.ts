@@ -7,5 +7,5 @@ export function captureFailure(error: unknown): AppError {
   const status = (error as { status?: unknown } | null)?.status;
   logger.warn({ errorName: error instanceof Error ? error.name : typeof error,
     ...(typeof status === 'number' ? { status } : {}) }, 'capture.recognition_failed');
-  return new AppError(502, 'capture_unavailable', 'Recognition is temporarily unavailable.');
+  return new AppError(502, 'capture_provider_failed', 'Recognition is temporarily unavailable.');
 }

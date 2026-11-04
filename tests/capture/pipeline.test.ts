@@ -87,7 +87,11 @@ describe('deterministic final draft and honest confidence', () => {
   it('hints transcription with the user category and recent merchant names', async () => {
     mocks.transcribe.mockResolvedValue({ text: '25 минг' });
     expect(await transcribeCapture('user', Buffer.from('synthetic'), 'audio/mp4', context, 'uz')).toBe('25 минг');
-    expect(mocks.transcribe.mock.calls[0][0]).toMatchObject({ language: 'uz', prompt: expect.stringContaining('Synthetic Market') });
+    const request = mocks.transcribe.mock.calls[0][0];
+    // The language is a soft prompt hint only, never the model's `language` parameter.
+    expect(request).not.toHaveProperty('language');
+    expect(request.prompt).toContain('Synthetic Market');
+    expect(request.prompt).toContain('usually Uzbek');
   });
 });
 describe('photo receipts', () => {

@@ -23,16 +23,22 @@ export async function readCaptureUpload(req: Request, field: 'audio' | 'image') 
     let failed = false;
     let bytes = 0;
     const fail = () => { failed = true; };
-    req.on('data', (chunk: Buffer) => {
+    const onData = (chunk: Buffer) => {
       bytes += chunk.length;
       if (bytes > MAX_CAPTURE_BYTES + 16_384) {
         failed = true;
+        req.off('data', onData);
         req.unpipe(parser);
         parser.destroy();
         reject(invalid());
-        req.resume();
+        // Do not drain a body we already know is too big (req.resume() would read all of it). Stop
+        // reading, let the 400 go out with Connection: close, then drop the socket.
+        req.pause();
+        req.res?.setHeader('Connection', 'close');
+        req.res?.once('finish', () => req.destroy());
       }
-    });
+    };
+    req.on('data', onData);
     req.once('aborted', () => { reject(invalid()); parser.destroy(); });
     req.once('error', () => { reject(invalid()); parser.destroy(); });
     parser.on('file', (name, stream, info) => {

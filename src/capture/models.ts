@@ -139,6 +139,8 @@ export function modelContext(context: CaptureContext): string {
   });
 }
 
+const LANGUAGE_NAME = { uz: 'Uzbek', ru: 'Russian', en: 'English' } as const;
+
 export async function transcribeCapture(uid: string, buffer: Buffer, _mime: string,
   context: CaptureContext, language?: 'uz' | 'ru' | 'en'): Promise<string> {
   const names = [...context.categories.map(c => c.name), ...context.merchantNames].join(', ').slice(0, 1000);
@@ -151,8 +153,9 @@ export async function transcribeCapture(uid: string, buffer: Buffer, _mime: stri
     const result = await openai().audio.transcriptions.create({
       file: await toFile(buffer, file.name, { type: file.mime }),
       model,
-      ...(language ? { language } : {}),
-      prompt: `Personal finance in Uzbek, Russian or English. 25 ming, 1,2 млн. Names: ${names}`,
+      // No `language` parameter: speech is often mixed (Russian numbers inside Uzbek, ...) and a forced
+      // language mangles it. The app's language is only a soft hint in the prompt, like the Telegram pipeline.
+      prompt: `Personal finance in Uzbek, Russian or English${language ? ` (usually ${LANGUAGE_NAME[language]})` : ''}. 25 ming, 1,2 млн. Names: ${names}`,
     }, { signal: AbortSignal.timeout(60_000) });
     usage = result.usage?.type === 'tokens' ? {
       inputTokens: result.usage.input_tokens, cachedInputTokens: 0, cacheWriteTokens: 0,

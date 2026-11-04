@@ -12,7 +12,7 @@ import { captureTimezone } from '../capture/time';
 
 const router = Router();
 
-const unavailable = () => new AppError(503, 'capture_unavailable', 'Voice and receipt capture are not available.');
+const unavailable = () => new AppError(503, 'capture_disabled', 'Voice and receipt capture are not available.');
 /** Capability gate per feature, so a dark feature cannot be reached by guessing the URL. */
 const requires = (feature: 'voice' | 'receipt' | 'any'): RequestHandler => asyncHandler(async (_req, _res, next) => {
   const capabilities = await captureCapabilities();
