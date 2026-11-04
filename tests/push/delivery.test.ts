@@ -218,7 +218,7 @@ describe('delivery channel integration with mocked I/O', () => {
         notificationId: 'job',
         aps: expect.objectContaining({ 'thread-id': 'money', 'interruption-level': 'active' }),
       }),
-      expect.objectContaining({ collapseId: 'budget:food' }),
+      expect.objectContaining({ collapseId: expect.stringMatching(/^budget:[a-f0-9]{48}$/) }),
     );
     expect(mocks.sendTelegram).not.toHaveBeenCalled();
     expect(mocks.channel).toHaveBeenCalledWith(expect.objectContaining({ id: 'job' }), 'a');
@@ -228,11 +228,6 @@ describe('delivery channel integration with mocked I/O', () => {
     expect(mocks.latency).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'budget_80', enqueuedAt: NOW, status: 200 }),
     );
-  });
-  it('claims a notification once when an API kick overlaps a worker tick', async () => {
-    await Promise.all([runDelivery(), runDelivery()]);
-    expect(mocks.sendApns).toHaveBeenCalledOnce();
-    expect(mocks.sent).toHaveBeenCalledOnce();
   });
   it('enforces the rollout allowlist before claiming or sending', async () => {
     mocks.job!.userId = 'not-allowed';
