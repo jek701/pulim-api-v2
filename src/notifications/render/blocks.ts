@@ -1,3 +1,4 @@
+import { renderPush } from '../../push/templates';
 import { env } from '../../config/env';
 import { categoryDisplayName } from '../../telegram/categoryAliases';
 import type { SupportedLanguage } from '../../telegram/types';
@@ -209,7 +210,9 @@ export function renderNotification(
   includeIntro = false,
   completedActions: number[] = [],
 ): RenderedNotification {
-  let text = payload.kind === 'daily' ? renderDaily(payload, language, completedActions)
+  const pushAlert = payload.kind === 'push' ? renderPush(payload, language, '').aps.alert : null;
+  let text = payload.kind === 'push' ? `<b>${safe(pushAlert!.title)}</b>\n\n${safe(pushAlert!.body)}`
+    : payload.kind === 'daily' ? renderDaily(payload, language, completedActions)
     : payload.kind === 'budget' ? renderBudget(payload, language)
       : payload.kind === 'campaign' ? `<b>${safe(payload.title, 80)}</b>\n\n${safe(payload.body, 2_000)}`
         : renderTrialStarted(payload, language);

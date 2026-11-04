@@ -1,3 +1,5 @@
+import { apnsConfigured } from '../push/apns';
+import { pushActive } from '../push/devices.repository';
 import {
   StoredDocument,
   afterQuery,
@@ -277,11 +279,10 @@ async function fanOut(campaign: CommunicationCampaign): Promise<void> {
             throw error;
         }
       }
-      if (
-        campaign.channels.includes('telegram') &&
-        preferences.marketing.telegram &&
-        telegramLinked(profile)
-      ) {
+      const nativePush = campaign.channels.includes('telegram') && apnsConfigured()
+        && profile.notifications?.enabled === true && preferences.marketing.inApp
+        && await pushActive(document.id);
+      if (campaign.channels.includes('telegram') && (nativePush || (preferences.marketing.telegram && telegramLinked(profile)))) {
         counters.telegramQueued += 1;
         const deliveryRef = documentKey(
           deliveries(),
@@ -297,7 +298,7 @@ async function fanOut(campaign: CommunicationCampaign): Promise<void> {
         };
         const queued = await createNotification({
           userId: document.id,
-          chatId: String(profile.notifications!.telegram.chatId),
+          chatId: profile.notifications?.telegram.chatId ?? '',
           type: 'campaign',
           dedupeKey: `campaign:${campaign.id}:${document.id}`,
           payload,

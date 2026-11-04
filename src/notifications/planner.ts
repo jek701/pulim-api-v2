@@ -1,3 +1,7 @@
+import { runPushPlanner } from '../push/planner';
+import { apnsConfigured } from '../push/apns';
+import { enabledDevices } from '../push/devices.repository';
+import { kickDelivery } from '../push/kick';
 import {
   StoredDocument,
   filterQuery,
@@ -29,7 +33,11 @@ async function listOwned<T>(collection: string, uid: string): Promise<T[]> {
   return snapshot.rows.map((document) => ({ id: document.id, ...document.data }) as T);
 }
 async function listMonthTransactions(uid: string, now: number): Promise<Transaction[]> {
-  const range = currentMonthRange(now, env.NOTIFY_TIMEZONE);
+  const profile = await getProfile(uid);
+  const range = currentMonthRange(
+    now,
+    profile?.notifications?.timezone ?? profile?.timezone ?? env.NOTIFY_TIMEZONE,
+  );
   try {
     const snapshot = await readDocument(
       filterQuery(
@@ -80,6 +88,8 @@ async function processProfile(
     id: string;
   };
   if (!profileCanReceive(profile)) return 'skipped';
+  if (apnsConfigured() && !profile.notifications.alsoTelegram && (await enabledDevices(uid)).length)
+    return 'skipped';
   if (now > dueAt + env.NOTIFY_STALE_AFTER_MS) {
     logger.info({ uid, type: 'daily', skipReason: 'stale_slot' }, 'notify.skipped');
     return 'skipped';
@@ -104,7 +114,15 @@ async function processProfile(
 async function processBudgetTask(task: BudgetTask, now: number): Promise<number> {
   try {
     const profile = await getProfile(task.userId);
-    if (!profileCanReceive(profile)) {
+    const canPush =
+      profile?.notifications?.enabled &&
+      apnsConfigured() &&
+      (await enabledDevices(task.userId)).length > 0;
+    if (!profile || (!profileCanReceive(profile) && !canPush)) {
+      await finishBudgetTask(task);
+      return 0;
+    }
+    if (canPush && profile.notifications?.groups?.money === false) {
       await finishBudgetTask(task);
       return 0;
     }
@@ -121,7 +139,7 @@ async function processBudgetTask(task: BudgetTask, now: number): Promise<number>
       profile.subscription.premiumUntil > now;
     const alerts = collectBudgetAlerts({
       now,
-      timeZone: env.NOTIFY_TIMEZONE,
+      timeZone: profile.notifications?.timezone ?? profile.timezone ?? env.NOTIFY_TIMEZONE,
       transactions,
       budgets,
       categories,
@@ -131,19 +149,21 @@ async function processBudgetTask(task: BudgetTask, now: number): Promise<number>
     });
     let queued = 0;
     for (const alert of alerts) {
+      if (task.categoryId && alert.payload.categoryId !== task.categoryId) continue;
       if (
         await createNotification({
           userId: task.userId,
-          chatId: profile.notifications.telegram.chatId!,
+          chatId: profile.notifications?.telegram.chatId ?? '',
           type: alert.payload.threshold === 100 ? 'budget_100' : 'budget_80',
           dedupeKey: alert.dedupeKey,
-          payload: alert.payload,
+          payload: { ...alert.payload, eventAt: task.eventAt ?? now },
           stateKeys: alert.stateKeys,
         })
       )
         queued += 1;
     }
     await finishBudgetTask(task);
+    if (queued) kickDelivery();
     return queued;
   } catch (error) {
     await failBudgetTask(task, error);
@@ -164,7 +184,7 @@ export async function runPlanner(now = Date.now()): Promise<{
   if (notificationAllowedUids.size) {
     for (const uid of notificationAllowedUids) {
       const document = await readDocument(profileRef(uid));
-      const dueAt = Number(document.data.notifications?.nextDailyAt ?? 0);
+      const dueAt = Number(document.data?.notifications?.nextDailyAt ?? 0);
       if (!document.exists || dueAt <= 0 || dueAt > now) continue;
       totals.scanned += 1;
       try {
@@ -174,38 +194,48 @@ export async function runPlanner(now = Date.now()): Promise<{
         logger.error({ err: error, uid }, 'notify.planner.profile_failed');
       }
     }
-  } else for (let page = 0; page < 10; page += 1) {
-    const snapshot = await readDocument(
-      limitQuery(
-        orderQuery(
-          filterQuery(
-            filterQuery(queryTable('profiles'), 'notifications.nextDailyAt', '>', 0),
+  } else
+    for (let page = 0; page < 10; page += 1) {
+      const snapshot = await readDocument(
+        limitQuery(
+          orderQuery(
+            filterQuery(
+              filterQuery(queryTable('profiles'), 'notifications.nextDailyAt', '>', 0),
+              'notifications.nextDailyAt',
+              '<=',
+              now,
+            ),
             'notifications.nextDailyAt',
-            '<=',
-            now,
           ),
-          'notifications.nextDailyAt',
+          env.NOTIFY_PLANNER_BATCH,
         ),
-        env.NOTIFY_PLANNER_BATCH,
-      ),
-    );
-    if (snapshot.empty) break;
-    totals.scanned += snapshot.size;
-    await mapWithConcurrency(snapshot.rows, 5, async (document) => {
-      try {
-        const result = await processProfile(document, now);
-        totals[result] += 1;
-      } catch (error) {
-        totals.skipped += 1;
-        logger.error({ err: error, uid: document.id }, 'notify.planner.profile_failed');
-      }
-    });
-    if (snapshot.size < env.NOTIFY_PLANNER_BATCH) break;
-  }
-  const tasks = await listDueBudgetTasks(now, 50);
-  await mapWithConcurrency(tasks, 5, async (task) => {
-    totals.queued += await processBudgetTask(task, now);
-  });
+      );
+      if (snapshot.empty) break;
+      totals.scanned += snapshot.size;
+      await mapWithConcurrency(snapshot.rows, 5, async (document) => {
+        try {
+          const result = await processProfile(document, now);
+          totals[result] += 1;
+        } catch (error) {
+          totals.skipped += 1;
+          logger.error({ err: error, uid: document.id }, 'notify.planner.profile_failed');
+        }
+      });
+      if (snapshot.size < env.NOTIFY_PLANNER_BATCH) break;
+    }
+  totals.queued += await runBudgetChecks(now);
+  totals.queued += await runPushPlanner(now);
   logger.info({ ...totals, durationMs: Date.now() - startedAt }, 'notify.planner.tick');
   return totals;
+}
+
+export async function runBudgetChecks(now = Date.now()): Promise<number> {
+  if (!env.NOTIFICATIONS_ENABLED) return 0;
+  await recoverExpiredBudgetTasks(now);
+  const tasks = await listDueBudgetTasks(now, 50);
+  let queued = 0;
+  await mapWithConcurrency(tasks, 5, async (task) => {
+    queued += await processBudgetTask(task, now);
+  });
+  return queued;
 }

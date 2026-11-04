@@ -11,6 +11,15 @@ export const requestLogger = pinoHttp({
     res.setHeader('X-Request-Id', id);
     return id;
   },
+  serializers: {
+    req: (request) => ({
+      ...request,
+      // Device tokens live in the DELETE URL by the native-app contract.
+      url: typeof request.url === 'string'
+        ? request.url.replace(/^(\/v1\/push\/devices\/)[^/?]+/, '$1[redacted]')
+        : request.url,
+    }),
+  },
   // Never log credentials.
   redact: {
     paths: [
@@ -18,6 +27,7 @@ export const requestLogger = pinoHttp({
       'req.headers.cookie',
       'req.headers.x-telegram-bot-api-secret-token',
       'req.body.firebaseIdToken',
+      'req.body.token',
     ],
     remove: true,
   },

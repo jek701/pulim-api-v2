@@ -64,6 +64,11 @@ const EnvSchema = z
     // Notifications are dark-launched: deploy infrastructure and backfill first,
     // then enable the worker explicitly in the environment.
     NOTIFICATIONS_ENABLED: boolish,
+    PUSH_ENABLED: boolish,
+    APNS_KEY_ID: z.string().default(''),
+    APNS_TEAM_ID: z.string().default(''),
+    APNS_KEY_PATH: z.string().default(''),
+    APNS_BUNDLE_ID: z.string().default('com.izik.pulim'),
     // Empty keeps the full rollout; a non-empty list limits every queued Telegram delivery.
     NOTIFY_ALLOWED_UIDS: z.string().default(''),
     NOTIFY_EMBEDDED: boolish,
@@ -80,7 +85,7 @@ const EnvSchema = z
     NOTIFY_MAX_ATTEMPTS: z.coerce.number().int().positive().default(8),
     NOTIFY_SEND_RATE_PER_SEC: z.coerce.number().int().positive().max(29).default(25),
     NOTIFY_LEASE_MS: z.coerce.number().int().min(10_000).default(120_000),
-    NOTIFY_BUDGET_DEBOUNCE_MS: z.coerce.number().int().min(1_000).default(300_000),
+    NOTIFY_BUDGET_DEBOUNCE_MS: z.coerce.number().int().min(1_000).default(25_000),
     NOTIFY_TRIAL_AVAILABLE_DAYS: z.coerce.number().int().nonnegative().default(3),
     NOTIFY_TRIAL_AVAILABLE_REPEAT_DAYS: z.coerce.number().int().positive().default(21),
     NOTIFY_NO_CARDS_DAYS: z.coerce.number().int().nonnegative().default(2),

@@ -33,4 +33,14 @@ describe('budget thresholds', () => {
     const key = collect(800)[0]!.dedupeKey;
     expect(collect(900, { [key]: now })).toHaveLength(0);
   });
+  it('starts fresh at the next local month while preserving last month dedupe', () => {
+    const previous = collect(1000)[0]!;
+    const october = Date.parse('2026-09-30T19:05:00Z'); // Oct 1 in Tashkent
+    const next = collectBudgetAlerts({ now: october, timeZone: 'Asia/Tashkent',
+      transactions: [{ ...transaction(800), date: october }], budgets: [budget], categories: [category],
+      subcategories: [], state: { ...emptyNotificationState('u'), seen: Object.fromEntries(previous.stateKeys.map(key => [key, now])) }, premium: false });
+    expect(next[0]?.payload.threshold).toBe(80);
+    expect(next[0]?.dedupeKey).toContain('2026-10');
+  });
+
 });

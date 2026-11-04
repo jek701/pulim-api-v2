@@ -1,3 +1,5 @@
+import { env } from '../config/env';
+import type { WriteChange } from '../push/events';
 import { randomInt } from 'node:crypto';
 import { sql, type Kysely, type Transaction } from 'kysely';
 import { database } from './database';
@@ -364,6 +366,9 @@ export async function syncHouseholdMembers(
 }
 export class SqlTransaction {
   private readonly writes: Write[] = [];
+  private readonly committed: Array<() => void> = [];
+  afterCommit(callback: () => void): void { this.committed.push(callback); }
+  notifyCommitted(): void { this.committed.forEach((callback) => callback()); }
   constructor(private readonly executor?: Executor) {}
   read(key: DocumentKey): Promise<StoredDocument>;
   read(query: QuerySpec): Promise<Selection>;
@@ -390,6 +395,7 @@ export class SqlTransaction {
   }
   async flush(executor: Executor): Promise<void> {
     const changes = new Map<string, SyncChange>();
+    const pushChanges: WriteChange[] = [];
     const track = (
       key: DocumentKey,
       data: DocumentData | undefined,
@@ -421,12 +427,17 @@ export class SqlTransaction {
       if (write.kind === 'remove') {
         // The owner is only known from the stored document (needed for the tombstone scope).
         const old =
-          isSyncEnabled() && collectionOf(write.key.table)
+          (isSyncEnabled() && collectionOf(write.key.table))
+            || (env.NOTIFICATIONS_ENABLED && env.PUSH_ENABLED && write.key.table === 'transactions')
             ? ((await readUsing(write.key, executor, true)) as StoredDocument)
             : undefined;
         await syncHouseholdMembers(executor, write.key);
         await executor.deleteFrom(table).where('id', '=', id).execute();
-        if (old?.exists) track(write.key, old.data, true);
+        if (old?.exists) {
+          track(write.key, old.data, true);
+          if (env.NOTIFICATIONS_ENABLED && env.PUSH_ENABLED && write.key.table === 'transactions')
+            pushChanges.push({ key: write.key, before: old.data, after: { deleted: true } });
+        }
         continue;
       }
       const old = (await readUsing(write.key, executor, true)) as StoredDocument;
@@ -446,6 +457,16 @@ export class SqlTransaction {
       else await executor.insertInto(table).values(values).execute();
       await syncHouseholdMembers(executor, write.key, data);
       track(write.key, data, false, old.exists ? old.data : undefined);
+      if (env.NOTIFICATIONS_ENABLED && env.PUSH_ENABLED
+        && ['profiles', 'savingsGoals', 'households', 'transactions'].includes(write.key.table))
+        pushChanges.push({ key: write.key, before: old.exists ? old.data : undefined, after: data });
+    }
+    if (pushChanges.length) {
+      const { enqueueWriteEvents } = await import('../push/outbox');
+      if (await enqueueWriteEvents(executor, pushChanges, (callback) => this.afterCommit(callback))) {
+        const { kickDelivery } = await import('../push/kick');
+        this.afterCommit(kickDelivery);
+      }
     }
     // Last: the per-user counter lock must be taken after every document lock.
     await recordSyncChanges(executor, [...changes.values()]);
@@ -514,6 +535,7 @@ export async function runSqlTransaction<T>(
     // Re-read per attempt: a retried attempt of a claimed request must not claim twice.
     const idempotency = idempotencyStorage.getStore();
     let carriesMarker = false;
+    let committedContext: SqlTransaction | undefined;
     try {
       const result = await database()
         .transaction()
@@ -528,9 +550,11 @@ export async function runSqlTransaction<T>(
           // Plain INSERT first: no pre-read, so no gap locks shared with other users' markers.
           if (carriesMarker) await insertIdempotencyMarker(trx, idempotency!, { effect: result });
           await context.flush(trx);
+          committedContext = context;
           return result;
         });
       if (carriesMarker) idempotency!.claimed = true;
+      committedContext?.notifyCommitted();
       return result;
     } catch (error) {
       const code = (error as { code?: string }).code;

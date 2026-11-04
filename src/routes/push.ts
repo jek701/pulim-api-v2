@@ -1,3 +1,4 @@
+import { AppError } from '../utils/AppError';
 import { Router } from 'express';
 import { z } from 'zod';
 import { validate } from '../middleware/validate';
@@ -6,6 +7,13 @@ import { registerDevice, unregisterDevice } from '../push/devices.repository';
 import { deviceTokenSchema, registerDeviceSchema } from '../push/schemas';
 
 const router = Router();
+router.use((req, _res, next) => {
+  if (req.claims?.firebase?.sign_in_provider === 'anonymous') {
+    next(AppError.unauthorized('Sign in to register push notifications.'));
+    return;
+  }
+  next();
+});
 router.post(
   '/devices',
   validate(registerDeviceSchema),

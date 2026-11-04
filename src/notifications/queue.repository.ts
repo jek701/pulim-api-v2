@@ -46,7 +46,7 @@ function alreadyExists(error: unknown): boolean {
   ).code;
   return code === 6 || code === 'already-exists';
 }
-export async function createNotification(input: {
+export interface NotificationInput {
   userId: string;
   chatId: string;
   type: NotificationType;
@@ -55,35 +55,42 @@ export async function createNotification(input: {
   payload: NotificationPayload;
   stateKeys?: string[];
   stateEffects?: NotificationStateEffects;
-}): Promise<boolean> {
+  pushOnly?: boolean;
+}
+export function queuedNotificationData(input: NotificationInput, now = Date.now()) {
+  const runAt = input.runAt ?? now;
+  return {
+    userId: input.userId,
+    chatId: String(input.chatId),
+    type: input.type,
+    dedupeKey: input.dedupeKey,
+    status: 'pending',
+    runAt,
+    staleAt: runAt + env.NOTIFY_STALE_AFTER_MS,
+    deferredUntil: null,
+    nextAttemptAt: runAt,
+    leaseUntil: null,
+    attempts: 0,
+    lastError: null,
+    skipReason: null,
+    payload: input.payload,
+    stateKeys: input.stateKeys ?? [],
+    stateEffects: input.stateEffects ?? {},
+    messageId: null,
+    createdAt: now,
+    updatedAt: now,
+    sentAt: null,
+    pushOnly: input.pushOnly ?? false,
+    expiresAt: Timestamp.fromMillis(now + 90 * 86400000),
+  };
+}
+export const notificationId = digest;
+export async function createNotification(input: NotificationInput): Promise<boolean> {
   if (!notificationRecipientAllowed(input.userId)) return false;
   const now = Date.now();
-  const runAt = input.runAt ?? now;
   const ref = documentKey(notificationCollection(), digest(input.dedupeKey));
   try {
-    await insertDocument(ref, {
-      userId: input.userId,
-      chatId: String(input.chatId),
-      type: input.type,
-      dedupeKey: input.dedupeKey,
-      status: 'pending',
-      runAt,
-      staleAt: runAt + env.NOTIFY_STALE_AFTER_MS,
-      deferredUntil: null,
-      nextAttemptAt: runAt,
-      leaseUntil: null,
-      attempts: 0,
-      lastError: null,
-      skipReason: null,
-      payload: input.payload,
-      stateKeys: input.stateKeys ?? [],
-      stateEffects: input.stateEffects ?? {},
-      messageId: null,
-      createdAt: now,
-      updatedAt: now,
-      sentAt: null,
-      expiresAt: Timestamp.fromMillis(now + 90 * 86400000),
-    });
+    await insertDocument(ref, queuedNotificationData(input, now));
     logger.info(
       { uid: input.userId, type: input.type, dedupeKey: input.dedupeKey },
       'notify.queued',
@@ -93,6 +100,36 @@ export async function createNotification(input: {
     if (alreadyExists(error)) return false;
     throw error;
   }
+}
+/** A timezone change moves an unattempted occurrence; it never reopens a sent one. */
+export async function upsertScheduledNotification(input: NotificationInput): Promise<boolean> {
+  if (!notificationRecipientAllowed(input.userId)) return false;
+  const now = Date.now();
+  const ref = documentKey(notificationCollection(), digest(input.dedupeKey));
+  return runSqlTransaction(async (tx) => {
+    const previous = await tx.read(ref);
+    if (!previous.exists) {
+      tx.insert(ref, queuedNotificationData(input, now));
+      return true;
+    }
+    const data = previous.data;
+    if (
+      data.status === 'pending' &&
+      !data.safetyCounted &&
+      Number(data.attempts ?? 0) === 0 &&
+      data.runAt !== input.runAt
+    ) {
+      tx.patch(ref, {
+        runAt: input.runAt,
+        nextAttemptAt: input.runAt,
+        staleAt: Number(input.runAt) + env.NOTIFY_STALE_AFTER_MS,
+        deferredUntil: null,
+        payload: input.payload,
+        updatedAt: now,
+      });
+    }
+    return false;
+  });
 }
 export async function queueTrialStarted(uid: string): Promise<boolean> {
   if (!env.NOTIFICATIONS_ENABLED || !notificationRecipientAllowed(uid)) return false;
@@ -112,6 +149,17 @@ export async function queueTrialStarted(uid: string): Promise<boolean> {
     payload,
     stateKeys: [`trial_started:${uid}`],
   });
+}
+const budgetTimers = new Map<string, NodeJS.Timeout>();
+export function armBudgetCheck(uid: string): void {
+  const previous = budgetTimers.get(uid);
+  if (previous) clearTimeout(previous);
+  const timer = setTimeout(() => {
+    budgetTimers.delete(uid);
+    void import('../push/kick').then(({ kickDelivery }) => kickDelivery());
+  }, env.NOTIFY_BUDGET_DEBOUNCE_MS + 10);
+  timer.unref();
+  budgetTimers.set(uid, timer);
 }
 export async function scheduleBudgetCheck(uid: string): Promise<void> {
   if (!env.NOTIFICATIONS_ENABLED || !notificationRecipientAllowed(uid)) return;
@@ -151,11 +199,14 @@ export async function scheduleBudgetCheck(uid: string): Promise<void> {
       { merge: true },
     );
   });
+  armBudgetCheck(uid);
 }
 export interface BudgetTask {
   id: string;
   userId: string;
   version: number;
+  eventAt?: number;
+  categoryId?: string;
 }
 export async function listDueBudgetTasks(now: number, limit = 50): Promise<BudgetTask[]> {
   const snapshot = await readDocument(
@@ -184,7 +235,13 @@ export async function listDueBudgetTasks(now: number, limit = 50): Promise<Budge
         },
         { merge: true },
       );
-      return { id: document.id, userId: String(data.userId), version };
+      return {
+        id: document.id,
+        userId: String(data.userId),
+        version,
+        categoryId: data.categoryId,
+        eventAt: Number(data.eventAt ?? data.updatedAt ?? now),
+      };
     });
     if (claimed) tasks.push(claimed);
   }
@@ -386,57 +443,104 @@ export async function reserveSafetySlot(
   uid: string,
   now: number,
   allowReminderDisabled = false,
+  habit = false,
 ): Promise<'ok' | 'disabled' | 'cap'> {
   const ref = profileRef(uid);
-  const today = dateKey(now, env.NOTIFY_TIMEZONE);
   return runSqlTransaction(async (transaction) => {
     const snap = await transaction.read(ref);
     const settings = snap.data?.notifications as NotificationSettings | undefined;
-    if (
-      !settings ||
-      (!allowReminderDisabled && !settings.enabled) ||
-      settings.telegram.status === 'blocked' ||
-      settings.telegram.status === 'unreachable'
-    ) {
+    const today = dateKey(now, settings?.timezone ?? snap.data?.timezone ?? env.NOTIFY_TIMEZONE);
+    if (!settings || (!allowReminderDisabled && !settings.enabled)) {
       return 'disabled';
     }
     const sent = settings.sentDay === today ? Number(settings.sentCount ?? 0) : 0;
     const reserved = settings.reservedDay === today ? Number(settings.reservedCount ?? 0) : 0;
-    if (sent + reserved >= env.NOTIFY_SAFETY_MAX_PER_USER_PER_DAY) return 'cap';
+    if (sent + reserved >= Math.min(6, env.NOTIFY_SAFETY_MAX_PER_USER_PER_DAY)) return 'cap';
+    if (
+      habit &&
+      (snap.data?.notifications.habitSentDay === today ||
+        snap.data?.notifications.habitReservedDay === today)
+    )
+      return 'cap';
     transaction.patch(ref, {
       'notifications.sentDay': today,
       'notifications.sentCount': sent,
       'notifications.reservedDay': today,
       'notifications.reservedCount': reserved + 1,
+      ...(habit ? { 'notifications.habitReservedDay': today } : {}),
       updatedAt: now,
     });
     return 'ok';
   });
 }
-export async function releaseSafetySlot(uid: string, now = Date.now()): Promise<void> {
-  const today = dateKey(now, env.NOTIFY_TIMEZONE);
+export async function releaseSafetySlot(
+  uid: string,
+  now = Date.now(),
+  habit = false,
+): Promise<void> {
   await runSqlTransaction(async (transaction) => {
     const ref = profileRef(uid);
     const snap = await transaction.read(ref);
     const settings = snap.data?.notifications as NotificationSettings | undefined;
+    const today = dateKey(now, settings?.timezone ?? snap.data?.timezone ?? env.NOTIFY_TIMEZONE);
     if (!settings || settings.reservedDay !== today || Number(settings.reservedCount ?? 0) <= 0)
       return;
     transaction.patch(ref, {
       'notifications.reservedCount': Number(settings.reservedCount) - 1,
+      ...(habit ? { 'notifications.habitReservedDay': '' } : {}),
       updatedAt: now,
     });
   });
 }
+/** Persist each accepted channel before retrying other recipients. Count a logical push once. */
+export async function recordChannelDelivery(
+  notification: QueuedNotification,
+  deviceId?: string,
+  messageId?: number,
+): Promise<void> {
+  const now = Date.now();
+  await runSqlTransaction(async (tx) => {
+    const ref = notificationRef(notification.id);
+    const profile = profileRef(notification.userId);
+    const [job, user] = await Promise.all([tx.read(ref), tx.read(profile)]);
+    if (!job.exists || !user.exists) throw new Error('Delivery acknowledgement target missing');
+    const settings = user.data.notifications as NotificationSettings;
+    const today = dateKey(now, settings.timezone ?? user.data.timezone ?? env.NOTIFY_TIMEZONE);
+    tx.patch(ref, {
+      ...(deviceId
+        ? { deliveredDevices: patchValue.arrayUnion(deviceId) }
+        : { telegramDelivered: true, messageId }),
+      safetyCounted: true,
+      updatedAt: now,
+    });
+    if (!job.data.safetyCounted) {
+      const habit = notification.payload.kind === 'push' && notification.payload.group === 'habit';
+      tx.patch(profile, {
+        'notifications.sentDay': today,
+        'notifications.sentCount':
+          (settings.sentDay === today ? Number(settings.sentCount ?? 0) : 0) + 1,
+        'notifications.reservedDay': today,
+        'notifications.reservedCount': Math.max(
+          0,
+          (settings.reservedDay === today ? Number(settings.reservedCount ?? 0) : 0) - 1,
+        ),
+        ...(habit
+          ? { 'notifications.habitSentDay': today, 'notifications.habitReservedDay': '' }
+          : {}),
+        updatedAt: now,
+      });
+    }
+  });
+}
 export async function markNotificationSent(
   notification: QueuedNotification,
-  messageId: number,
+  messageId: number | null,
   introWasIncluded: boolean,
   now = Date.now(),
 ): Promise<void> {
   const notificationRef = documentKey(notificationCollection(), notification.id);
   const userProfileRef = profileRef(notification.userId);
   const stateRef = notificationStateRef(notification.userId);
-  const today = dateKey(now, env.NOTIFY_TIMEZONE);
   await runSqlTransaction(async (transaction) => {
     const [jobSnap, profileSnap, stateSnap] = await Promise.all([
       transaction.read(notificationRef),
@@ -449,6 +553,10 @@ export async function markNotificationSent(
       job.status === 'failed' && job.lastError === 'lease_lost' && !job.sentAt;
     if (job.status !== 'sending' && !recoverableLeaseFailure) return;
     const settings = profileSnap.data?.notifications as NotificationSettings | undefined;
+    const today = dateKey(
+      now,
+      settings?.timezone ?? profileSnap.data?.timezone ?? env.NOTIFY_TIMEZONE,
+    );
     const state = parseNotificationState(notification.userId, stateSnap.data);
     const seen = pruneSeen(state.seen, now);
     notification.stateKeys.forEach((key) => {
@@ -483,13 +591,17 @@ export async function markNotificationSent(
     );
     transaction.patch(userProfileRef, {
       'notifications.sentDay': today,
-      'notifications.sentCount': sent + 1,
+      'notifications.sentCount': sent + (job.safetyCounted ? 0 : 1),
       'notifications.reservedDay': today,
-      'notifications.reservedCount': Math.max(0, reserved - 1),
+      'notifications.reservedCount': job.safetyCounted ? reserved : Math.max(0, reserved - 1),
       'notifications.lastSentAt': now,
-      'notifications.telegram.status': 'reachable',
-      'notifications.telegram.lastError': null,
-      'notifications.telegram.checkedAt': now,
+      ...(messageId !== null
+        ? {
+            'notifications.telegram.status': 'reachable',
+            'notifications.telegram.lastError': null,
+            'notifications.telegram.checkedAt': now,
+          }
+        : {}),
       ...(introWasIncluded ? { 'notifications.introSentAt': now } : {}),
       updatedAt: now,
     });
@@ -584,7 +696,8 @@ export function profileCanReceive(
 } {
   const settings = profile?.notifications;
   return Boolean(
-    profile && notificationRecipientAllowed(profile.id) &&
+    profile &&
+    notificationRecipientAllowed(profile.id) &&
     settings?.enabled &&
     settings.telegram.chatId &&
     settings.telegram.status !== 'blocked' &&

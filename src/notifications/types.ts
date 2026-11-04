@@ -1,6 +1,7 @@
+import type { PushPayload, PushType } from '../push/types';
 import type { SupportedLanguage } from '../telegram/types';
 
-export type NotificationType = 'daily' | 'budget_80' | 'budget_100' | 'trial_started' | 'campaign';
+export type NotificationType = 'daily' | 'budget_80' | 'budget_100' | 'trial_started' | 'campaign' | PushType;
 export type NotificationStatus = 'pending' | 'sending' | 'sent' | 'skipped' | 'failed' | 'cancelled';
 
 export interface SubscriptionEvent {
@@ -106,6 +107,7 @@ export interface DailyPayload {
 
 export interface BudgetPayload {
   kind: 'budget';
+  eventAt?: number;
   threshold: 80 | 100;
   categoryId: string;
   categoryName: string;
@@ -131,7 +133,7 @@ export interface CampaignPayload {
   ctaUrl?: string;
 }
 
-export type NotificationPayload = DailyPayload | BudgetPayload | TrialStartedPayload | CampaignPayload;
+export type NotificationPayload = DailyPayload | BudgetPayload | TrialStartedPayload | CampaignPayload | PushPayload;
 
 export interface NotificationStateEffects {
   trialAvailableSent?: boolean;
@@ -161,6 +163,10 @@ export interface QueuedNotification {
   createdAt: number;
   updatedAt: number;
   sentAt: number | null;
+  pushOnly?: boolean;
+  safetyCounted?: boolean;
+  deliveredDevices?: string[];
+  telegramDelivered?: boolean;
 }
 
 export interface NotificationState {
