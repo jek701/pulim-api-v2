@@ -19,6 +19,7 @@ import {
   recordChannelDelivery,
 } from './queue.repository';
 import { markTelegramUnavailable } from './settings';
+import { shiftOutOfQuietHours } from './schedule';
 import { renderNotification } from './render/blocks';
 import type { QueuedNotification } from './types';
 import { exhaustedAttempts, retryDelay } from './backoff';
@@ -45,8 +46,12 @@ function telegramUnavailable(error: TelegramApiError): 'blocked' | 'unreachable'
     return 'unreachable';
   return null;
 }
-async function safeStat(sent: boolean, forbidden: boolean): Promise<void> {
-  await recordDeliveryStat(sent, forbidden).catch((error) =>
+async function safeStat(
+  sent: boolean,
+  forbidden: boolean,
+  channel: 'telegram' | 'apns',
+): Promise<void> {
+  await recordDeliveryStat(sent, forbidden, Date.now(), channel).catch((error) =>
     logger.warn({ err: error }, 'notify.stats.failed'),
   );
 }
@@ -61,23 +66,35 @@ async function deliver(
   const claimed = await claimNotification(notification.id, now);
   if (!claimed) return;
   const campaignId = claimed.payload.kind === 'campaign' ? claimed.payload.campaignId : null;
+  const logFields = { uid: claimed.userId, type: claimed.type };
+  const skip = async (reason: string) => {
+    await finishNotification(claimed.id, 'skipped', reason);
+    logger.info({ ...logFields, skipReason: reason }, 'notify.skipped');
+  };
   const outcome = async (sent: boolean) => {
     if (campaignId)
       await markCampaignTelegramOutcome(campaignId, claimed.userId, sent ? 'sent' : 'failed');
   };
   if (now > claimed.staleAt) {
-    await finishNotification(claimed.id, 'skipped', 'stale');
+    await skip('stale');
     await outcome(false);
     return;
   }
   const profile = await getProfile(claimed.userId);
   if (!profile) {
-    await finishNotification(claimed.id, 'skipped', 'disabled');
+    await skip('disabled');
+    await outcome(false);
     return;
   }
   const settings = profile.notifications;
   const preferences = normalizePushSettings(settings, profile.timezone);
   const devices = apnsConfigured() ? await enabledDevices(claimed.userId) : [];
+  const marketing = campaignId
+    ? {
+        inApp: profile.communications?.marketing.inApp !== false,
+        telegram: profile.communications?.marketing.telegram === true,
+      }
+    : undefined;
   const language = normalizeLanguage(profile.language);
   let push = pushPayload(claimed.payload, language, preferences.timezone, claimed.createdAt);
   const channels = notificationChannels({
@@ -87,50 +104,58 @@ async function deliver(
     group: campaignId ? undefined : push?.group,
     digest: !push,
     pushOnly: claimed.pushOnly,
+    marketing,
   });
-  if (campaignId) {
-    channels.push &&= profile.communications?.marketing.inApp !== false;
-    channels.telegram &&= profile.communications?.marketing.telegram === true;
-  }
   if (!channels.push && !channels.telegram) {
-    await finishNotification(claimed.id, 'skipped', 'disabled');
+    await skip('disabled');
     await outcome(false);
     return;
   }
   if (claimed.pushOnly && !(await scheduledStillRelevant(claimed, profile, now))) {
-    await finishNotification(claimed.id, 'skipped', 'no_longer_relevant');
+    await skip('no_longer_relevant');
     return;
   }
   if (claimed.pushOnly)
     push = pushPayload(claimed.payload, language, preferences.timezone, claimed.createdAt);
   const sensitive = push?.type === 'budget_100' || push?.type === 'apple_billing_failed';
-  const quietUntil = sensitive
-    ? null
-    : quietHoursUntil(now, preferences.timezone, preferences.quietHours);
-  if (quietUntil !== null) {
+  // Telegram-only users retain the original worker quiet window. Push users use
+  // their configured local window, but urgency never bypasses Telegram silence.
+  const quietUntil = devices.length
+    ? quietHoursUntil(now, preferences.timezone, preferences.quietHours)
+    : (() => {
+        const until = shiftOutOfQuietHours(
+          now,
+          env.NOTIFY_TIMEZONE,
+          env.NOTIFY_QUIET_START_HOUR,
+          env.NOTIFY_QUIET_END_HOUR,
+        );
+        return until > now ? until : null;
+      })();
+  if (quietUntil !== null && (!channels.push || !sensitive)) {
     await deferNotification(claimed.id, quietUntil);
     return;
   }
   const habit = push?.group === 'habit';
   const reservation = claimed.safetyCounted
     ? 'ok'
-    : await reserveSafetySlot(claimed.userId, now, false, habit);
+    : await reserveSafetySlot(claimed.userId, now, Boolean(campaignId), habit);
   if (reservation !== 'ok') {
-    await finishNotification(
-      claimed.id,
-      'skipped',
-      reservation === 'cap' ? 'safety_cap' : 'disabled',
-    );
+    await skip(reservation === 'cap' ? 'safety_cap' : 'disabled');
+    if (reservation === 'cap') logger.error(logFields, 'notify.safety_cap');
     await outcome(false);
     return;
   }
   let unrecordedSend = false;
+  let attemptedChannel: 'telegram' | 'apns' = 'telegram';
+  let attemptStatRecorded = false;
   let messageId: number | null = null;
   const includeIntro = !campaignId && !settings?.introSentAt;
   try {
     if (channels.push && push) {
       for (const device of devices) {
         if (claimed.deliveredDevices?.includes(device.id)) continue;
+        attemptedChannel = 'apns';
+        attemptStatRecorded = false;
         const sendAt = Date.now();
         const result = await sendApns(device, renderPush(push, language, claimed.id), {
           expiration: Math.floor(claimed.staleAt / 1000),
@@ -150,6 +175,8 @@ async function deliver(
           status: result.status,
         });
         const classification = classifyApnsResponse(result);
+        await safeStat(classification === 'success', false, 'apns');
+        attemptStatRecorded = true;
         if (classification === 'disable') {
           await disableDevice(device.id, result.reason ?? 'Unregistered', device.lastSeenAt);
           continue;
@@ -164,6 +191,10 @@ async function deliver(
             await finishNotification(claimed.id, 'failed', result.reason ?? 'APNsRejected');
             if (!claimed.safetyCounted) await releaseSafetySlot(claimed.userId, now, habit);
             await outcome(false);
+            logger.error(
+              { ...logFields, attempts: claimed.attempts, reason: result.reason },
+              'notify.failed',
+            );
             return;
           }
           throw new Error(`APNs:${result.status}:${result.reason ?? 'Retry'}`);
@@ -180,17 +211,24 @@ async function deliver(
           settings,
           activeDevice: false,
           configured: apnsConfigured(),
+          marketing,
         }).telegram;
-        if (campaignId) channels.telegram &&= profile.communications?.marketing.telegram === true;
       }
       if (!claimed.deliveredDevices?.length && !channels.telegram) {
         if (!claimed.safetyCounted) await releaseSafetySlot(claimed.userId, now, habit);
-        await finishNotification(claimed.id, 'skipped', 'no_enabled_devices');
+        await skip('no_enabled_devices');
         await outcome(false);
         return;
       }
     }
+    if (channels.telegram && !claimed.telegramDelivered && quietUntil !== null) {
+      if (!claimed.safetyCounted) await releaseSafetySlot(claimed.userId, now, habit);
+      await deferNotification(claimed.id, quietUntil);
+      return;
+    }
     if (channels.telegram && !claimed.telegramDelivered) {
+      attemptedChannel = 'telegram';
+      attemptStatRecorded = false;
       const chatId = settings!.telegram.chatId!;
       const chatDelay = Math.max(0, 1000 - (Date.now() - (lastAttemptByChat.get(chatId) ?? 0)));
       if (chatDelay) await wait(chatDelay);
@@ -202,6 +240,8 @@ async function deliver(
       lastAttemptByChat.set(chatId, Date.now());
       const message = await sendMessage(chatId, rendered.text, { reply_markup: rendered.keyboard });
       unrecordedSend = true;
+      await safeStat(true, false, 'telegram');
+      attemptStatRecorded = true;
       messageId = message.message_id;
       await recordChannelDelivery(claimed, undefined, messageId);
       claimed.safetyCounted = true;
@@ -224,7 +264,7 @@ async function deliver(
     } else if (claimed.telegramDelivered) messageId = claimed.messageId;
     await markNotificationSent(claimed, messageId, channels.telegram && includeIntro);
     await outcome(true);
-    await safeStat(true, false);
+    logger.info({ ...logFields, messageId, latencyMs: Date.now() - claimed.runAt }, 'notify.sent');
   } catch (error) {
     if (unrecordedSend) {
       await finishNotification(claimed.id, 'failed', 'post_send_state_failed').catch(
@@ -249,20 +289,22 @@ async function deliver(
           await finishNotification(claimed.id, 'cancelled', unavailable);
           await outcome(false);
         }
-        await safeStat(false, true);
+        await safeStat(false, true, 'telegram');
+        logger.warn({ uid: claimed.userId, reason: unavailable }, 'notify.blocked');
         return;
       }
       if ((error.errorCode ?? error.status) === 429 && error.retryAfter !== null) {
         await retryNotification(
           claimed.id,
-          Date.now() + error.retryAfter * 1000,
+          Date.now() + error.retryAfter * 1000 + Math.floor(Math.random() * 1001),
           error.message,
           true,
         );
+        await safeStat(false, false, 'telegram');
         return;
       }
     }
-    await safeStat(false, false);
+    if (!attemptStatRecorded) await safeStat(false, false, attemptedChannel);
     if (exhaustedAttempts(claimed.attempts, env.NOTIFY_MAX_ATTEMPTS)) {
       await finishNotification(
         claimed.id,
@@ -270,6 +312,7 @@ async function deliver(
         error instanceof Error ? error.message : String(error),
       );
       await outcome(false);
+      logger.error({ ...logFields, attempts: claimed.attempts, err: error }, 'notify.failed');
       return;
     }
     await retryNotification(

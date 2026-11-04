@@ -9,22 +9,28 @@ export function notificationChannels(input: {
   group?: PushGroup;
   digest?: boolean;
   pushOnly?: boolean;
+  marketing?: { inApp: boolean; telegram: boolean };
 }): { push: boolean; telegram: boolean } {
   const settings = input.settings;
-  if (!settings?.enabled) return { push: false, telegram: false };
-  const active = input.activeDevice && input.configured;
+  if (!input.marketing && !settings?.enabled) return { push: false, telegram: false };
+  const active =
+    input.activeDevice && input.configured && !input.digest && input.marketing?.inApp !== false;
   const groupEnabled =
-    !input.group || (settings.groups?.[input.group] ?? input.group !== 'familyExpenses');
+    !input.group || (settings?.groups?.[input.group] ?? input.group !== 'familyExpenses');
   const telegramReachable = Boolean(
-    settings.telegram?.chatId &&
-    settings.telegram.status !== 'blocked' &&
-    settings.telegram.status !== 'unreachable',
+    settings?.telegram?.chatId &&
+    settings?.telegram?.status !== 'blocked' &&
+    settings?.telegram?.status !== 'unreachable',
   );
-  if (!groupEnabled && (active || input.group === 'familyExpenses'))
+  if (!input.marketing && !groupEnabled && (active || input.group === 'familyExpenses'))
     return { push: false, telegram: false };
   return {
-    push: active && !input.digest,
-    telegram: telegramReachable && !input.pushOnly && (!active || settings.alsoTelegram === true),
+    push: active,
+    telegram:
+      telegramReachable &&
+      !input.pushOnly &&
+      input.marketing?.telegram !== false &&
+      (!active || settings?.alsoTelegram === true),
   };
 }
 

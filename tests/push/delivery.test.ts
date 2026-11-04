@@ -27,6 +27,7 @@ const mocks = vi.hoisted(() => ({
   budgets: vi.fn(),
   campaign: vi.fn(),
   latency: vi.fn(),
+  log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 vi.mock('../../src/config/env', () => ({
   env: {
@@ -36,6 +37,9 @@ vi.mock('../../src/config/env', () => ({
     NOTIFY_DELIVERY_BATCH: 50,
     NOTIFY_SEND_RATE_PER_SEC: Infinity,
     NOTIFY_MAX_ATTEMPTS: 8,
+    NOTIFY_TIMEZONE: 'Asia/Tashkent',
+    NOTIFY_QUIET_START_HOUR: 22,
+    NOTIFY_QUIET_END_HOUR: 8,
   },
   notificationRecipientAllowed: (uid: string) => mocks.allowed.has(uid),
 }));
@@ -54,7 +58,16 @@ vi.mock('../../src/notifications/planner', () => ({ runBudgetChecks: mocks.budge
 vi.mock('../../src/push/latency', () => ({ recordPushLatency: mocks.latency }));
 vi.mock('../../src/telegram/client', () => ({
   sendMessage: mocks.sendTelegram,
-  TelegramApiError: class extends Error {},
+  TelegramApiError: class extends Error {
+    constructor(
+      public status: number,
+      public errorCode: number,
+      public description: string,
+      public retryAfter: number | null = null,
+    ) {
+      super(description);
+    }
+  },
 }));
 vi.mock('../../src/telegram/messages.repository', () => ({ saveMessage: mocks.saveMessage }));
 vi.mock('../../src/notifications/settings', () => ({ markTelegramUnavailable: mocks.unavailable }));
@@ -69,7 +82,7 @@ vi.mock('../../src/communications/repository', () => ({
   markCampaignTelegramOutcome: mocks.campaign,
 }));
 vi.mock('../../src/utils/logger', () => ({
-  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+  logger: mocks.log,
 }));
 vi.mock('../../src/notifications/queue.repository', () => ({
   claimNotification: mocks.claim,
@@ -88,6 +101,7 @@ vi.mock('../../src/notifications/queue.repository', () => ({
       : [],
 }));
 import { runDelivery } from '../../src/notifications/delivery';
+import { TelegramApiError } from '../../src/telegram/client';
 
 const NOW = Date.parse('2026-11-04T07:00:00Z'); // Noon in Tashkent.
 function device(id: string): PushDevice {
@@ -208,6 +222,7 @@ beforeEach(() => {
   });
 });
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.useRealTimers();
 });
 
@@ -427,5 +442,174 @@ describe('delivery channel integration with mocked I/O', () => {
     await runDelivery();
     expect(mocks.relevant).toHaveBeenCalledOnce();
     expect(mocks.reserve).toHaveBeenCalledWith('owner', NOW, false, true);
+  });
+});
+
+describe('legacy Telegram delivery compatibility', () => {
+  it('defers legacy budget exceeded alerts in the original Telegram quiet window', async () => {
+    const night = Date.parse('2026-11-04T18:00:00Z');
+    vi.setSystemTime(night);
+    mocks.job = notification(night);
+    mocks.job.type = 'budget_100';
+    if (mocks.job.payload.kind === 'budget') mocks.job.payload.threshold = 100;
+    const user = profile(true);
+    user.timezone = 'America/New_York';
+    user.notifications.quietHours = { start: '01:00', end: '02:00' };
+    mocks.profile.mockResolvedValue(user);
+    mocks.devices.mockResolvedValue([]);
+    await runDelivery();
+    expect(mocks.defer).toHaveBeenCalledWith('job', Date.parse('2026-11-05T03:00:00Z'));
+    expect(mocks.reserve).not.toHaveBeenCalled();
+    expect(mocks.sendTelegram).not.toHaveBeenCalled();
+  });
+  it('sends sensitive push immediately but defers Telegram without resending push at wake-up', async () => {
+    const night = Date.parse('2026-11-04T18:00:00Z');
+    vi.setSystemTime(night);
+    mocks.job = notification(night);
+    mocks.job.type = 'budget_100';
+    if (mocks.job.payload.kind === 'budget') mocks.job.payload.threshold = 100;
+    mocks.profile.mockResolvedValue(profile(true, true));
+    await runDelivery();
+    expect(mocks.sendApns).toHaveBeenCalledOnce();
+    expect(mocks.sendTelegram).not.toHaveBeenCalled();
+    expect(mocks.defer).toHaveBeenCalledWith('job', Date.parse('2026-11-05T03:00:00Z'));
+    expect(mocks.sent).not.toHaveBeenCalled();
+    expect(mocks.job).toMatchObject({ deliveredDevices: ['a'], safetyCounted: true });
+    vi.setSystemTime(mocks.job!.nextAttemptAt);
+    await runDelivery();
+    expect(mocks.sendApns).toHaveBeenCalledOnce();
+    expect(mocks.sendTelegram).toHaveBeenCalledOnce();
+    expect(mocks.reserve).toHaveBeenCalledOnce();
+    expect(mocks.job!.status).toBe('sent');
+  });
+  it('defers Telegram fallback after a sensitive push has only invalid tokens at night', async () => {
+    const night = Date.parse('2026-11-04T18:00:00Z');
+    vi.setSystemTime(night);
+    mocks.job = notification(night);
+    if (mocks.job.payload.kind === 'budget') mocks.job.payload.threshold = 100;
+    mocks.profile.mockResolvedValue(profile(true));
+    mocks.sendApns.mockResolvedValue({ status: 410, reason: 'Unregistered' });
+    await runDelivery();
+    expect(mocks.disableDevice).toHaveBeenCalledOnce();
+    expect(mocks.sendTelegram).not.toHaveBeenCalled();
+    expect(mocks.release).toHaveBeenCalledOnce();
+    expect(mocks.defer).toHaveBeenCalledWith('job', Date.parse('2026-11-05T03:00:00Z'));
+  });
+  it.each(['trial_started', 'daily'] as const)(
+    'delivers template-less %s rows to Telegram for push users',
+    async (type) => {
+      mocks.profile.mockResolvedValue(profile(true));
+      mocks.job!.type = type;
+      mocks.job!.payload =
+        type === 'trial_started'
+          ? { kind: 'trial_started', premiumUntil: NOW + 86400000 }
+          : { kind: 'daily', date: NOW, events: [], premiumDataUpsell: false };
+      await runDelivery();
+      expect(mocks.sendApns).not.toHaveBeenCalled();
+      expect(mocks.sendTelegram).toHaveBeenCalledOnce();
+      expect(mocks.job!.status).toBe('sent');
+    },
+  );
+  it.each([false, true])(
+    'keeps campaigns independent of disabled reminder settings (device=%s)',
+    async (activeDevice) => {
+      const user = {
+        ...profile(true),
+        communications: { marketing: { inApp: false, telegram: true } },
+      };
+      user.notifications.enabled = false;
+      mocks.profile.mockResolvedValue(user);
+      mocks.devices.mockResolvedValue(activeDevice ? [device('a')] : []);
+      mocks.job!.type = 'campaign';
+      mocks.job!.payload = {
+        kind: 'campaign',
+        campaignId: 'campaign',
+        title: 'Title',
+        body: 'Body',
+      };
+      await runDelivery();
+      expect(mocks.reserve).toHaveBeenCalledWith('owner', NOW, true, false);
+      expect(mocks.sendApns).not.toHaveBeenCalled();
+      expect(mocks.sendTelegram).toHaveBeenCalledOnce();
+      expect(mocks.campaign).toHaveBeenCalledWith('campaign', 'owner', 'sent');
+    },
+  );
+  it.each(['BadTopic', 'TopicDisallowed', 'DeviceTokenNotForTopic'])(
+    'falls back to Telegram on terminal topic error %s',
+    async (reason) => {
+      mocks.profile.mockResolvedValue(profile(true));
+      mocks.sendApns.mockResolvedValue({
+        status: reason === 'TopicDisallowed' ? 403 : 400,
+        reason,
+      });
+      await runDelivery();
+      expect(mocks.disableDevice).toHaveBeenCalledWith('a', reason, NOW);
+      expect(mocks.sendTelegram).toHaveBeenCalledOnce();
+      expect(mocks.job!.status).toBe('sent');
+    },
+  );
+});
+
+describe('delivery diagnostics', () => {
+  it('records APNs and Telegram attempts independently', async () => {
+    mocks.profile.mockResolvedValue(profile(true, true));
+    await runDelivery();
+    expect(mocks.stat.mock.calls).toEqual([
+      [true, false, NOW, 'apns'],
+      [true, false, NOW, 'telegram'],
+    ]);
+    expect(mocks.log.info).toHaveBeenCalledWith(
+      { uid: 'owner', type: 'budget_80', messageId: 42, latencyMs: 0 },
+      'notify.sent',
+    );
+  });
+  it('does not count a retried APNs failure as a Telegram attempt', async () => {
+    mocks.sendApns.mockResolvedValue({ status: 429, reason: 'TooManyRequests' });
+    await runDelivery();
+    expect(mocks.stat.mock.calls).toEqual([[false, false, NOW, 'apns']]);
+  });
+  it('logs skipped rows and safety caps', async () => {
+    mocks.reserve.mockResolvedValue('cap');
+    await runDelivery();
+    expect(mocks.log.info).toHaveBeenCalledWith(
+      { uid: 'owner', type: 'budget_80', skipReason: 'safety_cap' },
+      'notify.skipped',
+    );
+    expect(mocks.log.error).toHaveBeenCalledWith(
+      { uid: 'owner', type: 'budget_80' },
+      'notify.safety_cap',
+    );
+  });
+  it('records and logs Telegram forbidden errors without APNs attempts', async () => {
+    mocks.devices.mockResolvedValue([]);
+    mocks.profile.mockResolvedValue(profile(true));
+    mocks.sendTelegram.mockRejectedValue(
+      new TelegramApiError(403, 403, 'Bot blocked by user', null),
+    );
+    await runDelivery();
+    expect(mocks.stat.mock.calls).toEqual([[false, true, NOW, 'telegram']]);
+    expect(mocks.log.warn).toHaveBeenCalledWith(
+      { uid: 'owner', reason: 'blocked' },
+      'notify.blocked',
+    );
+  });
+  it('restores 0..1000ms jitter on Telegram 429 retries without consuming attempts', async () => {
+    mocks.devices.mockResolvedValue([]);
+    mocks.profile.mockResolvedValue(profile(true));
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    mocks.sendTelegram.mockRejectedValue(new TelegramApiError(429, 429, 'Too many requests', 3));
+    await runDelivery();
+    expect(mocks.retry).toHaveBeenCalledWith('job', NOW + 3500, 'Too many requests', true);
+    expect(mocks.stat.mock.calls).toEqual([[false, false, NOW, 'telegram']]);
+  });
+  it('logs exhausted failures with their attempt count', async () => {
+    mocks.job!.attempts = 7;
+    mocks.sendApns.mockResolvedValue({ status: 500, reason: 'InternalServerError' });
+    await runDelivery();
+    expect(mocks.log.error).toHaveBeenCalledWith(
+      expect.objectContaining({ uid: 'owner', type: 'budget_80', attempts: 8 }),
+      'notify.failed',
+    );
+    expect(mocks.job!.status).toBe('failed');
   });
 });

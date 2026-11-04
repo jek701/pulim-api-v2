@@ -650,6 +650,7 @@ export async function recordDeliveryStat(
   sent: boolean,
   forbidden: boolean,
   now = Date.now(),
+  channel: 'telegram' | 'apns' = 'telegram',
 ): Promise<void> {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: env.NOTIFY_TIMEZONE,
@@ -661,7 +662,8 @@ export async function recordDeliveryStat(
   }).formatToParts(new Date(now));
   const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
   const id = `${values.year}-${values.month}-${values.day}-${values.hour}`;
-  const ref = documentKey(queryTable('notificationStats'), id);
+  // Keep legacy Telegram buckets intact; native traffic has its own denominator.
+  const ref = documentKey(queryTable('notificationStats'), channel === 'apns' ? `apns:${id}` : id);
   await saveDocument(
     ref,
     {
@@ -672,7 +674,7 @@ export async function recordDeliveryStat(
     },
     { merge: true },
   );
-  if (forbidden) {
+  if (forbidden && channel === 'telegram') {
     const snap = await readDocument(ref);
     const attempts = Number(snap.data?.attempts ?? 0);
     const count = Number(snap.data?.forbidden ?? 0);

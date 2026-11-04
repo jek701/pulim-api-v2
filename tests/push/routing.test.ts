@@ -22,10 +22,10 @@ describe('channel contract and local quiet hours', () => {
       }),
     ).toEqual({ push: false, telegram: false });
   });
-  it('suppresses the daily Telegram digest for push users unless both are requested', () => {
+  it('keeps template-less rows on Telegram even with an active device', () => {
     expect(
       notificationChannels({ settings, configured: true, activeDevice: true, digest: true }),
-    ).toEqual({ push: false, telegram: false });
+    ).toEqual({ push: false, telegram: true });
     expect(
       notificationChannels({
         settings: { ...settings, alsoTelegram: true },
@@ -34,6 +34,41 @@ describe('channel contract and local quiet hours', () => {
         digest: true,
       }),
     ).toEqual({ push: false, telegram: true });
+  });
+  it('routes campaign preferences before deciding whether push suppresses Telegram', () => {
+    const disabled = { ...settings, enabled: false };
+    expect(
+      notificationChannels({
+        settings: disabled,
+        configured: true,
+        activeDevice: true,
+        marketing: { inApp: false, telegram: true },
+      }),
+    ).toEqual({ push: false, telegram: true });
+    expect(
+      notificationChannels({
+        settings: disabled,
+        configured: true,
+        activeDevice: false,
+        marketing: { inApp: true, telegram: true },
+      }),
+    ).toEqual({ push: false, telegram: true });
+    expect(
+      notificationChannels({
+        settings: disabled,
+        configured: true,
+        activeDevice: true,
+        marketing: { inApp: true, telegram: true },
+      }),
+    ).toEqual({ push: true, telegram: false });
+    expect(
+      notificationChannels({
+        settings: disabled,
+        configured: true,
+        activeDevice: false,
+        marketing: { inApp: true, telegram: false },
+      }),
+    ).toEqual({ push: false, telegram: false });
   });
   it('uses the device timezone and exact minute boundaries', () => {
     const now = Date.parse('2026-11-04T17:30:00Z'); // 22:30 Tashkent, 12:30 New York
