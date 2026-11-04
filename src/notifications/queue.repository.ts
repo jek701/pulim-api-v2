@@ -151,18 +151,23 @@ export async function queueTrialStarted(uid: string): Promise<boolean> {
   });
 }
 const budgetTimers = new Map<string, NodeJS.Timeout>();
-export function armBudgetCheck(uid: string): void {
+export const PUSH_BUDGET_DEBOUNCE_MS = 25_000;
+export function armBudgetCheck(uid: string, delay = env.NOTIFY_BUDGET_DEBOUNCE_MS): void {
   const previous = budgetTimers.get(uid);
   if (previous) clearTimeout(previous);
   const timer = setTimeout(() => {
     budgetTimers.delete(uid);
     void import('../push/kick').then(({ kickDelivery }) => kickDelivery());
-  }, env.NOTIFY_BUDGET_DEBOUNCE_MS + 10);
+  }, delay + 10);
   timer.unref();
   budgetTimers.set(uid, timer);
 }
 export async function scheduleBudgetCheck(uid: string): Promise<void> {
   if (!env.NOTIFICATIONS_ENABLED || !notificationRecipientAllowed(uid)) return;
+  if (env.PUSH_ENABLED) {
+    const { pushActive } = await import('../push/devices.repository');
+    if (await pushActive(uid)) return;
+  }
   const ref = documentKey(taskCollection(), digest(`budget_check:${uid}`));
   const now = Date.now();
   await runSqlTransaction(async (transaction) => {
@@ -259,7 +264,7 @@ export async function finishBudgetTask(task: BudgetTask): Promise<void> {
         ref,
         {
           status: 'pending',
-          runAt: Number(data.rerunAt ?? now + env.NOTIFY_BUDGET_DEBOUNCE_MS),
+          runAt: Number(data.rerunAt ?? now + (task.categoryId ? PUSH_BUDGET_DEBOUNCE_MS : env.NOTIFY_BUDGET_DEBOUNCE_MS)),
           rerunAt: null,
           leaseUntil: null,
           updatedAt: now,
@@ -325,7 +330,7 @@ export async function failBudgetTask(task: BudgetTask, error: unknown): Promise<
       {
         status: 'pending',
         runAt: hasNewerVersion
-          ? Math.max(now, Number(data.rerunAt ?? now + env.NOTIFY_BUDGET_DEBOUNCE_MS))
+          ? Math.max(now, Number(data.rerunAt ?? now + (task.categoryId ? PUSH_BUDGET_DEBOUNCE_MS : env.NOTIFY_BUDGET_DEBOUNCE_MS)))
           : now + 60000,
         rerunAt: null,
         leaseUntil: null,

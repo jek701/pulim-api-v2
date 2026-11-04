@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { z } from 'zod';
+import { setPushWriteEventsEnabled } from '../db/pushWriteConfig';
 
 /** Parses "true"/"false" strings (anything else => false). */
 const boolish = z
@@ -85,7 +86,7 @@ const EnvSchema = z
     NOTIFY_MAX_ATTEMPTS: z.coerce.number().int().positive().default(8),
     NOTIFY_SEND_RATE_PER_SEC: z.coerce.number().int().positive().max(29).default(25),
     NOTIFY_LEASE_MS: z.coerce.number().int().min(10_000).default(120_000),
-    NOTIFY_BUDGET_DEBOUNCE_MS: z.coerce.number().int().min(1_000).default(25_000),
+    NOTIFY_BUDGET_DEBOUNCE_MS: z.coerce.number().int().min(1_000).default(300_000),
     NOTIFY_TRIAL_AVAILABLE_DAYS: z.coerce.number().int().nonnegative().default(3),
     NOTIFY_TRIAL_AVAILABLE_REPEAT_DAYS: z.coerce.number().int().positive().default(21),
     NOTIFY_NO_CARDS_DAYS: z.coerce.number().int().nonnegative().default(2),
@@ -262,6 +263,7 @@ if (!parsed.success) {
 }
 
 export const env = parsed.data;
+setPushWriteEventsEnabled(env.NOTIFICATIONS_ENABLED && env.PUSH_ENABLED);
 
 export const corsOrigins = env.CORS_ORIGINS.split(',')
   .map((s) => s.trim())

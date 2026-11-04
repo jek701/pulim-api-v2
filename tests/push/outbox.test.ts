@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   createNotification: vi.fn(), sendApns: vi.fn(), sendTelegram: vi.fn(), kick: vi.fn(),
   kickPushPlanning: vi.fn(), armBudgetCheck: vi.fn(),
   operations: [] as string[],
+  deviceOwners: new Set(['owner', 'partner']),
+  insertIfAbsent: vi.fn(),
 }));
 
 vi.mock('../../src/config/env', () => ({ env: mocks.env, notificationRecipientAllowed: (uid: string) => mocks.allowed.has(uid) }));
@@ -17,6 +19,7 @@ vi.mock('../../src/db/documents', () => ({
   documentKey: (table: { table: string }, id: string) => ({ table: table.table, id }),
   queryTable: (table: string) => ({ table }),
   Timestamp: { fromMillis: (value: number) => value },
+  insertDocumentIfAbsent: mocks.insertIfAbsent,
   SqlTransaction: class {
     constructor(executor: unknown) { mocks.constructors(executor); }
     async read(ref: { table: string; id: string }) {
@@ -39,6 +42,7 @@ vi.mock('../../src/notifications/queue.repository', () => ({
   queuedNotificationData: (input: unknown, now: number) => ({ ...(input as object), createdAt: now, status: 'pending' }),
   createNotification: mocks.createNotification,
   armBudgetCheck: mocks.armBudgetCheck,
+  PUSH_BUDGET_DEBOUNCE_MS: 25_000,
 }));
 vi.mock('../../src/push/apns', () => ({ sendApns: mocks.sendApns }));
 vi.mock('../../src/telegram/client', () => ({ sendMessage: mocks.sendTelegram }));
@@ -47,7 +51,13 @@ vi.mock('../../src/push/kick', () => ({ kickDelivery: mocks.kick, kickPushPlanni
 import { enqueueWriteEvents } from '../../src/push/outbox';
 
 const now = Date.parse('2026-11-04T05:00:00Z');
-const executor = { marker: 'the caller transaction connection' } as unknown as Kysely<any>;
+const executor = { marker: 'the caller transaction connection', selectFrom: () => {
+  let uid: string;
+  const query: any = { select: () => query, limit: () => query,
+    where: (field: string, _op: string, value: any) => { if (field === 'uid') uid = value.toString(); return query; },
+    executeTakeFirst: async () => mocks.deviceOwners.has(uid) ? { id: 'device' } : undefined };
+  return query;
+} } as unknown as Kysely<any>;
 const goal = (id = 'goal'): WriteChange => ({ key: { table: 'savingsGoals', id }, before: { savedAmount: 90 },
   after: { userId: 'owner', targetAmount: 100, savedAmount: 100, name: 'Trip', currency: 'UZS' } });
 const expense = (): WriteChange => ({ key: { table: 'transactions', id: 'tx' }, after: {
@@ -61,14 +71,44 @@ beforeEach(() => {
   mocks.documents.clear(); mocks.operations.length = 0;
   mocks.allowed = new Set(['owner', 'partner']);
   mocks.env.NOTIFICATIONS_ENABLED = true; mocks.env.PUSH_ENABLED = true;
+  mocks.deviceOwners = new Set(['owner', 'partner']);
+  mocks.insertIfAbsent.mockImplementation(async (_executor, ref, data) => {
+    mocks.operations.push('upsert');
+    const key = `${ref.table}/${ref.id}`;
+    if (!mocks.documents.has(key)) {
+      mocks.inserts(ref, data);
+      mocks.documents.set(key, data);
+    }
+  });
 });
 afterEach(() => { vi.restoreAllMocks(); });
 
 describe('transactional push outbox', () => {
+  it.each(['goal', 'family', 'premium'])('does not create new %s events for Telegram-only recipients', async kind => {
+    mocks.deviceOwners.clear();
+    mocks.documents.set('households/family', { memberIds: ['owner', 'partner'] });
+    const changes: Record<string, WriteChange> = {
+      goal: goal(),
+      family: { key: { table: 'households', id: 'family' }, before: { memberIds: ['owner'] },
+        after: { memberIds: ['owner', 'partner'] } },
+      premium: { key: { table: 'profiles', id: 'owner' }, before: { isPremium: false },
+        after: { isPremium: true, subscription: { source: 'atmos', premiumUntil: now + 86400000 } } },
+    };
+    expect(await enqueueWriteEvents(executor, [changes[kind]!])).toBe(false);
+    expect(mocks.inserts).not.toHaveBeenCalled();
+  });
+
+  it('does not create the per-category budget task without an enabled device', async () => {
+    mocks.deviceOwners.clear();
+    await enqueueWriteEvents(executor, [{ key: { table: 'transactions', id: 'tx' },
+      after: { userId: 'owner', categoryId: 'food' } }]);
+    expect(mocks.insertIfAbsent).not.toHaveBeenCalled();
+    expect(mocks.saves).not.toHaveBeenCalled();
+  });
   it('queues on the caller executor without dispatching or using a separate queue write', async () => {
     expect(await enqueueWriteEvents(executor, [goal()])).toBe(true);
     expect(mocks.constructors).toHaveBeenCalledExactlyOnceWith(executor);
-    expect(mocks.flush).toHaveBeenCalledExactlyOnceWith(executor);
+    expect(mocks.flush).not.toHaveBeenCalled();
     expect(mocks.inserts).toHaveBeenCalledWith({ table: 'notifications', id: 'hashed:goal_reached:goal:owner' },
       expect.objectContaining({ userId: 'owner', dedupeKey: 'goal_reached:goal:owner', runAt: now, createdAt: now,
         payload: expect.objectContaining({ type: 'goal_reached', eventAt: now }) }));
@@ -79,17 +119,19 @@ describe('transactional push outbox', () => {
     expect(mocks.kickPushPlanning).not.toHaveBeenCalled();
   });
 
-  it('skips an existing notification without another insert or flush', async () => {
+  it('preserves an existing notification through a plain duplicate-safe insert without a pre-read', async () => {
     mocks.documents.set('notifications/hashed:goal_reached:goal:owner', { status: 'sent' });
-    expect(await enqueueWriteEvents(executor, [goal()])).toBe(false);
+    expect(await enqueueWriteEvents(executor, [goal()])).toBe(true);
     expect(mocks.inserts).not.toHaveBeenCalled();
     expect(mocks.flush).not.toHaveBeenCalled();
+    expect(mocks.reads).not.toHaveBeenCalled();
+    expect(mocks.documents.get('notifications/hashed:goal_reached:goal:owner')).toEqual({ status: 'sent' });
   });
 
   it('buffers each durable notification once when changes derive the same event repeatedly', async () => {
     await enqueueWriteEvents(executor, [goal(), goal()]);
     expect(mocks.inserts).toHaveBeenCalledTimes(1);
-    expect(mocks.flush).toHaveBeenCalledExactlyOnceWith(executor);
+    expect(mocks.flush).not.toHaveBeenCalled();
   });
 
   it('enforces the rollout allowlist before reading or writing notification rows', async () => {
@@ -110,19 +152,17 @@ describe('transactional push outbox', () => {
     expect(mocks.reads).not.toHaveBeenCalledWith(expect.objectContaining({ id: expect.stringContaining(':outsider') }));
   });
 
-  it('reads all recipients and dedupe records before buffering writes', async () => {
+  it('reads household recipients but never pre-reads absent notification ids', async () => {
     mocks.documents.set('households/family', { memberIds: ['owner', 'partner'] });
     const householdGoal = goal('shared'); householdGoal.after.householdId = 'family';
     expect(await enqueueWriteEvents(executor, [householdGoal, goal('personal')])).toBe(true);
-    const firstWrite = mocks.operations.findIndex(operation => operation === 'insert' || operation === 'save');
-    expect(firstWrite).toBeGreaterThan(0);
-    expect(mocks.operations.slice(firstWrite)).not.toContain('read');
-    expect(mocks.flush).toHaveBeenCalledExactlyOnceWith(executor);
+    expect(mocks.reads.mock.calls.every(([ref]) => ref.table === 'households')).toBe(true);
+    expect(mocks.flush).not.toHaveBeenCalled();
   });
 
-  it('propagates queue write failure so the caller can roll back its business write', async () => {
+  it('reports a queue write failure to the optional storage hook without dispatching', async () => {
     const error = new Error('transaction insert failed');
-    mocks.flush.mockRejectedValueOnce(error);
+    mocks.insertIfAbsent.mockRejectedValueOnce(error);
     await expect(enqueueWriteEvents(executor, [goal()])).rejects.toBe(error);
     expect(mocks.sendApns).not.toHaveBeenCalled();
     expect(mocks.kick).not.toHaveBeenCalled();
@@ -155,9 +195,11 @@ describe('transactional push outbox', () => {
     expect(mocks.kickPushPlanning).not.toHaveBeenCalled();
     expect(callbacks).toHaveLength(2);
     callbacks.forEach(callback => callback());
-    expect(mocks.armBudgetCheck).toHaveBeenCalledExactlyOnceWith('owner:food');
+    expect(mocks.armBudgetCheck).toHaveBeenCalledExactlyOnceWith('owner:food', 25_000);
     expect(mocks.kickPushPlanning).toHaveBeenCalledExactlyOnceWith('owner');
     expect(mocks.sendApns).not.toHaveBeenCalled();
+    expect(mocks.operations.indexOf('upsert')).toBeLessThan(mocks.operations.indexOf('read'));
+    expect(mocks.saves.mock.calls[0]![1].expiresAt).toBe(now + 90 * 86400000);
   });
 
   it('reschedules both old and new categories after an edit with one durable task for each', async () => {

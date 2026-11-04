@@ -1,4 +1,4 @@
-import { env } from '../config/env';
+import { pushWriteEventsEnabled } from './pushWriteConfig';
 import type { WriteChange } from '../push/events';
 import { randomInt } from 'node:crypto';
 import { sql, type Kysely, type Transaction } from 'kysely';
@@ -436,8 +436,7 @@ export class SqlTransaction {
         // The owner is only known from the stored document (needed for the tombstone scope).
         const old =
           (isSyncEnabled() && collectionOf(write.key.table)) ||
-          (env.NOTIFICATIONS_ENABLED &&
-            env.PUSH_ENABLED &&
+          (pushWriteEventsEnabled() &&
             [
               'transactions',
               'subscriptions',
@@ -453,8 +452,7 @@ export class SqlTransaction {
         if (old?.exists) {
           track(write.key, old.data, true);
           if (
-            env.NOTIFICATIONS_ENABLED &&
-            env.PUSH_ENABLED &&
+            pushWriteEventsEnabled() &&
             [
               'transactions',
               'subscriptions',
@@ -486,8 +484,7 @@ export class SqlTransaction {
       await syncHouseholdMembers(executor, write.key, data);
       track(write.key, data, false, old.exists ? old.data : undefined);
       if (
-        env.NOTIFICATIONS_ENABLED &&
-        env.PUSH_ENABLED &&
+        pushWriteEventsEnabled() &&
         [
           'profiles',
           'savingsGoals',
@@ -506,12 +503,19 @@ export class SqlTransaction {
         });
     }
     if (pushChanges.length) {
-      const { enqueueWriteEvents } = await import('../push/outbox');
-      if (
-        await enqueueWriteEvents(executor, pushChanges, (callback) => this.afterCommit(callback))
-      ) {
-        const { kickDelivery } = await import('../push/kick');
-        this.afterCommit(kickDelivery);
+      try {
+        const { enqueueWriteEvents } = await import('../push/outbox');
+        if (
+          await enqueueWriteEvents(executor, pushChanges, (callback) => this.afterCommit(callback))
+        ) {
+          const { kickDelivery } = await import('../push/kick');
+          this.afterCommit(kickDelivery);
+        }
+      } catch (error) {
+        const code = (error as { code?: string }).code;
+        if (['ER_LOCK_DEADLOCK', 'ER_LOCK_WAIT_TIMEOUT'].includes(code ?? '')) throw error;
+        const { logger } = await import('../utils/logger');
+        logger.error({ code }, 'notify.push.outbox_failed');
       }
     }
     // Last: the per-user counter lock must be taken after every document lock.
@@ -526,6 +530,18 @@ export class SqlTransaction {
 }
 export function writeBatch(): SqlTransaction {
   return new SqlTransaction();
+}
+/** Plain INSERT first: duplicates never require a locking read of an absent key. */
+export async function insertDocumentIfAbsent(
+  executor: Executor,
+  key: DocumentKey,
+  data: DocumentData,
+): Promise<void> {
+  await executor
+    .insertInto(tables[key.table])
+    .values({ id: Buffer.from(key.id), ...encodeData(data), ...projected(data) })
+    .onDuplicateKeyUpdate({ id: sql.ref('id') })
+    .execute();
 }
 /**
  * Insert the request's idempotency marker. A duplicate primary key means another request

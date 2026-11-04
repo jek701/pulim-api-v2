@@ -1,11 +1,13 @@
 import { kickPushPlanning } from './kick';
 import type { Kysely, Transaction } from 'kysely';
 import { env, notificationRecipientAllowed } from '../config/env';
-import { documentKey, queryTable, SqlTransaction } from '../db/documents';
+import { documentKey, insertDocumentIfAbsent, queryTable, SqlTransaction, Timestamp } from '../db/documents';
+import { relationalTables } from '../db/tables';
 import {
   armBudgetCheck,
   notificationId,
   queuedNotificationData,
+  PUSH_BUDGET_DEBOUNCE_MS,
 } from '../notifications/queue.repository';
 import { immediateEvents, type WriteChange } from './events';
 
@@ -65,6 +67,21 @@ export async function enqueueWriteEvents(
   if (!events.length && !budgets.size && !planningUids.size) return false;
 
   const tx = new SqlTransaction(executor);
+  const deviceOwners = new Map<string, boolean>();
+  const hasDevice = async (uid: string): Promise<boolean> => {
+    if (!deviceOwners.has(uid)) {
+      try {
+        const row = await executor.selectFrom(relationalTables.pushDevices).select('id')
+          .where('uid', '=', Buffer.from(uid)).where('disabled_at', 'is', null).limit(1)
+          .executeTakeFirst();
+        deviceOwners.set(uid, Boolean(row));
+      } catch (error) {
+        if ((error as { code?: string }).code !== 'ER_NO_SUCH_TABLE') throw error;
+        deviceOwners.set(uid, false);
+      }
+    }
+    return deviceOwners.get(uid)!;
+  };
   const rows: Array<{
     ref: ReturnType<typeof documentKey>;
     data: ReturnType<typeof queuedNotificationData>;
@@ -79,10 +96,10 @@ export async function enqueueWriteEvents(
       );
     }
     for (const uid of recipients) {
-      if (!notificationRecipientAllowed(uid)) continue;
+      if (!notificationRecipientAllowed(uid) || !(await hasDevice(uid))) continue;
       const dedupeKey = `${event.key}:${uid}`;
       const ref = documentKey(queryTable('notifications'), notificationId(dedupeKey));
-      if (pending.has(ref.id) || (await tx.read(ref)).exists) continue;
+      if (pending.has(ref.id)) continue;
       pending.add(ref.id);
       rows.push({
         ref,
@@ -102,10 +119,17 @@ export async function enqueueWriteEvents(
   }
   const tasks: Array<{ ref: ReturnType<typeof documentKey>; data: Record<string, unknown> }> = [];
   for (const { uid, categoryId } of budgets.values()) {
+    if (!(await hasDevice(uid))) continue;
     const ref = documentKey(
       queryTable('notificationTasks'),
       notificationId(`budget_check:${uid}:${categoryId}`),
     );
+    // Establish the row before locking it. Concurrent first writes cannot share a gap lock.
+    await insertDocumentIfAbsent(executor, ref, {
+      userId: uid, categoryId, type: 'budget_check', version: 0,
+      status: 'pending', runAt: now + PUSH_BUDGET_DEBOUNCE_MS, createdAt: now,
+      expiresAt: Timestamp.fromMillis(now + 90 * 86400000),
+    });
     const previous = await tx.read(ref);
     const data = previous.data;
     const active = data?.status === 'processing' && Number(data.leaseUntil ?? 0) > now;
@@ -119,23 +143,24 @@ export async function enqueueWriteEvents(
         eventAt: now,
         updatedAt: now,
         createdAt: data?.createdAt ?? now,
+        expiresAt: Timestamp.fromMillis(now + 90 * 86400000),
         ...(active
-          ? { rerunAt: now + env.NOTIFY_BUDGET_DEBOUNCE_MS }
+          ? { rerunAt: now + PUSH_BUDGET_DEBOUNCE_MS }
           : {
               status: 'pending',
-              runAt: now + env.NOTIFY_BUDGET_DEBOUNCE_MS,
+              runAt: now + PUSH_BUDGET_DEBOUNCE_MS,
               rerunAt: null,
               leaseUntil: null,
             }),
       },
     });
   }
-  for (const row of rows) tx.insert(row.ref, row.data);
+  for (const row of rows) await insertDocumentIfAbsent(executor, row.ref, row.data);
   for (const task of tasks) tx.save(task.ref, task.data, { merge: true });
-  if (rows.length || tasks.length) await tx.flush(executor);
+  if (tasks.length) await tx.flush(executor);
   // Timers only wake a delivery check. The durable task is invisible until the effect commits.
-  for (const { uid, categoryId } of budgets.values())
-    afterCommit?.(() => armBudgetCheck(`${uid}:${categoryId}`));
+  for (const task of tasks)
+    afterCommit?.(() => armBudgetCheck(`${task.data.userId}:${task.data.categoryId}`, PUSH_BUDGET_DEBOUNCE_MS));
   for (const uid of planningUids) afterCommit?.(() => kickPushPlanning(uid));
   return rows.length > 0;
 }
