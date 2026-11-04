@@ -6,19 +6,26 @@ import { isCaptureStorageReady } from './repository';
 import { isMerchantTin, isStandardCategoryKey } from './categories';
 
 export interface MerchantReview {
-  tin: string; name: string | null; status: string; seen_count: number;
+  tin: string; name: string | null; status: string; seen_count: number; first_seen: number;
+  /** At least two different standard categories have real (non-AI) voters. */
+  contested: boolean;
   votes: Array<{ standardKey: string; weight: number; voters: number }>;
 }
 
-export async function reviewMerchants(limit = 30): Promise<MerchantReview[]> {
-  const merchants = await sql<{ tin: string; name: string | null; status: string; seen_count: number }>`SELECT tin, name, status, seen_count FROM merchants
+/** New (not yet at consensus) and contested merchants. `since` limits "new" to recently first-seen ones. */
+export async function reviewMerchants(limit = 30, since?: number): Promise<MerchantReview[]> {
+  const merchants = await sql<{ tin: string; name: string | null; status: string; seen_count: number; first_seen: number }>`SELECT tin, name, status, seen_count, first_seen FROM merchants
     WHERE status <> 'verified' ORDER BY last_seen DESC LIMIT ${Math.max(1, Math.min(100, limit))}`.execute(database());
   const result: MerchantReview[] = [];
   for (const merchant of merchants.rows) {
     const votes = await sql<{ standard_key: string; weight_sum: number; voter_count: number }>`SELECT standard_key, weight_sum, voter_count
       FROM merchant_category_votes WHERE tin = ${merchant.tin} AND weight_sum > 0 ORDER BY weight_sum DESC`.execute(database());
-    if (merchant.status === 'consensus' && votes.rows.length < 2) continue;
-    result.push({ ...merchant, seen_count: Number(merchant.seen_count), votes: votes.rows.map((vote) => ({
+    const contested = votes.rows.filter((vote) => Number(vote.voter_count) > 0).length >= 2;
+    // A merchant that reached consensus without disagreement needs no attention.
+    if (merchant.status === 'consensus' && !contested) continue;
+    const firstSeen = Number(merchant.first_seen);
+    if (since !== undefined && !contested && firstSeen < since) continue;
+    result.push({ ...merchant, seen_count: Number(merchant.seen_count), first_seen: firstSeen, contested, votes: votes.rows.map((vote) => ({
       standardKey: vote.standard_key, weight: Number(vote.weight_sum), voters: Number(vote.voter_count),
     })) });
   }
@@ -39,12 +46,14 @@ export function summaryWeek(now: Date): string | null {
 }
 
 export function renderMerchantSummary(merchants: MerchantReview[]): string {
+  const contested = merchants.filter((merchant) => merchant.contested).length;
   const lines = merchants.slice(0, 8).map((merchant) => {
     const name = (merchant.name ?? merchant.tin).replace(/[<>]/g, '').slice(0, 50);
     const votes = merchant.votes.slice(0, 2).map((vote) => `${vote.standardKey}: ${vote.weight}`).join(', ');
-    return `${name} · ${merchant.tin}${votes ? ` (${votes})` : ''}`;
+    return `${merchant.contested ? '⚠ ' : ''}${name} · ${merchant.tin}${votes ? ` (${votes})` : ''}`;
   });
-  return `Справочник продавцов: ${merchants.length} новых или спорных.\n${lines.join('\n')}\nПроверка: npm run merchants -- review`;
+  const more = merchants.length > lines.length ? `\n… и ещё ${merchants.length - lines.length}` : '';
+  return `Справочник продавцов за неделю: ${merchants.length} новых или спорных (спорных: ${contested}).\n${lines.join('\n')}${more}\nПроверка: npm run merchants -- review\nПодтвердить: npm run merchants -- verify <ИНН> <ключ>`;
 }
 
 /** Owner-requested directory digest. No receipt contents, buyer details, or voter identities. */
@@ -53,7 +62,7 @@ export async function runMerchantSummary(now = new Date()): Promise<void> {
   if (!week || !await isCaptureStorageReady()) return;
   const owners = (process.env.DEV_NOTES_UIDS ?? '').split(',').map((uid) => uid.trim()).filter(Boolean);
   if (!owners.length) return;
-  const merchants = await reviewMerchants();
+  const merchants = await reviewMerchants(30, now.getTime() - 7 * 24 * 3600_000);
   if (!merchants.length) return;
   for (const uid of owners) {
     const profile = await readDocument(documentKey('profiles', uid));

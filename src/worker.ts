@@ -6,6 +6,7 @@ import { logger } from './utils/logger';
 import { runCommunicationDispatch } from './communications/repository';
 import { closeApns } from './push/apns';
 import { drainPushKicks } from './push/kick';
+import { runMerchantSummary } from './capture/owner';
 
 async function main(): Promise<void> {
   if (!env.BACKGROUND_JOBS_ENABLED || env.MAINTENANCE_MODE) {
@@ -21,6 +22,14 @@ async function main(): Promise<void> {
   let timer: NodeJS.Timeout | null = null;
   let communicationRun: Promise<unknown> | undefined;
   let stopping = false;
+  let merchantRun: Promise<void> | undefined;
+  const merchantTick = () => {
+    if (stopping || merchantRun) return;
+    merchantRun = runMerchantSummary().catch(() => logger.warn('capture.owner_summary_failed'))
+      .finally(() => { merchantRun = undefined; });
+  };
+  const merchantTimer = setInterval(merchantTick, 60_000);
+  merchantTick();
   const dispatch = () => {
     if (stopping || communicationRun) return;
     communicationRun = runCommunicationDispatch()
@@ -39,8 +48,9 @@ async function main(): Promise<void> {
     stopping = true;
     logger.info({ signal }, 'worker.stopping');
     if (timer) clearInterval(timer);
+    clearInterval(merchantTimer);
     try {
-      await Promise.all([loops?.stop(), communicationRun, drainPushKicks()]);
+      await Promise.all([loops?.stop(), communicationRun, merchantRun, drainPushKicks()]);
       await closeDatabase();
     } finally {
       closeApns();
