@@ -292,8 +292,10 @@ export function mapSoliqReceipt(raw: unknown, qr: SoliqQr, amountDivisor = 1): S
   const sellerTin = tin(extra.merchantTin) ?? comitent ?? tin(payment.tin);
   // fiscalSign is read only to canonicalise the dedupe hash between the `s` and `h` QR variants.
   const actualSign = text(extra.fiscalSign, 128) ?? text(payment.fiscalSign, 128);
+  // Soliq sends refundPaymentId "0" on ordinary sales, so only a non-zero id marks a refund.
+  const refundId = payment.refundPaymentId;
   const refund = payment.isRefund === 1 || payment.isRefund === true || payment.isRefund === '1' ||
-    (payment.refundPaymentId !== undefined && payment.refundPaymentId !== null && payment.refundPaymentId !== '');
+    (refundId !== undefined && refundId !== null && !/^0*$/.test(String(refundId).trim()));
   return {
     kind: 'soliq',
     receiptKey: soliqReceiptKey(actualSign ? { ...qr, fiscalSign: actualSign } : qr),

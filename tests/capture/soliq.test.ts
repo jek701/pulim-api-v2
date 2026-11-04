@@ -218,6 +218,9 @@ describe('Soliq signing and mapping', () => {
     expect(mapSoliqReceipt({ ...fixture(), isRefund: 1 }, qr).isRefund).toBe(true);
     expect(mapSoliqReceipt({ ...fixture(), refundPaymentId: 99 }, qr).isRefund).toBe(true);
     expect(mapSoliqReceipt(fixture(), qr)).not.toHaveProperty('isRefund');
+    // Real sales carry refundPaymentId "0" (string) alongside isRefund 0.
+    expect(mapSoliqReceipt({ ...fixture(), isRefund: 0, refundPaymentId: '0' }, qr)).not.toHaveProperty('isRefund');
+    expect(mapSoliqReceipt({ ...fixture(), refundPaymentId: 0 }, qr)).not.toHaveProperty('isRefund');
   });
 
   it('only companyName, merchantTin and address come out of extraInfo, even when every key is filled', () => {
