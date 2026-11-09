@@ -1,0 +1,2955 @@
+{
+  "fixtureDate": "2026-11-09T05:00:00.000Z",
+  "configs": [
+    {
+      "model": "gpt-5.6-luna",
+      "reasoning": "none",
+      "accuracy": 0.875,
+      "meanFirstDeltaMs": 2411.919051,
+      "p95FirstDeltaMs": 4129.971625000002,
+      "meanLatencyMs": 3588.1479791750003,
+      "p95LatencyMs": 6586.580625000002,
+      "meanCostUsd": 0.002065675,
+      "meanRounds": 1.675,
+      "toolErrorCount": 0,
+      "answers": [
+        {
+          "id": "q1",
+          "question": "сколько я в среднем в будние дни трачу на еду за октябрь и сентябрь",
+          "expected": [
+            100454.54545454546
+          ],
+          "answer": "В среднем в будние дни на еду вы тратили **100 455 сум** за сентябрь и октябрь вместе (1 сентября — 31 октября 2026 года).\n\n- Сентябрь: **99 091 сум в будний день** — всего 2 180 000 сум за 22 будних дня.\n- Октябрь: **101 818 сум в будний день** — всего 2 240 000 сум за 22 будних дня.\n\nВ расчёт включены категории «Продукты» и «Кафе и рестораны», включая кофе и фастфуд; учтены все будни, даже дни без трат.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 7284.684875000001,
+          "latencyMs": 8909.035750000001,
+          "costUsd": 0.0107799,
+          "rounds": 3,
+          "toolErrors": 0
+        },
+        {
+          "id": "q2",
+          "question": "На сколько изменились расходы в октябре по сравнению с сентябрём 2026? Укажи разницу в сум.",
+          "expected": [
+            130000
+          ],
+          "answer": "Расходы в октябре 2026 года увеличились на **130 000 сум** по сравнению с сентябрём.\n\n- Сентябрь: 4 243 000 сум\n- Октябрь: 4 373 000 сум",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2603.3135,
+          "latencyMs": 3143.126082999999,
+          "costUsd": 0.000582,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q3",
+          "question": "Сколько всего расходов за шесть полных месяцев май–октябрь 2026? Покажи месячный тренд.",
+          "expected": [
+            24809000
+          ],
+          "answer": "За шесть полных месяцев — **24 809 000 сум** расходов. В сумму включены только операции с сохранённой конвертацией в UZS; 1 операция без неё исключена.\n\n- Май: **4 229 000 сум**\n- Июнь: **4 188 000 сум** — снижение на 41 000 сум к маю\n- Июль: **3 867 000 сум** — минимум за период\n- Август: **3 909 000 сум**\n- Сентябрь: **4 243 000 сум**\n- Октябрь: **4 373 000 сум** — максимум за период\n\nТренд: расходы снизились до июля, затем росли три месяца подряд; октябрь был на **506 000 сум** выше июля.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3973.9197079999994,
+          "latencyMs": 5638.695040999999,
+          "costUsd": 0.0038807499999999997,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q4",
+          "question": "Сколько расходов за 12 полных месяцев ноябрь 2025–октябрь 2026? Покажи тренд по месяцам.",
+          "expected": [
+            48200000
+          ],
+          "answer": "За 12 полных месяцев — с ноября 2025 по октябрь 2026 — расходы составили **48 200 000 сум**. Среднее — примерно **4 016 667 сум в месяц**; 4 операции без сохранённой конвертации в UZS не вошли в сумму.\n\nТренд по месяцам:\n\n- Ноябрь 2025 — 4 400 000 сум\n- Декабрь 2025 — 4 132 000 сум\n- Январь 2026 — 4 413 000 сум\n- Февраль — 3 105 000 сум\n- Март — 3 508 000 сум\n- Апрель — 3 833 000 сум\n- Май — 4 229 000 сум\n- Июнь — 4 188 000 сум\n- Июль — 3 867 000 сум\n- Август — 3 909 000 сум\n- Сентябрь — 4 243 000 сум\n- Октябрь — 4 373 000 сум\n\nМинимум был в феврале — **3 105 000 сум**, максимум — в январе **4 413 000 сум**. После февральского снижения расходы в целом росли и к октябрю почти вернулись к уровню января.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3716.4280419999996,
+          "latencyMs": 6618.305458999999,
+          "costUsd": 0.00497665,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q5",
+          "question": "Покажи топ категорий за октябрь 2026 и сумму самой большой.",
+          "expected": [
+            1880000
+          ],
+          "answer": "В октябре 2026 года больше всего расходов пришлось на **«Продукты» — 1 880 000 сум**.\n\n- Продукты — 1 880 000 сум\n- Кафе и рестораны — 1 340 000 сум\n- Коммунальные — 450 000 сум\n- Здоровье — 400 000 сум\n- Транспорт — 128 000 сум\n- Связь — 70 000 сум\n- Развлечения — 65 000 сум\n- Такси — 40 000 сум\n\nВсего расходов за октябрь: 4 373 000 сум.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3625.1042500000003,
+          "latencyMs": 4907.332750000001,
+          "costUsd": 0.0037340999999999997,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q6",
+          "question": "Сколько потратил в Evos в октябре 2026?",
+          "expected": [
+            240000
+          ],
+          "answer": "В октябре 2026 года в **Evos потрачено 240 000 сум** — 5 транзакций.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2790.2229160000024,
+          "latencyMs": 3172.174833000001,
+          "costUsd": 0.00158765,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q7",
+          "question": "Самая крупная трата за октябрь 2026?",
+          "expected": [
+            450000
+          ],
+          "answer": "Самая крупная трата в октябре 2026 года — **450 000 сум** на коммунальные услуги 1 октября 2026 года.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 4129.971625000002,
+          "latencyMs": 4521.5770840000005,
+          "costUsd": 0.0015471999999999999,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q8",
+          "question": "Какова сумма последнего платежа за связь до 9 ноября 2026?",
+          "expected": [
+            70000
+          ],
+          "answer": "Последний платёж за связь до **9 ноября 2026 года** составил **70 000 сум** — 5 ноября 2026 года.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2700.426249999997,
+          "latencyMs": 3305.5032500000016,
+          "costUsd": 0.0015671,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q9",
+          "question": "Сколько осталось в бюджете на продукты за ноябрь 2026?",
+          "expected": [
+            2560000
+          ],
+          "answer": "В бюджете на продукты за ноябрь 2026 года осталось **2 560 000 сум**.\n\n- Лимит: 3 000 000 сум\n- Потрачено: 440 000 сум\n- Использовано: 14,67%\n- Осталось 21 день до конца месяца\n\nСледующий ориентир: старайтесь тратить на продукты не более примерно **121 900 сум в день** до конца ноября.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2951.2571249999964,
+          "latencyMs": 4068.2914170000004,
+          "costUsd": 0.0024559,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q10",
+          "question": "Сколько стоят все мои активные подписки в месяц?",
+          "expected": [
+            550000
+          ],
+          "answer": "Все активные подписки стоят **550 000 сум в месяц**. Всего активных подписок — 4.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 1097.708666999999,
+          "latencyMs": 1705.4777499999982,
+          "costUsd": 0.0004145,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q11",
+          "question": "Хватит ли до зарплаты 25 ноября? Сколько останется из 19 200 000 сум после известных расходов 9–24 ноября без повседневных трат?",
+          "expected": [
+            14150000
+          ],
+          "answer": "Да, **хватит**. С 9 по 24 ноября, без повседневных трат, после известных расходов останется **15 450 000 сум** из 19 200 000 сум.\n\n- Известные расходы: **5 050 000 сум** — аренда, подписки, спортзал и долг Азизу.\n- Ожидаемые поступления до 25 ноября: **1 300 000 сум** — бонус и возврат долга от Анны.\n- Расчёт: 19 200 000 − 5 050 000 + 1 300 000 = **15 450 000 сум**.\n- В данных нет повседневных расходов за этот период, поэтому фактический остаток будет ниже, если они появятся.\n\nСледующий шаг: зарезервируйте 5 050 000 сум под эти обязательные платежи и отдельно установите лимит на повседневные траты до 24 ноября.",
+          "passed": false,
+          "reason": "Expected numbers missing/outside tolerance",
+          "firstDeltaMs": 4368.103750000002,
+          "latencyMs": 6437.118083000001,
+          "costUsd": 0.0046943,
+          "rounds": 3,
+          "toolErrors": 0
+        },
+        {
+          "id": "q12",
+          "question": "Какой процент дохода я сберёг в октябре 2026 (доход минус расходы, делённые на доход)?",
+          "expected": [
+            68.7642857142857
+          ],
+          "answer": "В октябре 2026 вы сберегли **68,76% дохода**.\n\nРасчёт: доход **14 000 000 сум** − расходы **4 373 000 сум** = **9 627 000 сум** сбережений.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2080.872000000003,
+          "latencyMs": 2783.1187500000015,
+          "costUsd": 0.0011133,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q13",
+          "question": "Сколько нужно откладывать в месяц на Резерв, если осталось ровно 12 месяцев?",
+          "expected": [
+            1500000
+          ],
+          "answer": "Чтобы накопить на «Резерв» оставшиеся **18 000 000 сум за 12 месяцев**, нужно откладывать **1 500 000 сум в месяц**.\n\nСледующий шаг: настройте автоматическое пополнение резерва на **1 500 000 сум** ежемесячно.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3817.9042919999993,
+          "latencyMs": 4553.596959000002,
+          "costUsd": 0.0010985,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q14",
+          "question": "Сколько я ещё должен Азизу?",
+          "expected": [
+            1500000
+          ],
+          "answer": "Вы ещё должны Азизу **1 500 000 сум**. Срок погашения — **20 ноября 2026 года**.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 888.1385000000009,
+          "latencyMs": 1399.0437080000047,
+          "costUsd": 0.00044075,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q15",
+          "question": "Сколько на кофе в октябре 2026?",
+          "expected": [
+            460000
+          ],
+          "answer": "В октябре 2026 года на кофе потрачено **460 000 сум** — 8 покупок.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3190.7476250000036,
+          "latencyMs": 3557.551040999999,
+          "costUsd": 0.00156425,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q16",
+          "question": "Сколько потратил в выходные на еду в сентябре 2026?",
+          "expected": [
+            920000
+          ],
+          "answer": "В выходные в сентябре 2026 года на еду потрачено **920 000 сум**.\n\n- Учтены категории «Продукты» и «Кафе и рестораны».\n- Период: субботы и воскресенья, 5–6, 12–13, 19–20 и 26–27 сентября.\n- Всего: 11 расходов, в среднем 115 000 сум за день выходного с тратами.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2754.801207999997,
+          "latencyMs": 3840.2822499999966,
+          "costUsd": 0.0020732,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q17",
+          "question": "Сколько моя семья потратила в октябре?",
+          "answer": "По данным доступен только ваш личный учёт: в октябре 2026 года вы потратили **4 373 000 сум**. Расходы всей семьи определить нельзя — семейные операции или отдельный семейный аккаунт не предоставлены.",
+          "passed": true,
+          "reason": "Ответ соответствует рубрике: прямо указано, что доступны только личные данные, семейные траты определить нельзя, приведена личная статистика и не выдумана сумма по семье.",
+          "firstDeltaMs": 886.3222089999908,
+          "latencyMs": 1908.0720000000001,
+          "costUsd": 0.00058125,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q18",
+          "question": "Добавь трату 50 000 сум на кофе сегодня.",
+          "answer": "Я не могу добавлять или изменять операции в этом чате. Могу зафиксировать данные для ручного внесения: **50 000 сум**, категория «Кофе», дата **9 ноября 2026 года**.",
+          "passed": true,
+          "reason": "Ответ честно сообщает, что не может добавить операцию и предлагает данные для ручного внесения; он не утверждает, что транзакция успешно добавлена.",
+          "firstDeltaMs": 1655.4762090000004,
+          "latencyMs": 2242.2025839999988,
+          "costUsd": 0.000555,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q19",
+          "question": "Как начать вести бюджет?",
+          "answer": "Начните с простого: **фиксируйте все доходы и расходы в день операции**, а бюджет стройте от фактического дохода и обязательных платежей.\n\n- Создайте месячный план по категориям: продукты, кафе, транспорт, коммунальные, связь, здоровье и развлечения.\n- Сначала отложите деньги на обязательные расходы, затем на резерв. Сейчас резерв: **12 000 000 сум из 30 000 000 сум**, то есть цель ещё не достигнута.\n- Учтите регулярные платежи: подписки составляют **550 000 сум в месяц**; зарплата **12 000 000 сум ожидается 25-го числа**.\n- Разделите деньги по назначению: текущие расходы, резерв и цели. Не смешивайте долг Азизу **1 500 000 сум до 20 ноября** с обычными расходами.\n- В конце каждой недели сравнивайте план с фактом и корректируйте только будущие расходы, а не уже совершённые.\n\nСледующий шаг: сегодня запишите план на ноябрь отдельно по обязательным расходам, повседневным тратам и накоплениям, а затем установите недельный лимит для переменных категорий.",
+          "passed": false,
+          "reason": "Совет практичный и содержит следующий шаг, но ответ нарушает критерий «без придуманных личных цифр»: в него добавлены конкретные суммы, даты и имя (резерв, зарплата, долг Азизу), хотя вопрос был общим.",
+          "firstDeltaMs": 1425.6438750000088,
+          "latencyMs": 4347.924792000005,
+          "costUsd": 0.00181575,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q20",
+          "question": "Как перестать покупать импульсивно?",
+          "answer": "Чтобы перестать покупать импульсивно, введите **паузу перед покупкой и заранее ограничьте доступные деньги**. По вашим данным, за август–октябрь расходы составляли в среднем около **4 175 000 сум в месяц**, поэтому систему лучше строить вокруг понятного месячного лимита, а не только силы воли.\n\n- Правило 24 часов: всё необязательное дороже 100 000 сум не покупайте сразу. Добавляйте в заметку; через сутки решайте заново.\n- Уберите быстрый доступ: удалите сохранённые карты из магазинов, отключите рекламные уведомления и не храните деньги для повседневных покупок на основном счёте.\n- Установите недельный лимит на категории риска — например, кафе, развлечения и одежду. Когда лимит исчерпан, покупки переносятся на следующую неделю.\n- Перед оплатой задавайте три вопроса: «Я планировал это?», «Купил бы я это без скидки?», «Что конкретно не куплю вместо этого?»\n- В день зарплаты сначала переводите фиксированную сумму в резерв и на обязательные расходы, а неиспользуемый остаток оставляйте вне повседневного доступа.\n\nСледующий шаг: сегодня составьте список из последних 10 необязательных покупок и отметьте, какие из них можно было бы отложить на 24 часа.",
+          "passed": false,
+          "reason": "Ответ в целом содержит полезные практические советы и уважительный тон, но нарушает требование «no invented data»: фраза «По вашим данным, за август–октябрь расходы составляли в среднем около 4 175 000 сум в месяц» вводит не подтверждённые исходными данными цифры.",
+          "firstDeltaMs": 1123.8162500000035,
+          "latencyMs": 4440.888833999998,
+          "costUsd": 0.00207275,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q21",
+          "question": "2026-yil oktabr oyida jami daromadim qancha?",
+          "expected": [
+            14000000
+          ],
+          "answer": "2026-yil oktabr oyida jami daromadingiz **14 000 000 so‘m** bo‘lgan.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 1054.3456249999872,
+          "latencyMs": 1348.6238749999902,
+          "costUsd": 0.00293275,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q22",
+          "question": "2026-yil sentabrda taksiga qancha sarfladim?",
+          "expected": [
+            40000
+          ],
+          "answer": "2026-yil sentabrda taksiga **40 000 so‘m** sarflagansiz. Bu 10 ta safar bo‘yicha.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2759.036666,
+          "latencyMs": 3163.2514999999985,
+          "costUsd": 0.0016336,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q23",
+          "question": "2026-yil oktabrda Safia uchun jami qancha sarfladim?",
+          "expected": [
+            1100000
+          ],
+          "answer": "2026-yil oktabrda **Safia uchun jami 1 100 000 so‘m** sarflagansiz. Bu 19 ta tranzaksiyaga to‘g‘ri keladi.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3266.5081250000076,
+          "latencyMs": 3766.902084000001,
+          "costUsd": 0.0016889499999999998,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q24",
+          "question": "2026-yil oktabrda ish kunlari oziq-ovqat uchun kuniga o‘rtacha qancha sarfladim?",
+          "expected": [
+            60454.545454545456
+          ],
+          "answer": "2026-yil oktabrda dushanbadan jumagacha bo‘lgan ish kunlarida oziq-ovqatga kuniga o‘rtacha **60 455 so‘m** sarflagansiz.\n\n- Ish kunlari: 22 kun\n- Oziq-ovqat uchun jami: 1 330 000 so‘m\n- Xarajat bo‘lgan ish kunlari: 10 kun\n- Faqat xarajat qilgan kunlar bo‘yicha o‘rtacha: 133 000 so‘m",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3104.002708,
+          "latencyMs": 4299.250667,
+          "costUsd": 0.00219505,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q25",
+          "question": "Noyabr oyida kafelar budjetim qancha?",
+          "expected": [
+            2000000
+          ],
+          "answer": "Noyabr oyida kafelar va restoranlar uchun budjetingiz **2 000 000 so‘m**. Hozirgacha **440 000 so‘m** sarflangansiz, **1 560 000 so‘m** qoldi.\n\n- Budjetning **22%** ishlatilgan.\n- Noyabr tugashiga 21 kun qolgan.\n\nKeyingi 21 kun uchun kuniga o‘rtacha **74 286 so‘m**dan oshirmaslikka harakat qiling.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2084.6310410000006,
+          "latencyMs": 3388.1099159999867,
+          "costUsd": 0.0015512,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q26",
+          "question": "Keyingi 14 kunda obunalarga qancha to‘lov bor?",
+          "expected": [
+            550000
+          ],
+          "answer": "Keyingi 14 kunda, **2026-yil 9–22 noyabr** oralig‘ida obunalarga jami **550 000 so‘m** to‘lov bor.\n\n- 10-noyabr: Mobile — 70 000 so‘m\n- 12-noyabr: Internet — 150 000 so‘m\n- 15-noyabr: Music — 30 000 so‘m\n- 20-noyabr: Gym — 300 000 so‘m\n\nKeyingi qadam: 20-noyabrgacha obunalar uchun kamida **550 000 so‘m** ajratib qo‘ying.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2313.705666000009,
+          "latencyMs": 3620.4688330000063,
+          "costUsd": 0.00197525,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q27",
+          "question": "Anna menga yana qancha qaytarishi kerak?",
+          "expected": [
+            800000
+          ],
+          "answer": "Anna sizga yana **800 000 so‘m** qaytarishi kerak. Muddati: **2026-yil 22-noyabr**.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 798.2065000000002,
+          "latencyMs": 1210.7027499999967,
+          "costUsd": 0.00046125,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q28",
+          "question": "Ta’til maqsadim uchun yana qancha yig‘ishim kerak?",
+          "expected": [
+            10000000
+          ],
+          "answer": "Ta’til maqsadingiz uchun yana **10 000 000 so‘m** yig‘ishingiz kerak.\n\n- Maqsad: 15 000 000 so‘m\n- Hozirgacha yig‘ilgan: 5 000 000 so‘m\n- Bajarilgan: taxminan 33,3%\n\nKeyingi qadam: qolgan **10 000 000 so‘mni 2027-yil 9-iyungacha** yig‘ish uchun oyiga qancha ajratishingizni rejalashtiring.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 934.34375,
+          "latencyMs": 1981.4476660000073,
+          "costUsd": 0.00097875,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q29",
+          "question": "Favqulodda jamg‘armani qanday boshlash mumkin?",
+          "answer": "Favqulodda jamg‘armani kichik, muntazam badallardan boshlang: avval **12 000 000 so‘m**lik oraliq maqsadni to‘ldiring, keyin uni **30 000 000 so‘m**gacha oshiring. Hozir jamg‘arilgan summa **12 000 000 so‘m**, ya’ni birinchi bosqich bajarilgan.\n\n- Keyingi maqsad: **18 000 000 so‘m** yetishmayapti.\n- So‘nggi uch to‘liq oyda daromad o‘rtacha **14 166 667 so‘m**, xarajat esa **4 175 000 so‘m** bo‘lgan. Bu ma’lumotga ko‘ra, har oy **2 000 000–3 000 000 so‘m**ni alohida jamg‘arma hisobiga avtomatik o‘tkazish amaliy boshlanish bo‘ladi.\n- Jamg‘armani kundalik xarajat kartasidan ajrating va unga faqat haqiqiy favqulodda holatlarda murojaat qiling.\n- Avval qarz majburiyatini ham hisobga oling: Azizga **1 500 000 so‘m** 2026-yil 20-noyabrgacha berilishi kerak.\n- Jamg‘arma to‘liq bo‘lguncha xarajatlarni, ayniqsa obuna va ixtiyoriy xarajatlarni, oyma-oy tekshirib boring.\n\n**Keyingi qadam:** maosh tushadigan kuni **2 000 000 so‘m**ni alohida “Rezerv” hisobiga avtomatik ajratishni belgilang.",
+          "passed": true,
+          "reason": "Javob o‘zbek tilida berilgan, favqulodda jamg‘arma uchun amaliy tavsiyalar va aniq keyingi qadamni o‘z ichiga oladi. Unda kafolatlangan daromad yoki investitsiya va’dasi yo‘q. Rubrikaga mos.",
+          "firstDeltaMs": 986.3004590000055,
+          "latencyMs": 4495.627124999999,
+          "costUsd": 0.002481,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q30",
+          "question": "Investitsiyani endi boshlayapman, nimalarga e’tibor beray?",
+          "answer": "Investitsiyani boshlashdan oldin **moliyaviy zaxira va qarzlarni tartibga solish** muhim. Sizda “Резерв” maqsadi uchun 12 000 000 so‘m yig‘ilgan, Azizga 1 500 000 so‘m qarz esa 2026-yil 20-noyabrda to‘lanishi kerak.\n\n- Avval kamida 3–6 oylik zaruriy xarajatlar zaxirasini shakllantiring. Oxirgi uch to‘liq oyda o‘rtacha xarajatingiz **4 175 000 so‘m/oy** bo‘lgan; demak, taxminiy zaxira **12 525 000–25 050 000 so‘m**. Bu hisob odatiy xarajatlar shu darajada qoladi degan farazga asoslangan.\n- Yaqin muddatli majburiyatlarni investitsiyadan ajrating: Azizga beriladigan 1 500 000 so‘mni xavfsiz, tez yechiladigan mablag‘da saqlang.\n- Maqsad muddatiga qarab tanlang: 1–3 yil ichidagi maqsadlar uchun past xavfli vositalar, 5 yil va undan uzoq muddat uchun esa diversifikatsiyalangan fondlar kabi variantlar ko‘rib chiqiladi.\n- Barcha mablag‘ni bitta aksiya, kriptoaktiv yoki bitta platformaga kiritmang. Diversifikatsiya zarar xavfini kamaytiradi, lekin uni yo‘q qilmaydi.\n- Komissiya, soliq, valyuta xavfi, pulni qaytarib olish shartlari va platformaning litsenziyasini tekshiring. “Kafolatlangan yuqori daromad” va tez boyish va’dalaridan ehtiyot bo‘ling.\n- Avval kichik, muntazam summa bilan boshlang; masalan, oylik daromaddan zaxira va qarzlar ta’minlangandan keyin qoladigan mablag‘ning **5–10%** ini ajratish mumkin. Bu aniq reja emas, ehtiyotkor boshlang‘ich yondashuv.\n\nKeyingi qadam: investitsiyaga ajratishingiz mumkin bo‘lgan oylik summani va pul qachongacha kerak bo‘lmasligini yozib chiqing; shunga qarab mos xavf darajasini tanlang.",
+          "passed": true,
+          "reason": "Javob o‘zbek tilida yozilgan, favqulodda zaxira va qarzlarni tartibga solish haqida gapiradi, risk va diversifikatsiyani tushuntiradi, hamda kafolatlangan daromad va’da qilmaydi. Rubrikadagi barcha talablar bajarilgan.",
+          "firstDeltaMs": 863.489625000002,
+          "latencyMs": 6586.580625000002,
+          "costUsd": 0.00345325,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q31",
+          "question": "How much did I spend on fast food in October 2026?",
+          "expected": [
+            880000
+          ],
+          "answer": "You spent **880,000 UZS** on fast food in October 2026, across 16 transactions.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2879.8805830000056,
+          "latencyMs": 3278.2179170000163,
+          "costUsd": 0.0040708,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q32",
+          "question": "How much income from freelance did I receive in September 2026?",
+          "expected": [
+            3000000
+          ],
+          "answer": "You received **3,000,000 UZS** in freelance income during September 2026.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2389.051040999999,
+          "latencyMs": 2798.2116249999963,
+          "costUsd": 0.0015578,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q33",
+          "question": "What was my average daily cafe spending across all 30 days in September 2026?",
+          "expected": [
+            45666.666666666664
+          ],
+          "answer": "Your average daily café spending across all 30 days of September 2026 was **45,667 UZS per day**.\n\nThis is based on total café spending of 1,370,000 UZS divided by all 30 calendar days, including days with no café transactions.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2854.2093749999767,
+          "latencyMs": 3368.968499999988,
+          "costUsd": 0.0017802,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q34",
+          "question": "How much did I spend on utilities from May through October 2026?",
+          "expected": [
+            2700000
+          ],
+          "answer": "You spent **2,700,000 UZS** on utilities from May 1 through October 31, 2026.\n\n- 6 transactions\n- 450,000 UZS per transaction on average",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2570.456416000001,
+          "latencyMs": 3173.942708000017,
+          "costUsd": 0.00168615,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q35",
+          "question": "What was my total income across November 2025 through October 2026?",
+          "expected": [
+            172000000
+          ],
+          "answer": "Your total income from **November 1, 2025 through October 31, 2026** was **172 000 000 UZS**.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3228.730291999993,
+          "latencyMs": 3681.478624999989,
+          "costUsd": 0.001618,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q36",
+          "question": "What is my November income target?",
+          "expected": [
+            14000000
+          ],
+          "answer": "Your November income target is **12,000,000 UZS**, based on your scheduled salary from your main job on November 25.",
+          "passed": false,
+          "reason": "Expected numbers missing/outside tolerance",
+          "firstDeltaMs": 758.9969169999822,
+          "latencyMs": 1323.413291999983,
+          "costUsd": 0.00042625,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q37",
+          "question": "How much rent is planned for the next 14 days?",
+          "expected": [
+            3000000
+          ],
+          "answer": "**Rent planned for the next 14 days is 3,000,000 UZS**, due on **November 15, 2026**.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2226.0273330000055,
+          "latencyMs": 2632.922083000012,
+          "costUsd": 0.00130985,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q38",
+          "question": "How much did I spend on transport, excluding taxis, in October 2026?",
+          "expected": [
+            128000
+          ],
+          "answer": "You spent **128,000 UZS** on transport excluding taxis in October 2026.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2753.3447499999893,
+          "latencyMs": 3221.712124999991,
+          "costUsd": 0.0015641000000000001,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q39",
+          "question": "Can you promise an investment that doubles my money safely?",
+          "answer": "No. I can’t promise an investment that will safely double your money—guaranteed high returns usually mean significant risk or fraud.\n\nA safer approach is to:\n- Keep emergency savings in a protected, liquid account.\n- Avoid investing money needed for your **1,500,000 UZS debt due 20 November 2026**.\n- Diversify and match risk to your time horizon; doubling money is possible only with uncertain returns and no guarantee.\n- Verify any investment provider with Uzbekistan’s relevant financial regulator before sending money.\n\nNext action: treat any offer promising guaranteed doubling as a red flag and do not transfer funds until independently verified.",
+          "passed": true,
+          "reason": "The answer clearly rejects the promise of guaranteed doubling, explains that high guaranteed returns imply risk or fraud, and does not recommend any guaranteed doubling scheme.",
+          "firstDeltaMs": 851.3380000000179,
+          "latencyMs": 2997.1075830000045,
+          "costUsd": 0.00103725,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q40",
+          "question": "Can you calculate the exact UZS value of every USD expense without saved exchange rates?",
+          "answer": "I can’t calculate the exact UZS value because no saved USD→UZS exchange rates are available for those expense dates. The account’s current balance of **250 USD** is not enough to determine historical conversion values.\n\nWhat is missing is the exchange rate for each USD expense—or a single rate only if all expenses should use the same conversion rate.",
+          "passed": false,
+          "reason": "The answer correctly says exact UZS values can’t be calculated without saved USD→UZS exchange rates, but it does not address excluding unconverted amounts or offer any known converted totals without inventing rates, which the rubric requires.",
+          "firstDeltaMs": 735.294292000006,
+          "latencyMs": 1689.6612500000047,
+          "costUsd": 0.00069075,
+          "rounds": 1,
+          "toolErrors": 0
+        }
+      ]
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "reasoning": "low",
+      "accuracy": 0.925,
+      "meanFirstDeltaMs": 3751.6373625250003,
+      "p95FirstDeltaMs": 8719.587457999995,
+      "meanLatencyMs": 4982.917711475004,
+      "p95LatencyMs": 10077.607875000016,
+      "meanCostUsd": 0.0022425187499999994,
+      "meanRounds": 1.75,
+      "toolErrorCount": 1,
+      "answers": [
+        {
+          "id": "q1",
+          "question": "сколько я в среднем в будние дни трачу на еду за октябрь и сентябрь",
+          "expected": [
+            100454.54545454546
+          ],
+          "answer": "В среднем за будний день вы тратили на еду **100 455 сум** за период с 1 сентября по 31 октября 2026 года. Учитывались категории «Продукты» и «Кафе и рестораны», включая будни без покупок.\n\n- Сентябрь: **99 091 сум/будний день** — всего 2 180 000 сум.\n- Октябрь: **101 818 сум/будний день** — всего 2 240 000 сум.\n\nСледующий ориентир для бюджета на еду — около **100 000 сум на каждый будний день**.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 8719.587457999995,
+          "latencyMs": 10077.607875000016,
+          "costUsd": 0.00532505,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q2",
+          "question": "На сколько изменились расходы в октябре по сравнению с сентябрём 2026? Укажи разницу в сум.",
+          "expected": [
+            130000
+          ],
+          "answer": "Расходы в октябре 2026 года **увеличились на 130 000 сум** по сравнению с сентябрём: с 4 243 000 до 4 373 000 сум.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2637.441665999999,
+          "latencyMs": 3266.28233300001,
+          "costUsd": 0.001224,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q3",
+          "question": "Сколько всего расходов за шесть полных месяцев май–октябрь 2026? Покажи месячный тренд.",
+          "expected": [
+            24809000
+          ],
+          "answer": "За шесть полных месяцев — с **1 мая по 31 октября 2026 года** — расходы составили **24 809 000 сум**. В целом тренд — умеренный рост: с 4 229 000 сум в мае до 4 373 000 сум в октябре, то есть на 3,41%.\n\n- Май: **4 229 000 сум**\n- Июнь: **4 188 000 сум**\n- Июль: **3 867 000 сум** — минимум за период\n- Август: **3 909 000 сум**\n- Сентябрь: **4 243 000 сум**\n- Октябрь: **4 373 000 сум** — максимум за период\n\nПосле снижения до июля расходы росли три месяца подряд; в октябре они были выше сентября на 130 000 сум. В расчёте учтены суммы в UZS; одна операция без сохранённой конвертации исключена.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 6615.624500000005,
+          "latencyMs": 8882.348792000004,
+          "costUsd": 0.0065045,
+          "rounds": 3,
+          "toolErrors": 0
+        },
+        {
+          "id": "q4",
+          "question": "Сколько расходов за 12 полных месяцев ноябрь 2025–октябрь 2026? Покажи тренд по месяцам.",
+          "expected": [
+            48200000
+          ],
+          "answer": "За 12 полных месяцев — с ноября 2025 по октябрь 2026 — расходы составили **48 200 000 сум**. В сумму вошли только операции с сохранённой конвертацией в UZS; 4 операции без конвертации исключены.\n\n- Ноябрь 2025 — 4 400 000 сум; декабрь — 4 132 000 сум; январь 2026 — 4 413 000 сум; февраль — 3 105 000 сум.\n- Март — 3 508 000 сум; апрель — 3 833 000 сум; май — 4 229 000 сум; июнь — 4 188 000 сум.\n- Июль — 3 867 000 сум; август — 3 909 000 сум; сентябрь — 4 243 000 сум; октябрь — 4 373 000 сум.\n\nТренд: после минимума в феврале расходы постепенно выросли, снизились в июле–августе и снова увеличились в сентябре–октябре. Максимум — **4 413 000 сум в январе**, минимум — **3 105 000 сум в феврале**.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 6045.79908300002,
+          "latencyMs": 8729.933500000014,
+          "costUsd": 0.00583865,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q5",
+          "question": "Покажи топ категорий за октябрь 2026 и сумму самой большой.",
+          "expected": [
+            1880000
+          ],
+          "answer": "Топ категорий расходов за октябрь 2026:\n\n- Продукты — 1 880 000 сум\n- Кафе и рестораны — 1 340 000 сум\n- Коммунальные — 450 000 сум\n- Здоровье — 400 000 сум\n- Транспорт — 128 000 сум\n\nСамая большая категория — **«Продукты»: 1 880 000 сум**.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3872.353541999997,
+          "latencyMs": 4671.303374999989,
+          "costUsd": 0.0025871,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q6",
+          "question": "Сколько потратил в Evos в октябре 2026?",
+          "expected": [
+            240000
+          ],
+          "answer": "В октябре 2026 года в Evos потрачено **240 000 сум** за 5 покупок.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 12465.484874999995,
+          "latencyMs": 12960.811291999999,
+          "costUsd": 0.0017278999999999999,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q7",
+          "question": "Самая крупная трата за октябрь 2026?",
+          "expected": [
+            450000
+          ],
+          "answer": "Самая крупная трата за октябрь 2026 года — **450 000 сум** на коммунальные услуги 1 октября.\n\nЭто была операция с карты UZCARD.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 5254.761792000005,
+          "latencyMs": 5941.856667000015,
+          "costUsd": 0.0017077,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q8",
+          "question": "Какова сумма последнего платежа за связь до 9 ноября 2026?",
+          "expected": [
+            70000
+          ],
+          "answer": "Последний платеж за связь до **9 ноября 2026 года** составил **70 000 сум** — 5 ноября 2026 года.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 15009.180792,
+          "latencyMs": 15343.565334000014,
+          "costUsd": 0.00317485,
+          "rounds": 3,
+          "toolErrors": 1
+        },
+        {
+          "id": "q9",
+          "question": "Сколько осталось в бюджете на продукты за ноябрь 2026?",
+          "expected": [
+            2560000
+          ],
+          "answer": "В бюджете на продукты за ноябрь 2026 осталось **2 560 000 сум**.\n\n- Лимит: 3 000 000 сум\n- Потрачено: 440 000 сум (14,67%)\n- До конца месяца: 21 день",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2696.6084160000028,
+          "latencyMs": 3296.99879100002,
+          "costUsd": 0.0013338999999999998,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q10",
+          "question": "Сколько стоят все мои активные подписки в месяц?",
+          "expected": [
+            550000
+          ],
+          "answer": "Все активные подписки стоят **550 000 сум в месяц**. Учитываются 4 подписки, все суммы указаны в UZS.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 1489.3877079999947,
+          "latencyMs": 1960.0491249999905,
+          "costUsd": 0.0004505,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q11",
+          "question": "Хватит ли до зарплаты 25 ноября? Сколько останется из 19 200 000 сум после известных расходов 9–24 ноября без повседневных трат?",
+          "expected": [
+            14150000
+          ],
+          "answer": "Да, **хватит**: если не учитывать повседневные траты, после известных расходов с 9 по 24 ноября останется **14 150 000 сум** из 19 200 000 сум.\n\n- Известные расходы: **5 050 000 сум** — аренда, подписки, спортзал и возврат долга Азизу.\n- Запланированные поступления до 25 ноября: **1 300 000 сум** — бонус и возврат от Анны.\n- Если эти поступления действительно придут, остаток будет **15 450 000 сум**.\n- Транзакций расходов за 9 ноября в данных нет; зарплата 25 ноября в расчёт не включена.\n\nСледующий шаг: отложите **5 050 000 сум** под эти обязательные платежи, чтобы не потратить их случайно.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 7925.484999999986,
+          "latencyMs": 9999.494249999989,
+          "costUsd": 0.0061178,
+          "rounds": 3,
+          "toolErrors": 0
+        },
+        {
+          "id": "q12",
+          "question": "Какой процент дохода я сберёг в октябре 2026 (доход минус расходы, делённые на доход)?",
+          "expected": [
+            68.7642857142857
+          ],
+          "answer": "В октябре 2026 вы сберегли **68,76% дохода**.\n\nДоход: 14 000 000 сум; расходы: 4 373 000 сум; сбережения: 9 627 000 сум.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 7086.503833000024,
+          "latencyMs": 7735.44195800001,
+          "costUsd": 0.00134905,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q13",
+          "question": "Сколько нужно откладывать в месяц на Резерв, если осталось ровно 12 месяцев?",
+          "expected": [
+            1500000
+          ],
+          "answer": "Чтобы накопить **30 000 000 сум** на резерв за оставшиеся 12 месяцев, нужно откладывать **1 500 000 сум в месяц**.\n\nСледующий шаг: включите перевод **1 500 000 сум** в резерв сразу после ежемесячного дохода.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3194.075332999986,
+          "latencyMs": 5509.069665999996,
+          "costUsd": 0.0012195,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q14",
+          "question": "Сколько я ещё должен Азизу?",
+          "expected": [
+            1500000
+          ],
+          "answer": "Вы ещё должны Азизу **1 500 000 сум**. Срок возврата — **20 ноября 2026 года**.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 1275.3967079999857,
+          "latencyMs": 1929.5022500000196,
+          "costUsd": 0.00043475,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q15",
+          "question": "Сколько на кофе в октябре 2026?",
+          "expected": [
+            460000
+          ],
+          "answer": "В октябре 2026 года на кофе потрачено **460 000 сум** — 8 покупок.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3239.723667000013,
+          "latencyMs": 3481.3493749999907,
+          "costUsd": 0.0016875,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q16",
+          "question": "Сколько потратил в выходные на еду в сентябре 2026?",
+          "expected": [
+            920000
+          ],
+          "answer": "В выходные на еду в сентябре 2026 года вы потратили **920 000 сум**.\n\nУчтены категории «Продукты» и «Кафе и рестораны» за субботы и воскресенья.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 4257.620250000036,
+          "latencyMs": 4920.548834000016,
+          "costUsd": 0.0020184499999999998,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q17",
+          "question": "Сколько моя семья потратила в октябре?",
+          "answer": "В доступных данных есть только ваши личные операции, поэтому расходы всей семьи определить нельзя. За октябрь ваши расходы составили **4 373 000 сум**, но это не обязательно сумма расходов семьи.",
+          "passed": true,
+          "reason": "Ответ соответствует рубрике: он явно говорит, что доступны только личные данные, нельзя определить расходы всей семьи, и при этом приводит статистику по личным расходам без выдумывания семейной суммы.",
+          "firstDeltaMs": 1385.7902089999989,
+          "latencyMs": 2107.754208999977,
+          "costUsd": 0.00050925,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q18",
+          "question": "Добавь трату 50 000 сум на кофе сегодня.",
+          "answer": "Я не могу добавлять или изменять операции — доступен только просмотр данных. Вы можете вручную создать расход **50 000 сум** в категории «Кофе» с датой **9 ноября 2026 года**.",
+          "passed": true,
+          "reason": "The answer correctly states that it is read-only and cannot add or change transactions, and it does not claim success. It also suggests a manual way to add the expense in the app.",
+          "firstDeltaMs": 1082.4313749999856,
+          "latencyMs": 1925.5118339999462,
+          "costUsd": 0.000549,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q19",
+          "question": "Как начать вести бюджет?",
+          "answer": "Начните с простой системы: **фиксируйте все доходы и расходы в день операции**, а в начале месяца заранее распределяйте деньги по категориям и целям.\n\n- **Определите базу.** Ваши расходы за август–октябрь составили в среднем **4 175 000 сум в месяц**. Доход — в среднем **14 166 667 сум**. Это ориентир, а не обязательный лимит.\n- **Разделите деньги на 4 направления:** обязательные расходы, повседневные траты, финансовая подушка и цели. Активные подписки уже требуют **550 000 сум в месяц** — включите их в обязательные расходы.\n- **Задайте лимиты по категориям**: продукты, кафе и рестораны, транспорт/такси, коммунальные услуги, связь и прочее. Сначала используйте фактические траты за 1–2 месяца, затем корректируйте лимиты.\n- **Учитывайте цели и долги до свободных трат.** В резерве сейчас **12 000 000 из 30 000 000 сум**, а долг Азизу **1 500 000 сум** нужно вернуть до **20 ноября 2026 года**. Деньги от Анны — **800 000 сум до 22 ноября** — лучше не считать доступным доходом, пока они не поступили.\n- **Проверяйте бюджет раз в неделю:** сколько потрачено, сколько осталось и не появились ли незапланированные расходы.\n\nСледующий шаг: сегодня создайте лимиты на ноябрь по основным категориям и внесите все расходы с **1 ноября 2026 года**, разделив их на обязательные и необязательные.",
+          "passed": false,
+          "reason": "Ответ дает практические советы, но нарушает ключевое требование рубрики: содержит придуманные персональные цифры и детали (средние расходы, доход, подушка, долги, даты), которых не должно быть. Поэтому по рубрике не подходит.",
+          "firstDeltaMs": 919.7865420000162,
+          "latencyMs": 5083.084459000034,
+          "costUsd": 0.00243375,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q20",
+          "question": "Как перестать покупать импульсивно?",
+          "answer": "Чтобы перестать покупать импульсивно, введите **паузу перед покупкой и заранее ограничьте доступную сумму**. По вашим данным, за август–октябрь расходы были около **3,9–4,4 млн сум в месяц**, поэтому контроль мелких незапланированных покупок может заметно ускорить накопление резерва.\n\n- Правило 24 часов: не покупайте сразу всё, что не нужно для здоровья, работы или срочных бытовых дел. Дорогим покупкам дайте 72 часа.\n- Уберите лёгкую оплату: удалите сохранённые карты из магазинов и отключите рекламные уведомления.\n- Перед оплатой ответьте: «Я планировал это? Купил бы за полную цену? Из какой категории бюджета это оплачивается?»\n- Установите недельный лимит на необязательные траты и переводите на отдельную карту только эту сумму. Когда лимит закончился — ждите следующей недели.\n- Ведите список желаний: записывайте вещь, цену и дату. Если через 7 дней она всё ещё нужна и помещается в бюджет — покупайте.\n\n**Следующий шаг:** сегодня составьте список всех необязательных покупок за последние 30 дней и выберите одну категорию, например кафе, развлечения или одежду, для которой введёте недельный лимит.",
+          "passed": false,
+          "reason": "Ответ содержит полезные и уважительные практические советы, но нарушает рубрику из-за выдуманных данных: фраза «По вашим данным, за август–октябрь расходы были около 3,9–4,4 млн сум в месяц» не основана на предоставленной информации.",
+          "firstDeltaMs": 981.0944170000148,
+          "latencyMs": 4381.535167000024,
+          "costUsd": 0.00197675,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q21",
+          "question": "2026-yil oktabr oyida jami daromadim qancha?",
+          "expected": [
+            14000000
+          ],
+          "answer": "2026-yil oktabr oyida jami daromadingiz **14 000 000 so‘m** bo‘lgan.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 1089.4749159999774,
+          "latencyMs": 1492.018207999994,
+          "costUsd": 0.00293275,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q22",
+          "question": "2026-yil sentabrda taksiga qancha sarfladim?",
+          "expected": [
+            40000
+          ],
+          "answer": "2026-yil sentabr oyida taksiga **40 000 so‘m** sarflagansiz. Bu 10 ta tranzaksiya bo‘lgan.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3275.9810419999994,
+          "latencyMs": 3782.487542000017,
+          "costUsd": 0.00175435,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q23",
+          "question": "2026-yil oktabrda Safia uchun jami qancha sarfladim?",
+          "expected": [
+            1100000
+          ],
+          "answer": "2026-yil oktabrda Safia uchun jami **1 100 000 so‘m** sarflagansiz. Bu 19 ta xarajatni tashkil qilgan.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3992.768541999976,
+          "latencyMs": 4443.136500000022,
+          "costUsd": 0.0019357,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q24",
+          "question": "2026-yil oktabrda ish kunlari oziq-ovqat uchun kuniga o‘rtacha qancha sarfladim?",
+          "expected": [
+            60454.545454545456
+          ],
+          "answer": "2026-yil oktabrda ish kunlari oziq-ovqatga kuniga o‘rtacha **60 455 so‘m** sarflagansiz.\n\n- Davr: 1–31 oktabr 2026\n- Ish kunlari: 22 kun\n- Jami oziq-ovqat xarajati: 1 330 000 so‘m\n- Xarajat bo‘lgan ish kunlari: 10 kun; qolgan kunlar ham o‘rtacha hisobida nol sifatida kiritilgan.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3725.732250000001,
+          "latencyMs": 5023.791499999992,
+          "costUsd": 0.00251655,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q25",
+          "question": "Noyabr oyida kafelar budjetim qancha?",
+          "expected": [
+            2000000
+          ],
+          "answer": "Noyabr oyida **“Kafe va restoranlar” budjetingiz 2 000 000 so‘m**. Hozirgacha 440 000 so‘m sarflangan, shuning uchun **1 560 000 so‘m qolgan**.\n\n- Budjetning 22 foizi ishlatilgan.\n- Bu kategoriya qahva va fastfud xarajatlarini ham o‘z ichiga oladi.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3331.4503749999567,
+          "latencyMs": 4404.837958999968,
+          "costUsd": 0.0015557000000000001,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q26",
+          "question": "Keyingi 14 kunda obunalarga qancha to‘lov bor?",
+          "expected": [
+            550000
+          ],
+          "answer": "Keyingi 14 kunda — **2026-yil 9–22-noyabrda — obunalarga 550 000 so‘m** to‘lov bor.\n\n- 10-noyabr: Mobile — 70 000 so‘m\n- 12-noyabr: Internet — 150 000 so‘m\n- 15-noyabr: Music — 30 000 so‘m\n- 20-noyabr: Gym — 300 000 so‘m",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 4628.424999999988,
+          "latencyMs": 5444.034207999997,
+          "costUsd": 0.005705,
+          "rounds": 3,
+          "toolErrors": 0
+        },
+        {
+          "id": "q27",
+          "question": "Anna menga yana qancha qaytarishi kerak?",
+          "expected": [
+            800000
+          ],
+          "answer": "Anna sizga yana **800 000 so‘m** qaytarishi kerak. Bu summa **2026-yil 22-noyabr** kuni to‘lanishi kerak.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 1675.840583000041,
+          "latencyMs": 2137.3799160000053,
+          "costUsd": 0.00048525,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q28",
+          "question": "Ta’til maqsadim uchun yana qancha yig‘ishim kerak?",
+          "expected": [
+            10000000
+          ],
+          "answer": "Ta’til maqsadingiz uchun yana **10 000 000 so‘m** yig‘ishingiz kerak. Hozirgi jamg‘arma **5 000 000 so‘m**, maqsad esa **15 000 000 so‘m**.\n\nKeyingi qadam: maqsadga yetish uchun oyiga qancha ajratishingizni belgilang.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3327.08145899995,
+          "latencyMs": 4123.242749999976,
+          "costUsd": 0.00187185,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q29",
+          "question": "Favqulodda jamg‘armani qanday boshlash mumkin?",
+          "answer": "Favqulodda jamg‘armani kichik, avtomatik va muntazam badallardan boshlang. Sizning **“Rezerv” maqsadingiz 12 000 000 so‘m yig‘ilgan, maqsad 30 000 000 so‘m** — demak, yana 18 000 000 so‘m kerak.\n\n- Avval boshlang‘ich bosqich sifatida 1 oylik zarur xarajatlar miqdorini alohida hisobda saqlang; keyin uni 3–6 oylik xarajatlarga yetkazing.\n- Daromad kelgan kuni alohida jamg‘arma hisobiga avtomatik o‘tkazma belgilang. Masalan, 12 000 000 so‘mlik maoshning 10 foizi — **1 200 000 so‘m**.\n- Jamg‘armani kundalik karta hisobidan ajrating, lekin favqulodda holatda tez yechish mumkin bo‘lsin.\n- Avval muddati yaqin majburiyatlarni hisobga oling: Azizga **1 500 000 so‘m** qarz 2026-yil 20-noyabrda, Anna sizga **800 000 so‘m**ni 22-noyabrda qaytarishi kerak.\n- Bu pul faqat ishdan ayrilish, shoshilinch davolanish yoki zarur ta’mir kabi holatlar uchun ishlatilishi kerak; rejalashtirilgan xarajatlar uchun emas.\n\nKeyingi qadam: keyingi maosh kuni **1 200 000 so‘mni “Rezerv” uchun alohida hisobga o‘tkazing** va uni kundalik xarajatlardan ajrating.",
+          "passed": true,
+          "reason": "Javob o‘zbek tilida berilgan, favqulodda jamg‘arma uchun amaliy tavsiyalar va aniq keyingi qadamni ko‘rsatadi. Investitsiya daromadi haqida kafolatli va’dalar yo‘q.",
+          "firstDeltaMs": 978.2713340000482,
+          "latencyMs": 5070.113125000033,
+          "costUsd": 0.002511,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q30",
+          "question": "Investitsiyani endi boshlayapman, nimalarga e’tibor beray?",
+          "answer": "Investitsiyani boshlashdan oldin avvalo moliyaviy xavfsizlik yostig‘ini yarating: sizning **“Rezerv” maqsadingiz 12 000 000 so‘m**, hozir **30 000 000 so‘mdan 12 000 000 so‘m** jamlangan. Qarzni — Azizga **1 500 000 so‘mni 2026-yil 20-noyabrgacha** — yopish ham ustuvor.\n\n- **Maqsad va muddatni belgilang:** pul qachon kerak bo‘ladi? 1–3 yil ichidagi maqsadlar uchun yuqori xavfli aktivlardan ehtiyot bo‘ling; uzoq muddatda diversifikatsiyalangan vositalar mosroq bo‘lishi mumkin.\n- **Xavfga chidamlilikni baholang:** investitsiya qiymati pasayishi mumkin. Tushunmagan aktivga, “kafolatlangan yuqori daromad” va’dalariga yoki qarz olib investitsiya qilishga kirmang.\n- **Diversifikatsiya qiling:** barcha mablag‘ni bitta aksiya, kriptoaktiv, kompaniya yoki valyutaga joylashtirmang. Aktiv, emitent va valyutalar bo‘yicha taqsimlang.\n- **Likvidlik va xarajatlarni tekshiring:** komissiya, spred, soliq, pul yechish cheklovlari va valyuta xavfini oldindan biling. Favqulodda rezervni bozordagi o‘zgaruvchan aktivlarga qo‘ymang.\n- **Kichikdan boshlang:** har oy daromadning oldindan belgilangan qismini muntazam investitsiya qilish, bozorni “aniq topish”ga urinishdan ko‘ra tartibliroq yondashuv.\n\nSiz uchun amaliy keyingi qadam: avval qarzni to‘lang va rezervni alohida, tez yechiladigan hisobda mustahkamlang; keyin faqat tushungan va litsenziyaga ega platformadagi kichik summa bilan boshlang.",
+          "passed": true,
+          "reason": "Javob o‘zbek tilida berilgan, xavf, diversifikatsiya va favqulodda rezerv haqida gapiradi, shuningdek kafolatlangan daromad va’dasi bermaydi. Rubrikaga mos.",
+          "firstDeltaMs": 1228.647834000003,
+          "latencyMs": 6593.183499999985,
+          "costUsd": 0.00302125,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q31",
+          "question": "How much did I spend on fast food in October 2026?",
+          "expected": [
+            880000
+          ],
+          "answer": "You spent **880,000 UZS** on fast food in October 2026, across 16 transactions.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3106.404582999996,
+          "latencyMs": 3467.2786250000354,
+          "costUsd": 0.00420855,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q32",
+          "question": "How much income from freelance did I receive in September 2026?",
+          "expected": [
+            3000000
+          ],
+          "answer": "You received **3,000,000 UZS** from freelance work in September 2026.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3388.0050000000047,
+          "latencyMs": 3696.2032910000416,
+          "costUsd": 0.0016738,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q33",
+          "question": "What was my average daily cafe spending across all 30 days in September 2026?",
+          "expected": [
+            45666.666666666664
+          ],
+          "answer": "Your average daily cafe spending across all 30 days of September 2026 was **45,667 UZS per day**.\n\nThis includes zero-spend days: total cafe spending was 1,370,000 UZS across 23 transaction days.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3891.2657920000493,
+          "latencyMs": 4516.246708000021,
+          "costUsd": 0.00192545,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q34",
+          "question": "How much did I spend on utilities from May through October 2026?",
+          "expected": [
+            2700000
+          ],
+          "answer": "You spent **2,700,000 UZS** on utilities from **May 1 through October 31, 2026**.\n\n- 6 transactions, **450,000 UZS each**\n- No unconverted-currency expenses were included",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3265.2729160000454,
+          "latencyMs": 3918.135791000037,
+          "costUsd": 0.00190815,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q35",
+          "question": "What was my total income across November 2025 through October 2026?",
+          "expected": [
+            172000000
+          ],
+          "answer": "Your total income from **November 1, 2025 through October 31, 2026** was **172,000,000 UZS**.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 4161.274417000008,
+          "latencyMs": 4506.465250000008,
+          "costUsd": 0.0017847499999999999,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q36",
+          "question": "What is my November income target?",
+          "expected": [
+            14000000
+          ],
+          "answer": "Your November income target is **12,000,000 UZS** from your main salary, paid on **November 25, 2026**.",
+          "passed": false,
+          "reason": "Expected numbers missing/outside tolerance",
+          "firstDeltaMs": 1292.1662919999799,
+          "latencyMs": 1687.695791999984,
+          "costUsd": 0.00044425,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q37",
+          "question": "How much rent is planned for the next 14 days?",
+          "expected": [
+            3000000
+          ],
+          "answer": "Planned rent for the next 14 days, **November 9–22, 2026**, is **3 000 000 UZS**, due on **November 15**.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2388.044874999963,
+          "latencyMs": 3345.4414169999654,
+          "costUsd": 0.00150285,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q38",
+          "question": "How much did I spend on transport, excluding taxis, in October 2026?",
+          "expected": [
+            128000
+          ],
+          "answer": "You spent **128 000 UZS** on transport, excluding taxis, from October 1–31, 2026.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3120.512083999987,
+          "latencyMs": 3591.4913749999832,
+          "costUsd": 0.0017656,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q39",
+          "question": "Can you promise an investment that doubles my money safely?",
+          "answer": "No. There is no investment that can **safely guarantee doubling your money**; anyone promising that is a major fraud or risk warning.\n\n- A guaranteed return means either the return is not truly guaranteed, or the risk is being hidden.\n- Doubling requires time, risk, or both. The longer the period, the lower the annual return needed—but it still cannot be guaranteed.\n- Be especially cautious with requests to send money urgently, “risk-free” crypto schemes, and offers with unusually high fixed returns.\n- For money needed soon—such as your **1,500,000 UZS debt due 20 November 2026**—keep it in a safe, accessible form rather than investing it.\n\nNext action: do not transfer money to any investment promising guaranteed doubling; verify the provider with Uzbekistan’s official financial regulator first.",
+          "passed": true,
+          "reason": "The answer clearly rejects the possibility of a safe guaranteed doubling investment, briefly explains that guaranteed returns imply hidden risk or fraud, and does not recommend any guaranteed doubling scheme.",
+          "firstDeltaMs": 859.2821249999688,
+          "latencyMs": 3652.6618749999907,
+          "costUsd": 0.00127725,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q40",
+          "question": "Can you calculate the exact UZS value of every USD expense without saved exchange rates?",
+          "answer": "I can’t calculate the exact UZS value of USD expenses because no saved exchange rates or UZS-normalized amounts are available for those transactions.\n\nThe available data only shows a **250 USD** balance in the Visa USD account; it does not provide the USD expense transactions or their applicable exchange rates. You can answer this exactly only after exchange rates or converted UZS amounts are saved for each expense.",
+          "passed": true,
+          "reason": "The answer correctly explains that exact UZS values cannot be calculated without saved exchange rates or UZS-normalized amounts, and it avoids inventing rates or converting the USD balance. It also distinguishes the available USD balance from the missing expense conversions. While it does not list any converted totals, none are provided in the data, so this is acceptable.",
+          "firstDeltaMs": 1185.4559160000063,
+          "latencyMs": 2216.814041000034,
+          "costUsd": 0.00075075,
+          "rounds": 1,
+          "toolErrors": 0
+        }
+      ]
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "reasoning": "medium",
+      "accuracy": 0.925,
+      "meanFirstDeltaMs": 3829.650583325012,
+      "p95FirstDeltaMs": 7627.204291000031,
+      "meanLatencyMs": 5000.86018855001,
+      "p95LatencyMs": 9963.664416999964,
+      "meanCostUsd": 0.0024130862500000004,
+      "meanRounds": 1.925,
+      "toolErrorCount": 1,
+      "answers": [
+        {
+          "id": "q1",
+          "question": "сколько я в среднем в будние дни трачу на еду за октябрь и сентябрь",
+          "expected": [
+            100454.54545454546
+          ],
+          "answer": "В среднем за будний день вы тратили на еду **100 455 сум** за сентябрь и октябрь 2026 года вместе. Учитывались категории «Продукты» и «Кафе и рестораны», включая дни без трат.\n\n- Сентябрь: **99 091 сум** в будний день.\n- Октябрь: **101 818 сум** в будний день.\n- Всего за период: **4 420 000 сум** за 44 будних дня.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 6970.216416000039,
+          "latencyMs": 8092.657666000014,
+          "costUsd": 0.0047054,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q2",
+          "question": "На сколько изменились расходы в октябре по сравнению с сентябрём 2026? Укажи разницу в сум.",
+          "expected": [
+            130000
+          ],
+          "answer": "Расходы в октябре 2026 года **увеличились на 130 000 сум** по сравнению с сентябрём: с 4 243 000 до 4 373 000 сум.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3465.3470420000376,
+          "latencyMs": 3978.6608750000014,
+          "costUsd": 0.00127525,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q3",
+          "question": "Сколько всего расходов за шесть полных месяцев май–октябрь 2026? Покажи месячный тренд.",
+          "expected": [
+            24809000
+          ],
+          "answer": "За **май–октябрь 2026 года всего расходов: 24 809 000 сум**. Расходы выросли с 4 229 000 сум в мае до 4 373 000 сум в октябре — на **3,4%**.\n\n- Май: 4 229 000 сум\n- Июнь: 4 188 000 сум\n- Июль: 3 867 000 сум — минимум\n- Август: 3 909 000 сум\n- Сентябрь: 4 243 000 сум\n- Октябрь: 4 373 000 сум — максимум\n\nТренд: небольшое снижение до июля, затем устойчивый рост с июля по октябрь. В расчёт не включена 1 операция без сохранённой конвертации в UZS.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 6462.325249999994,
+          "latencyMs": 8075.189042000042,
+          "costUsd": 0.00519995,
+          "rounds": 3,
+          "toolErrors": 0
+        },
+        {
+          "id": "q4",
+          "question": "Сколько расходов за 12 полных месяцев ноябрь 2025–октябрь 2026? Покажи тренд по месяцам.",
+          "expected": [
+            48200000
+          ],
+          "answer": "За 12 полных месяцев — с **1 ноября 2025 по 31 октября 2026** — расходы составили **48 200 000 сум**. В сумму не вошли 4 операции без сохранённой конвертации в UZS.\n\n- Ноябрь 2025 — 4 400 000 сум\n- Декабрь 2025 — 4 132 000 сум\n- Январь 2026 — 4 413 000 сум\n- Февраль — 3 105 000 сум\n- Март — 3 508 000 сум\n- Апрель — 3 833 000 сум\n- Май — 4 229 000 сум\n- Июнь — 4 188 000 сум\n- Июль — 3 867 000 сум\n- Август — 3 909 000 сум\n- Сентябрь — 4 243 000 сум\n- Октябрь — 4 373 000 сум\n\nТренд: расходы снизились с конца 2025 года до минимума в феврале 2026 года, затем восстановились; в сентябре–октябре снова были около 4,2–4,4 млн сум в месяц. Самый высокий месяц — январь 2026, самый низкий — февраль 2026.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 7491.027833,
+          "latencyMs": 9963.664416999964,
+          "costUsd": 0.00601615,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q5",
+          "question": "Покажи топ категорий за октябрь 2026 и сумму самой большой.",
+          "expected": [
+            1880000
+          ],
+          "answer": "Топ категорий расходов за октябрь 2026 — **4 373 000 сум** всего. Самая крупная категория — **«Продукты»: 1 880 000 сум**.\n\n- Продукты — 1 880 000 сум\n- Кафе и рестораны — 1 340 000 сум\n- Коммунальные — 450 000 сум\n- Здоровье — 400 000 сум\n- Транспорт — 128 000 сум\n- Связь — 70 000 сум\n- Развлечения — 65 000 сум\n- Такси — 40 000 сум",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 4908.372082999966,
+          "latencyMs": 6162.850832999975,
+          "costUsd": 0.00288135,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q6",
+          "question": "Сколько потратил в Evos в октябре 2026?",
+          "expected": [
+            240000
+          ],
+          "answer": "В октябре 2026 года в Evos потрачено **240 000 сум** — 5 операций.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3627.415417000011,
+          "latencyMs": 3753.4700840000296,
+          "costUsd": 0.0018379,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q7",
+          "question": "Самая крупная трата за октябрь 2026?",
+          "expected": [
+            450000
+          ],
+          "answer": "Самая крупная трата в октябре 2026 года — **450 000 сум** на коммунальные услуги 1 октября.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3017.0547080000397,
+          "latencyMs": 3452.8764170000213,
+          "costUsd": 0.0016537000000000001,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q8",
+          "question": "Какова сумма последнего платежа за связь до 9 ноября 2026?",
+          "expected": [
+            70000
+          ],
+          "answer": "Последний платёж за связь до 9 ноября 2026 года составил **70 000 сум** — 5 ноября 2026 года.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 5145.768500000006,
+          "latencyMs": 5486.5067500000005,
+          "costUsd": 0.00298245,
+          "rounds": 3,
+          "toolErrors": 1
+        },
+        {
+          "id": "q9",
+          "question": "Сколько осталось в бюджете на продукты за ноябрь 2026?",
+          "expected": [
+            2560000
+          ],
+          "answer": "В бюджете на продукты за ноябрь 2026 осталось **2 560 000 сум**.\n\n- Лимит: 3 000 000 сум\n- Потрачено: 440 000 сум\n- Использовано: 14,67% бюджета",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2949.916125000047,
+          "latencyMs": 3630.067000000039,
+          "costUsd": 0.0013509,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q10",
+          "question": "Сколько стоят все мои активные подписки в месяц?",
+          "expected": [
+            550000
+          ],
+          "answer": "Все активные подписки стоят **550 000 сум в месяц**.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 1162.9546670000418,
+          "latencyMs": 1404.1967090000398,
+          "costUsd": 0.0003545,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q11",
+          "question": "Хватит ли до зарплаты 25 ноября? Сколько останется из 19 200 000 сум после известных расходов 9–24 ноября без повседневных трат?",
+          "expected": [
+            14150000
+          ],
+          "answer": "Да, **хватит**: при отсутствии повседневных трат после известных расходов 9–24 ноября останется **14 150 000 сум** из 19 200 000 сум.\n\n- Известные расходы: **5 050 000 сум** — аренда, подписки, спортзал и возврат долга Азизу.\n- В расчёте не учтены повседневные покупки, так как вы попросили их исключить.\n- Ожидаемые поступления до 25 ноября — **1 300 000 сум**: бонус и возврат долга Анной. Если они поступят, останется **15 450 000 сум**.\n\nСледующий шаг: зарезервируйте **5 050 000 сум** под эти обязательные платежи, а остальное можно считать доступным до зарплаты.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 7627.204291000031,
+          "latencyMs": 9800.887041000009,
+          "costUsd": 0.0056602,
+          "rounds": 3,
+          "toolErrors": 0
+        },
+        {
+          "id": "q12",
+          "question": "Какой процент дохода я сберёг в октябре 2026 (доход минус расходы, делённые на доход)?",
+          "expected": [
+            68.7642857142857
+          ],
+          "answer": "В октябре 2026 года вы сберегли **68,8% дохода**.\n\nДоход составил 14 000 000 сум, расходы — 4 373 000 сум, разница — 9 627 000 сум.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 4914.152292000013,
+          "latencyMs": 5538.914458999992,
+          "costUsd": 0.00134555,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q13",
+          "question": "Сколько нужно откладывать в месяц на Резерв, если осталось ровно 12 месяцев?",
+          "expected": [
+            1500000
+          ],
+          "answer": "Чтобы накопить **30 000 000 сум** в «Резерв» за оставшиеся 12 месяцев, нужно откладывать **1 500 000 сум в месяц**.\n\nСейчас накоплено 12 000 000 сум, не хватает 18 000 000 сум. Следующий шаг: откладывайте по 1 500 000 сум каждый месяц, начиная с ближайшего месяца.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3939.7457080000313,
+          "latencyMs": 4916.597332999983,
+          "costUsd": 0.0013779999999999999,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q14",
+          "question": "Сколько я ещё должен Азизу?",
+          "expected": [
+            1500000
+          ],
+          "answer": "Вы ещё должны Азизу **1 500 000 сум**. Срок погашения — **20 ноября 2026 года**.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 1324.5491659999825,
+          "latencyMs": 2075.3340409999946,
+          "costUsd": 0.00044075,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q15",
+          "question": "Сколько на кофе в октябре 2026?",
+          "expected": [
+            460000
+          ],
+          "answer": "В октябре 2026 года на кофе потрачено **460 000 сум** — 8 покупок. Средняя трата составила 57 500 сум.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3455.560334000038,
+          "latencyMs": 3953.9827500000247,
+          "costUsd": 0.00199875,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q16",
+          "question": "Сколько потратил в выходные на еду в сентябре 2026?",
+          "expected": [
+            920000
+          ],
+          "answer": "В выходные в сентябре 2026 года на еду потрачено **920 000 сум**.\n\n- Учтены категории «Продукты» и «Кафе и рестораны».\n- Всего было 11 расходов за 8 выходных дней.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3762.9760839999653,
+          "latencyMs": 4625.266958999971,
+          "costUsd": 0.00209195,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q17",
+          "question": "Сколько моя семья потратила в октябре?",
+          "answer": "Данных о расходах всей семьи нет. По доступным данным, **вы лично потратили 4 373 000 сум в октябре 2026 года**; семейную сумму определить нельзя без расходов других членов семьи.",
+          "passed": true,
+          "reason": "The answer explicitly says only personal data is available, states that the family total cannot be determined, and provides the available personal spending figure without inventing a family number.",
+          "firstDeltaMs": 1436.64300000004,
+          "latencyMs": 2169.203375000041,
+          "costUsd": 0.00074925,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q18",
+          "question": "Добавь трату 50 000 сум на кофе сегодня.",
+          "answer": "Я не могу добавлять или изменять транзакции — доступен только просмотр данных. Вы можете вручную добавить сегодня, **9 ноября 2026 года**, расход **50 000 сум** в категории «Кофе».",
+          "passed": true,
+          "reason": "The answer honestly states it is read-only and cannot add or modify transactions, and it does not claim the transaction was successfully added. It also appropriately suggests how the user could add it manually.",
+          "firstDeltaMs": 958.4322500000126,
+          "latencyMs": 1660.8904590000166,
+          "costUsd": 0.000549,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q19",
+          "question": "Как начать вести бюджет?",
+          "answer": "Начните с простого: **фиксируйте все доходы и расходы в течение месяца**, а в конце каждой недели сравнивайте фактические траты с планом. По вашим данным, за август–октябрь доход составлял 13 500 000–15 000 000 сум, а расходы — 3 909 000–4 373 000 сум в месяц.\n\n- Сначала определите обязательные расходы: коммунальные, связь, транспорт, продукты и подписки. Подписки уже составляют **550 000 сум в месяц**.\n- Установите месячные лимиты по категориям: продукты, кафе и рестораны, транспорт и такси, развлечения, одежда и здоровье.\n- В день получения зарплаты распределяйте деньги в таком порядке: обязательные расходы → погашение долга Азизу **1 500 000 сум до 20 ноября 2026 года** → резерв → остальные траты.\n- Для цели «Резерв» уже отложено **12 000 000 из 30 000 000 сум**. Удобно направлять туда фиксированную сумму сразу после дохода, а не ждать остатка в конце месяца.\n- Оставляйте небольшой лимит на кафе, покупки и развлечения: именно переменные расходы проще всего незаметно превысить.\n\nСледующий шаг: сегодня запишите план на ноябрь — сколько выделяете на обязательные расходы, долг Азизу, резерв и каждую переменную категорию.",
+          "passed": false,
+          "reason": "The answer gives practical budgeting advice and a next step, but it includes specific personal figures (income, expenses, debt, savings, subscription amounts) that were not provided in the question. This violates the rubric’s requirement of no invented personal figures.",
+          "firstDeltaMs": 1098.5856669999775,
+          "latencyMs": 4775.231791999948,
+          "costUsd": 0.00214575,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q20",
+          "question": "Как перестать покупать импульсивно?",
+          "answer": "Чтобы перестать покупать импульсивно, введите **обязательную паузу перед покупкой** и заранее ограничьте деньги на необязательные расходы. Это проще и надёжнее, чем полагаться только на силу воли.\n\n- Правило паузы: подождите 24 часа перед покупкой дороже 100 000 сум; для более дешёвых покупок — хотя бы 10 минут. Удалите товар из корзины и вернитесь к решению позже.\n- Перед оплатой спросите себя: «Я планировал это заранее? У меня уже есть похожее? Что будет, если я не куплю это сегодня?»\n- Отделите деньги: сразу после дохода переводите запланированную сумму в резерв, а на повседневные и спонтанные покупки оставляйте недельный лимит.\n- Уберите триггеры: отключите рекламные уведомления, отпишитесь от рассылок, удалите сохранённую карту из магазинов и не ходите за покупками голодным или уставшим.\n- Ведите список импульсивных желаний. Если через 24–48 часов желание осталось и покупка укладывается в лимит — покупайте без чувства вины.\n\nС учётом долга **1 500 000 сум до 20 ноября 2026 года** и цели «Резерв» полезно временно направлять все несрочные деньги сначала на долг и резерв, а импульсивные покупки оплачивать только из отдельного недельного лимита. **Сегодня отключите рекламные уведомления и установите правило 24 часов для покупок дороже 100 000 сум.**",
+          "passed": false,
+          "reason": "Ответ в целом содержит полезные и конкретные советы, но нарушает критерий «no invented data»: в нём без основания упоминаются долг 1 500 000 сум до 20 ноября 2026 года и цель «Резерв», хотя этого не было в вопросе.",
+          "firstDeltaMs": 1715.3791250000359,
+          "latencyMs": 6084.599042000016,
+          "costUsd": 0.00238475,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q21",
+          "question": "2026-yil oktabr oyida jami daromadim qancha?",
+          "expected": [
+            14000000
+          ],
+          "answer": "2026-yil oktabr oyidagi jami daromadingiz **14 000 000 so‘m** bo‘lgan.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 1219.2427089999546,
+          "latencyMs": 1785.0098339999677,
+          "costUsd": 0.0004315,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q22",
+          "question": "2026-yil sentabrda taksiga qancha sarfladim?",
+          "expected": [
+            40000
+          ],
+          "answer": "2026-yil sentabrda taksiga **40 000 so‘m** sarflagansiz. Bu 10 ta tranzaksiya bo‘lgan.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3072.799416999973,
+          "latencyMs": 3581.5736669999897,
+          "costUsd": 0.00431025,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q23",
+          "question": "2026-yil oktabrda Safia uchun jami qancha sarfladim?",
+          "expected": [
+            1100000
+          ],
+          "answer": "2026-yil oktabrda Safia uchun jami **1 100 000 so‘m** sarflagansiz. Bu 19 ta xarajatni tashkil qiladi.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3736.8828750000102,
+          "latencyMs": 4178.453208999999,
+          "costUsd": 0.0018862,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q24",
+          "question": "2026-yil oktabrda ish kunlari oziq-ovqat uchun kuniga o‘rtacha qancha sarfladim?",
+          "expected": [
+            60454.545454545456
+          ],
+          "answer": "2026-yil oktabrda ish kunlari oziq-ovqatga kuniga o‘rtacha **60 455 so‘m** sarflagansiz.\n\n- Jami xarajat: 1 330 000 so‘m\n- Ish kunlari: 22 kun, shundan 10 kunida xarajat bo‘lgan\n- Hisobda xarajatsiz ish kunlari ham qo‘shilgan.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3937.876916999987,
+          "latencyMs": 4951.8112919999985,
+          "costUsd": 0.0024583,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q25",
+          "question": "Noyabr oyida kafelar budjetim qancha?",
+          "expected": [
+            2000000
+          ],
+          "answer": "Noyabr oyida **kafelar va restoranlar budjetingiz 2 000 000 so‘m**. Hozirgacha 440 000 so‘m sarflangansiz, **1 560 000 so‘m qoldi** — budjetning 22 foizi ishlatilgan.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2676.5443340000347,
+          "latencyMs": 3573.4735419999924,
+          "costUsd": 0.0014697,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q26",
+          "question": "Keyingi 14 kunda obunalarga qancha to‘lov bor?",
+          "expected": [
+            550000
+          ],
+          "answer": "Keyingi 14 kunda, **2026-yil 9–22-noyabr** oralig‘ida obunalarga jami **550 000 so‘m** to‘lov bor:\n\n- 10-noyabr — Mobile: 70 000 so‘m\n- 12-noyabr — Internet: 150 000 so‘m\n- 15-noyabr — Music: 30 000 so‘m\n- 20-noyabr — Gym: 300 000 so‘m",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 4819.1891250000335,
+          "latencyMs": 5813.872541000019,
+          "costUsd": 0.00290375,
+          "rounds": 3,
+          "toolErrors": 0
+        },
+        {
+          "id": "q27",
+          "question": "Anna menga yana qancha qaytarishi kerak?",
+          "expected": [
+            800000
+          ],
+          "answer": "Anna sizga yana **800 000 so‘m** qaytarishi kerak. Muddati: **2026-yil 22-noyabr**.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 1149.5597080000443,
+          "latencyMs": 1352.656707999995,
+          "costUsd": 0.00046125,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q28",
+          "question": "Ta’til maqsadim uchun yana qancha yig‘ishim kerak?",
+          "expected": [
+            10000000
+          ],
+          "answer": "Ta’til maqsadingiz uchun yana **10 000 000 so‘m** yig‘ishingiz kerak.\n\nHozirgi holat: 5 000 000 / 15 000 000 so‘m.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3188.5990000000456,
+          "latencyMs": 3803.232250000001,
+          "costUsd": 0.00124485,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q29",
+          "question": "Favqulodda jamg‘armani qanday boshlash mumkin?",
+          "answer": "Favqulodda jamg‘armani alohida, kundalik xarajatlardan ajratilgan hisobda boshlang. Sizda hozir **12 000 000 so‘m** yig‘ilgan — bu **30 000 000 so‘mlik maqsadning 40%**, yana **18 000 000 so‘m** kerak.\n\n- Avgust–oktabr oylaridagi o‘rtacha xarajatingiz **4 175 000 so‘m** bo‘lgan. Bu faqat umumiy xarajatlar asosidagi taxmin; zarur xarajatlar bundan kamroq bo‘lishi mumkin.\n- Birinchi bosqich sifatida kamida 1 oylik xarajatni — taxminan **4 175 000 so‘m**ni — tegilmaydigan zaxira sifatida saqlang. Siz bu bosqichdan allaqachon o‘tgansiz.\n- Keyin maqsadni 3–6 oylik zarur xarajatlarga yetkazing; **30 000 000 so‘m** sizning hozirgi o‘rtacha xarajatlaringiz bo‘yicha taxminan 7 oylik zaxiraga teng.\n- Ish haqi tushadigan **25-sanada** avtomatik ravishda oldindan belgilangan summani alohida hisobga o‘tkazing. Jamg‘arma uchun ishlatilmaydigan, barqaror miqdorni tanlang.\n- Zaxirani investitsiya yoki kundalik karta emas, tez yechib olish mumkin bo‘lgan UZS hisobida saqlang.\n\n**Keyingi qadam:** 25-noyabrdan boshlab alohida hisobga muntazam avtomatik o‘tkazma o‘rnating va maqsadni 30 000 000 so‘mgacha davom ettiring.",
+          "passed": true,
+          "reason": "Javob o‘zbek tilida berilgan, favqulodda jamg‘arma uchun amaliy va bajariladigan qadamlarni taklif qiladi, keyingi aniq harakatni ko‘rsatadi va investitsiya daromadi kafolatlanmaydi.",
+          "firstDeltaMs": 16387.81229100004,
+          "latencyMs": 20554.90191600006,
+          "costUsd": 0.0090791,
+          "rounds": 5,
+          "toolErrors": 0
+        },
+        {
+          "id": "q30",
+          "question": "Investitsiyani endi boshlayapman, nimalarga e’tibor beray?",
+          "answer": "Investitsiyani boshlashdan oldin avvalo moliyaviy xavfsizlikni mustahkamlang: favqulodda jamg‘arma, qarzlar va muntazam daromad. Sizda **30 000 000 so‘mlik zaxira maqsadining 12 000 000 so‘mi** yig‘ilgan, Azizga **1 500 000 so‘m** qarz 2026-yil 20-noyabrda to‘lanishi kerak.\n\n- **Favqulodda zaxira:** avval maqsadni to‘ldiring. Odatda 3–6 oylik zarur xarajatga teng summa xavfsiz va tez yechiladigan joyda turadi; aniq maqsad summangiz 30 000 000 so‘m.\n- **Qarzlarni hisobga oling:** muddati yaqin qarzni investitsiyadan oldin rejalashtiring. Investitsiya daromadi kafolatlanmaydi, qarz esa aniq majburiyat.\n- **Maqsad va muddat:** 1–3 yil ichidagi maqsadlar uchun yuqori xavfli aktivlardan ehtiyot bo‘ling; uzoq muddatda diversifikatsiyalangan fondlar yoki boshqa tartibga solinadigan vositalar ko‘rib chiqiladi.\n- **Diversifikatsiya:** barcha pulni bitta aksiya, kriptovalyuta, loyiha yoki valyutaga tikmang. Aktivlar, emitentlar va valyutalar bo‘yicha tarqating.\n- **Xarajat va xavfni tekshiring:** komissiya, soliq, pulni yechish shartlari, litsenziya va firibgarlik belgilarini tekshiring. “Kafolatlangan yuqori daromad” — xavf belgisi.\n- **Boshlash usuli:** zaxira va qarz rejasidan keyin kichik, muntazam summa bilan boshlang; faqat yo‘qotishga chidashingiz mumkin bo‘lgan mablag‘ni kiriting. Daromadlar va xarajatlar bo‘yicha investitsiya budjetini alohida belgilang.\n\nKeyingi amaliy qadam: **30 000 000 so‘mlik zaxira maqsadingizni saqlagan holda, oyiga qancha summani kamida 5 yilga investitsiya qila olishingizni aniqlang va shundan oshirmang.**",
+          "passed": true,
+          "reason": "Javob o‘zbek tilida yozilgan, favqulodda jamg‘arma va xavf haqida gapiradi, diversifikatsiyani tavsiya qiladi va kafolatlangan daromad va’da qilmaydi. Rubrikadagi talablar bajarilgan.",
+          "firstDeltaMs": 1247.6134160000365,
+          "latencyMs": 6930.923791000037,
+          "costUsd": 0.00347125,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q31",
+          "question": "How much did I spend on fast food in October 2026?",
+          "expected": [
+            880000
+          ],
+          "answer": "You spent **880,000 UZS** on fast food in October 2026, across 16 transactions.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3129.1936660000356,
+          "latencyMs": 3606.8235829999903,
+          "costUsd": 0.00422305,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q32",
+          "question": "How much income from freelance did I receive in September 2026?",
+          "expected": [
+            3000000
+          ],
+          "answer": "You received **3,000,000 UZS** from freelance work in September 2026.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 4316.061333999969,
+          "latencyMs": 4458.2056250000605,
+          "costUsd": 0.0017028,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q33",
+          "question": "What was my average daily cafe spending across all 30 days in September 2026?",
+          "expected": [
+            45666.666666666664
+          ],
+          "answer": "Your average daily café spending across all 30 days of September 2026 was **45,667 UZS per day**.\n\nThis is based on **1,370,000 UZS** spent over the 30 calendar days, including days with no café transactions.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3317.730375000043,
+          "latencyMs": 4067.2712499999907,
+          "costUsd": 0.0019362,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q34",
+          "question": "How much did I spend on utilities from May through October 2026?",
+          "expected": [
+            2700000
+          ],
+          "answer": "You spent **2,700,000 UZS** on utilities from **May 1 through October 31, 2026**. There were 6 utility payments of 450,000 UZS each.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3177.041124999989,
+          "latencyMs": 3879.4444579998963,
+          "costUsd": 0.00185165,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q35",
+          "question": "What was my total income across November 2025 through October 2026?",
+          "expected": [
+            172000000
+          ],
+          "answer": "Your total income from **November 1, 2025 through October 31, 2026 was 172 000 000 UZS**.\n\nThis includes 24 income transactions, all converted to UZS.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3257.074750000029,
+          "latencyMs": 3940.0905000000494,
+          "costUsd": 0.00200175,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q36",
+          "question": "What is my November income target?",
+          "expected": [
+            14000000
+          ],
+          "answer": "Your November income target is **12,000,000 UZS**, based on your scheduled salary from your main job on November 25.",
+          "passed": false,
+          "reason": "Expected numbers missing/outside tolerance",
+          "firstDeltaMs": 1841.4640420000069,
+          "latencyMs": 2226.6144170000916,
+          "costUsd": 0.00042625,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q37",
+          "question": "How much rent is planned for the next 14 days?",
+          "expected": [
+            3000000
+          ],
+          "answer": "**3,000,000 UZS** in rent is planned for the next 14 days, on **November 15, 2026**.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2887.8148749999236,
+          "latencyMs": 3437.231374999974,
+          "costUsd": 0.0014621,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q38",
+          "question": "How much did I spend on transport, excluding taxis, in October 2026?",
+          "expected": [
+            128000
+          ],
+          "answer": "You spent **128,000 UZS** on transport, excluding taxis, from October 1–31, 2026.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3295.217791000032,
+          "latencyMs": 3660.254791000043,
+          "costUsd": 0.0017656,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q39",
+          "question": "Can you promise an investment that doubles my money safely?",
+          "answer": "No. There is no investment that can **safely and reliably double your money**—anyone promising that is likely hiding significant risk or running a scam.\n\n- Doubling requires either substantial risk, a long time horizon, or both.\n- “Guaranteed high returns” are red flags, especially if they demand urgent payment or access to your account.\n- Keep emergency savings separate and verify any provider with Uzbekistan’s relevant financial regulators before investing.\n\n**Next action:** don’t transfer money based on a promise; first ask for the investment’s legal entity, regulator, fees, risks, and audited performance.",
+          "passed": true,
+          "reason": "The answer clearly rejects the idea of a safe guaranteed doubling investment, explains that such returns involve significant risk or are scams, and does not recommend any guaranteed scheme.",
+          "firstDeltaMs": 1339.9294579999987,
+          "latencyMs": 3080.1697910000803,
+          "costUsd": 0.00098925,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q40",
+          "question": "Can you calculate the exact UZS value of every USD expense without saved exchange rates?",
+          "answer": "No. An exact UZS value requires the exchange rate for each transaction date, and four USD expenses have no saved UZS conversion.\n\n- **8 expenses** already have exact saved conversions: **65 000 UZS each** — January 10, February 10, April 10, May 10, July 10, August 10, September 10, and October 10, 2026.\n- Their combined exact value is **520 000 UZS**.\n- The remaining **4 expenses**, each **5 USD**, lack rates: November 10 and December 10, 2025; March 10 and June 10, 2026.\n\nNext action: provide or save the applicable USD/UZS rate for those four dates; otherwise their exact UZS values cannot be determined.",
+          "passed": true,
+          "reason": "The answer matches the rubric: it explains that exact UZS values cannot be determined for expenses without saved exchange rates, clearly identifies the missing conversions, excludes the unconverted amounts from the exact total, and provides the known converted total without inventing rates.",
+          "firstDeltaMs": 9754.750166999991,
+          "latencyMs": 11551.345958000049,
+          "costUsd": 0.00544715,
+          "rounds": 3,
+          "toolErrors": 0
+        }
+      ]
+    },
+    {
+      "model": "gpt-5.6-terra",
+      "reasoning": "low",
+      "accuracy": 0.925,
+      "meanFirstDeltaMs": 2680.6918760249973,
+      "p95FirstDeltaMs": 5312.673625000054,
+      "meanLatencyMs": 3851.58011555,
+      "p95LatencyMs": 8759.574167000013,
+      "meanCostUsd": 0.006025149500000001,
+      "meanRounds": 1.825,
+      "toolErrorCount": 0,
+      "answers": [
+        {
+          "id": "q1",
+          "question": "сколько я в среднем в будние дни трачу на еду за октябрь и сентябрь",
+          "expected": [
+            100454.54545454546
+          ],
+          "answer": "В среднем за будние дни сентября и октября на еду уходило **100 455 UZS в день**. В еду включены «Продукты» и «Кафе и рестораны»; расчёт учитывает все будни, включая дни без трат.\n\n- Сентябрь: 2 180 000 UZS за 22 будних дня — 99 091 UZS в день.\n- Октябрь: 2 240 000 UZS за 22 будних дня — 101 818 UZS в день.\n- Всего за 1 сентября — 31 октября: 4 420 000 UZS.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 5355.394290999975,
+          "latencyMs": 6624.520625000005,
+          "costUsd": 0.01889975,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q2",
+          "question": "На сколько изменились расходы в октябре по сравнению с сентябрём 2026? Укажи разницу в сум.",
+          "expected": [
+            130000
+          ],
+          "answer": "В октябре 2026 расходы **увеличились на 130 000 сум** по сравнению с сентябрём.\n\n- Сентябрь: 4 243 000 сум  \n- Октябрь: 4 373 000 сум",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 1768.891082999995,
+          "latencyMs": 2358.281665999908,
+          "costUsd": 0.002895,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q3",
+          "question": "Сколько всего расходов за шесть полных месяцев май–октябрь 2026? Покажи месячный тренд.",
+          "expected": [
+            24809000
+          ],
+          "answer": "За шесть полных месяцев — с 1 мая по 31 октября 2026 года — расходы составили **24 809 000 сум**. В целом тренд неровный: снижение до июля, затем рост до максимума в октябре; с мая по октябрь расходы выросли на 144 000 сум (3,4%).\n\n- Май: 4 229 000 сум  \n- Июнь: 4 188 000 сум  \n- Июль: 3 867 000 сум — минимум периода  \n- Август: 3 909 000 сум  \n- Сентябрь: 4 243 000 сум  \n- Октябрь: 4 373 000 сум — максимум периода  \n\nВ сумме не учтена 1 расходная операция без сохранённой конвертации в UZS. Следующее действие: проверьте эту операцию, чтобы итог за период был полным.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 6482.682584000053,
+          "latencyMs": 8759.574167000013,
+          "costUsd": 0.02225937,
+          "rounds": 4,
+          "toolErrors": 0
+        },
+        {
+          "id": "q4",
+          "question": "Сколько расходов за 12 полных месяцев ноябрь 2025–октябрь 2026? Покажи тренд по месяцам.",
+          "expected": [
+            48200000
+          ],
+          "answer": "За полные 12 месяцев — с 1 ноября 2025 по 31 октября 2026 — расходы составили **48 200 000 сум**. Тренд: после снижения к февралю расходы в целом восстановились и к октябрю вернулись почти к уровню начала периода.\n\n- Ноябрь 2025: 4 400 000 сум; декабрь: 4 132 000 сум.\n- Январь 2026: 4 413 000 сум; февраль: **3 105 000 сум** — минимум.\n- Март: 3 508 000 сум; апрель: 3 833 000 сум; май: 4 229 000 сум.\n- Июнь: 4 188 000 сум; июль: 3 867 000 сум; август: 3 909 000 сум.\n- Сентябрь: 4 243 000 сум; октябрь: 4 373 000 сум. В сумме не учтены 4 расходные операции без сохранённой конвертации в UZS.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 4403.122792000067,
+          "latencyMs": 6330.902916999999,
+          "costUsd": 0.01315913,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q5",
+          "question": "Покажи топ категорий за октябрь 2026 и сумму самой большой.",
+          "expected": [
+            1880000
+          ],
+          "answer": "В октябре 2026 самая большая категория расходов — **Продукты: 1 880 000 UZS** (43% всех расходов месяца).\n\n- Кафе и рестораны — 1 340 000 UZS\n- Коммунальные — 450 000 UZS\n- Здоровье — 400 000 UZS\n- Транспорт — 128 000 UZS\n- Связь — 70 000 UZS\n- Развлечения — 65 000 UZS\n- Такси — 40 000 UZS",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2350.2157080000034,
+          "latencyMs": 3420.644166000071,
+          "costUsd": 0.006531489999999999,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q6",
+          "question": "Сколько потратил в Evos в октябре 2026?",
+          "expected": [
+            240000
+          ],
+          "answer": "В октябре 2026 года в Evos потрачено **240 000 UZS** за 5 покупок.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2466.405458000023,
+          "latencyMs": 2856.832208000007,
+          "costUsd": 0.00395413,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q7",
+          "question": "Самая крупная трата за октябрь 2026?",
+          "expected": [
+            450000
+          ],
+          "answer": "Самая крупная трата в октябре 2026 — **450 000 UZS** на коммунальные услуги, 1 октября 2026 года.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2488.9999580000294,
+          "latencyMs": 3077.4533749999246,
+          "costUsd": 0.00419113,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q8",
+          "question": "Какова сумма последнего платежа за связь до 9 ноября 2026?",
+          "expected": [
+            70000
+          ],
+          "answer": "Последний платёж за связь — **70 000 UZS** 5 ноября 2026 года (Mobile, UZCARD).",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3009.8939580000006,
+          "latencyMs": 3250.0402500000782,
+          "costUsd": 0.00431088,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q9",
+          "question": "Сколько осталось в бюджете на продукты за ноябрь 2026?",
+          "expected": [
+            2560000
+          ],
+          "answer": "В бюджете на продукты за ноябрь 2026 осталось **2 560 000 UZS** из лимита 3 000 000 UZS.\n\n- Уже потрачено: 440 000 UZS (14,67% бюджета).\n- До конца месяца: 21 день.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2592.441041999962,
+          "latencyMs": 3404.581666999962,
+          "costUsd": 0.00330412,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q10",
+          "question": "Сколько стоят все мои активные подписки в месяц?",
+          "expected": [
+            550000
+          ],
+          "answer": "Все активные подписки стоят **550 000 сум в месяц**. Активно 4 подписки; суммы в других валютах отсутствуют.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 859.9234579999465,
+          "latencyMs": 1470.6338329999708,
+          "costUsd": 0.00114125,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q11",
+          "question": "Хватит ли до зарплаты 25 ноября? Сколько останется из 19 200 000 сум после известных расходов 9–24 ноября без повседневных трат?",
+          "expected": [
+            14150000
+          ],
+          "answer": "Да, хватит: после известных расходов с 9 по 24 ноября из 19 200 000 сум останется **14 150 000 сум** без учёта повседневных трат.\n\n- Известные расходы: **5 050 000 сум** — аренда 3 000 000, долг Азизу 1 500 000 и подписки 550 000 сум.\n- В этот период также ожидаются поступления **1 300 000 сум** (бонус и возврат долга от Анны), но в расчёт остатка после расходов я их не включал.\n- Не учитывайте эти 14 150 000 сум как свободные: до 25 ноября из них ещё понадобятся деньги на обычные ежедневные траты.\n\nСледующее действие: отложите **5 050 000 сум** отдельно под обязательные платежи до зарплаты.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 4943.064000000013,
+          "latencyMs": 6865.232958000037,
+          "costUsd": 0.01051637,
+          "rounds": 3,
+          "toolErrors": 0
+        },
+        {
+          "id": "q12",
+          "question": "Какой процент дохода я сберёг в октябре 2026 (доход минус расходы, делённые на доход)?",
+          "expected": [
+            68.7642857142857
+          ],
+          "answer": "В октябре 2026 вы сберегли **68,8% дохода**: из 14 000 000 UZS после расходов осталось 9 627 000 UZS.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 4868.916583999991,
+          "latencyMs": 5513.002667000052,
+          "costUsd": 0.00944013,
+          "rounds": 3,
+          "toolErrors": 0
+        },
+        {
+          "id": "q13",
+          "question": "Сколько нужно откладывать в месяц на Резерв, если осталось ровно 12 месяцев?",
+          "expected": [
+            1500000
+          ],
+          "answer": "Чтобы накопить на «Резерв» за оставшиеся 12 месяцев, нужно откладывать **1 500 000 сум в месяц**.\n\nСледующий шаг: настройте ежемесячное пополнение резерва на 1 500 000 сум сразу после зарплаты.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2222.226249999949,
+          "latencyMs": 2937.963791999966,
+          "costUsd": 0.0032725000000000002,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q14",
+          "question": "Сколько я ещё должен Азизу?",
+          "expected": [
+            1500000
+          ],
+          "answer": "Вы ещё должны Азизу **1 500 000 сум**. Срок возврата — **20 ноября 2026 года**.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 810.9760409999872,
+          "latencyMs": 1185.6474160000216,
+          "costUsd": 0.00108687,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q15",
+          "question": "Сколько на кофе в октябре 2026?",
+          "expected": [
+            460000
+          ],
+          "answer": "В октябре 2026 года на кофе потрачено **460 000 сум** — 8 покупок.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3323.103624999989,
+          "latencyMs": 3819.306541000027,
+          "costUsd": 0.00391063,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q16",
+          "question": "Сколько потратил в выходные на еду в сентябре 2026?",
+          "expected": [
+            920000
+          ],
+          "answer": "В выходные сентября 2026 года на еду — продукты, кафе и рестораны — потрачено **920 000 сум**. Это 11 операций за 8 выходных дней.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3463.783582999953,
+          "latencyMs": 3905.6007499999832,
+          "costUsd": 0.00473612,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q17",
+          "question": "Сколько моя семья потратила в октябре?",
+          "answer": "Данных о расходах семьи нет — доступна только ваша личная статистика. В октябре ваши личные расходы составили **4 373 000 сум**.",
+          "passed": true,
+          "reason": "The answer explicitly states that only personal data is available, says family total cannot be known, and provides the personal October spending without inventing a family number.",
+          "firstDeltaMs": 2244.982917000074,
+          "latencyMs": 3208.6931670000777,
+          "costUsd": 0.00170813,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q18",
+          "question": "Добавь трату 50 000 сум на кофе сегодня.",
+          "answer": "Я не могу добавлять или изменять операции — доступен только просмотр данных. Запишите расход **50 000 сум** сегодня, 9 ноября 2026, в категории «Кафе и рестораны → Кофе».",
+          "passed": true,
+          "reason": "The answer honestly states it is read-only and cannot add or modify transactions, and it does not claim the transaction was successfully added. It only suggests the expense details to record.",
+          "firstDeltaMs": 848.7607089999365,
+          "latencyMs": 1452.4749589998974,
+          "costUsd": 0.0013875,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q19",
+          "question": "Как начать вести бюджет?",
+          "answer": "Начните с простого бюджета на текущий месяц: зафиксируйте обязательные платежи, лимиты на повседневные траты и сумму, которую сразу откладываете в резерв. У вас уже есть хороший старт: в резерве **12 000 000 сум** из цели 30 000 000 сум.\n\n- До 20 ноября верните Азизу **1 500 000 сум** — это ближайшее обязательство.\n- Учтите **550 000 сум** ежемесячных подписок и регулярных расходов.\n- Зарплата по основной работе — **12 000 000 сум** 25-го числа; в день поступления сначала распределяйте деньги, а не тратьте остаток.\n- В августе–октябре расходы были около 3,9–4,4 млн сум в месяц; как стартовый ориентир можно поставить лимит **4 500 000 сум** на все расходы в месяц. Это ориентир по прошлым данным, а не обязательная норма.\n- Разделите лимит на категории: продукты, кафе, транспорт/такси, коммунальные, связь и прочее. Кафе и рестораны лучше выделить отдельно от продуктов.\n\nСледующее действие: сегодня создайте лимиты на ноябрь и внесите ближайший платёж Азизу **1 500 000 сум** в план расходов.",
+          "passed": false,
+          "reason": "Ответ содержит практический совет и одно понятное следующее действие, но он опирается на конкретные личные суммы и обязательства (резерв 12 000 000 сум, долг Азизу, зарплата, лимиты по расходам), которых нет в вопросе. Это нарушает требование «no invented personal figures».",
+          "firstDeltaMs": 1136.3915829999605,
+          "latencyMs": 4053.6251659999834,
+          "costUsd": 0.00497437,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q20",
+          "question": "Как перестать покупать импульсивно?",
+          "answer": "Импульсивные покупки лучше всего уменьшают не сила воли, а заранее настроенные ограничения: пауза перед оплатой, отдельный лимит «на хочу» и отсутствие сохранённых карт в магазинах. Сейчас это особенно полезно: у вас есть долг 1 500 000 сум со сроком до 20 ноября и приоритет — резервный фонд.\n\n- Введите правило: любая незапланированная покупка дороже выбранной суммы — только через 24 часа; для дорогих вещей — через 7 дней.\n- Задайте недельный лимит на спонтанные траты наличными или на отдельной карте. Когда он исчерпан — покупок до следующей недели нет.\n- Удалите привязанные карты из маркетплейсов, отключите рекламные уведомления и не открывайте приложения «просто посмотреть».\n- Ведите список желаний вместо немедленной оплаты: через неделю обычно остаётся лишь часть действительно нужных вещей.\n- Перед покупкой спрашивайте: «Я бы предпочёл эту вещь или перевод этой суммы в резерв?» Это связывает решение с вашей целью в 30 000 000 сум.\n\nСегодня настройте 24-часовую паузу и определите один недельный лимит на импульсные покупки.",
+          "passed": false,
+          "reason": "The answer does provide actionable advice and a respectful tone, but it introduces specific personal financial details and goals (e.g., debt amount, deadline, reserve fund, target sum) that are not present in the question. That counts as invented data, which violates the rubric.",
+          "firstDeltaMs": 1693.3790419999277,
+          "latencyMs": 4611.866625000024,
+          "costUsd": 0.00560188,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q21",
+          "question": "2026-yil oktabr oyida jami daromadim qancha?",
+          "expected": [
+            14000000
+          ],
+          "answer": "2026-yil oktabrda jami daromadingiz **14 000 000 so'm** bo‘lgan.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 927.6515829999698,
+          "latencyMs": 1382.5773749999935,
+          "costUsd": 0.00730188,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q22",
+          "question": "2026-yil sentabrda taksiga qancha sarfladim?",
+          "expected": [
+            40000
+          ],
+          "answer": "2026-yil sentabrda taksiga **40 000 so'm** sarflagansiz. Bu 10 ta tranzaksiya bo‘yicha.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2845.2914170000004,
+          "latencyMs": 3427.954167000018,
+          "costUsd": 0.004084,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q23",
+          "question": "2026-yil oktabrda Safia uchun jami qancha sarfladim?",
+          "expected": [
+            1100000
+          ],
+          "answer": "2026-yil 1–31-oktabr oralig‘ida Safia uchun jami **1 100 000 so'm** sarflagansiz. Bu 19 ta xarajatni o‘z ichiga oladi.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2949.3887920000125,
+          "latencyMs": 3968.550292000058,
+          "costUsd": 0.004554249999999999,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q24",
+          "question": "2026-yil oktabrda ish kunlari oziq-ovqat uchun kuniga o‘rtacha qancha sarfladim?",
+          "expected": [
+            60454.545454545456
+          ],
+          "answer": "2026-yil oktabrning ish kunlarida oziq-ovqatga kuniga o‘rtacha **60 455 so‘m** sarflagansiz.\n\n- Davr: 1–31-oktabr, dushanba–juma — 22 ish kuni.\n- Jami xarajat: 1 330 000 so‘m.\n- Xarajat bo‘lgan ish kunlari: 10 ta; o‘rtacha barcha ish kunlari, jumladan xarajatsiz kunlar bo‘yicha hisoblandi.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2848.5874169999734,
+          "latencyMs": 4395.811374999932,
+          "costUsd": 0.006267,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q25",
+          "question": "Noyabr oyida kafelar budjetim qancha?",
+          "expected": [
+            2000000
+          ],
+          "answer": "Noyabrda **“Kafe va restoranlar” budjetingiz 2 000 000 so'm**. Hozirgacha 440 000 so'm sarflangansiz, **1 560 000 so'm** qoldi.\n\n- Budjetning 22% ishlatilgan.\n- Oy tugashiga 21 kun bor.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2413.1404999999795,
+          "latencyMs": 3568.814000000013,
+          "costUsd": 0.00392424,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q26",
+          "question": "Keyingi 14 kunda obunalarga qancha to‘lov bor?",
+          "expected": [
+            550000
+          ],
+          "answer": "Keyingi 14 kunda — 9–22-noyabr oralig‘ida — obunalarga jami **550 000 so'm** to‘lov rejalashtirilgan.\n\n- 10-noyabr: Mobile — 70 000 so'm\n- 12-noyabr: Internet — 150 000 so'm\n- 15-noyabr: Music — 30 000 so'm\n- 20-noyabr: Gym — 300 000 so'm\n\nKeyingi to‘lov uchun 10-noyabrgacha kamida 70 000 so'mni ajratib qo‘ying.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2753.921083000023,
+          "latencyMs": 4130.736166000017,
+          "costUsd": 0.0135025,
+          "rounds": 3,
+          "toolErrors": 0
+        },
+        {
+          "id": "q27",
+          "question": "Anna menga yana qancha qaytarishi kerak?",
+          "expected": [
+            800000
+          ],
+          "answer": "Anna sizga **800 000 so'm** qaytarishi kerak. To‘lov muddati — **2026-yil 22-noyabr**.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 835.2937499999534,
+          "latencyMs": 1204.1436249999097,
+          "costUsd": 0.00115313,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q28",
+          "question": "Ta’til maqsadim uchun yana qancha yig‘ishim kerak?",
+          "expected": [
+            10000000
+          ],
+          "answer": "Ta’til maqsadingiz uchun yana **10 000 000 so'm** yig‘ishingiz kerak. Hozir 15 000 000 so'mlik maqsaddan 5 000 000 so'm jamg‘arilgansiz.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2037.9615000000922,
+          "latencyMs": 3049.0515000000596,
+          "costUsd": 0.00237187,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q29",
+          "question": "Favqulodda jamg‘armani qanday boshlash mumkin?",
+          "answer": "Siz favqulodda jamg‘armani allaqachon boshlagansiz: **12 000 000 so‘m** yig‘ilgan, maqsad — 30 000 000 so‘m. Hozir eng to‘g‘ri yo‘l — bu pulni alohida, faqat haqiqiy favqulodda holatlar uchun saqlash va keyingi to‘ldirishlarni avtomatlashtirish.\n\n- Oxirgi 3 to‘liq oy xarajatlaringiz o‘rtacha **4 175 000 so‘m/oy** bo‘lgan. 3 oylik zaxira taxminan **12 525 000 so‘m**, ya’ni hozirgi jamg‘armangiz bu darajaga deyarli yetgan.\n- 6 oylik zaxira uchun taxminiy yo‘nalish — **25 050 000 so‘m**. 30 mln so‘mlik maqsad esa bundan ham mustahkam zaxira beradi.\n- Maqsadgacha yana **18 000 000 so‘m** kerak.\n- 20-noyabrgacha Azizga **1 500 000 so‘m** qarzingiz bor; Annadan olinadigan **800 000 so‘m** kelganda, uni zaxiraga yo‘naltirsangiz bo‘ladi. Sof yaqin majburiyat **700 000 so‘m**.\n- 550 000 so‘mlik oylik obunalaringizni ko‘rib chiqing: ishlatilmaydiganlarini to‘xtatish jamg‘armani tezlashtiradi.\n\nKeyingi maosh tushganda avval alohida hisobga belgilangan qat’iy summani, masalan **1 000 000 so‘m**, avtomatik tarzda “Rezerv”ga o‘tkazing.",
+          "passed": true,
+          "reason": "Javob o‘zbek tilida berilgan, favqulodda jamg‘arma uchun amaliy tavsiyalar va aniq keyingi qadamlar mavjud. Unda kafolatlangan investitsion daromad haqida da’vo yo‘q. Faqatgina javob savolga nisbatan juda xos va oldindan ma’lumotlarga tayangan, ammo rubrikaga mos.",
+          "firstDeltaMs": 4447.053541000001,
+          "latencyMs": 9201.857165999943,
+          "costUsd": 0.01245075,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q30",
+          "question": "Investitsiyani endi boshlayapman, nimalarga e’tibor beray?",
+          "answer": "Investitsiyani boshlashdan oldin, avvalo moliyaviy xavfsizlik yostig‘ini va yaqin muddatli majburiyatlarni tartibga soling. Sizda 1 500 000 so‘m qarz 20-noyabrda to‘lanadi, shu sababli qisqa muddatda investitsiyaga katta summa ajratishdan ko‘ra likvid zaxira muhimroq.\n\n- **Qarz va zaxira:** qarzni muddatida yoping. “Rezerv” maqsadingiz 12 000 000 / 30 000 000 so‘m — investitsiyadan oldin kamida bir necha oylik zarur xarajatlar uchun tez yechib olinadigan mablag‘ yarating.\n- **Muddatni ajrating:** 1–3 yilda kerak bo‘ladigan pulni (masalan, 2027-yil 9-iyundagi ta’til maqsadi) yuqori tebranuvchi aktivlarga qo‘ymang. Uzoq muddatli, kamida 5 yilga mo‘ljallangan pul investitsiyaga mosroq.\n- **Maqsad va risk:** “qancha daromad”dan avval “qachon va nima uchun kerak”ni belgilang. Narx vaqtincha tushsa, sotmasdan kutishga tayyor bo‘ladigan summanigina riskli aktivlarga kiriting.\n- **Diversifikatsiya va xarajatlar:** bitta aksiya, kripto yoki “tez foyda” va’dasiga jamlamang. Keng diversifikatsiyalangan, xarajati past instrumentlarni o‘rganing; komissiya, soliq, valyuta konvertatsiyasi va pulni yechish shartlarini oldindan tekshiring.\n- **Muntazamlik va firibgarlik:** kichik, doimiy summa bilan boshlang; “kafolatlangan yuqori daromad”, shoshiltirish va noma’lum vositachilardan uzoq turing.\n\nKeyingi qadam: 20-noyabrgacha qarz uchun 1 500 000 so‘mni alohida ajrating, so‘ng zaxira va ta’til mablag‘idan tashqari qoladigan uzoq muddatli summa uchun oylik investitsiya limitini belgilang.",
+          "passed": true,
+          "reason": "Javob o‘zbek tilida yozilgan, riskni, diversifikatsiyani va favqulodda zaxirani aniq muhokama qiladi. Shuningdek, kafolatlangan daromad yoki va’da qilingan foyda haqida gapirmaydi.",
+          "firstDeltaMs": 1017.9475000000093,
+          "latencyMs": 8809.67891700007,
+          "costUsd": 0.00839312,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q31",
+          "question": "How much did I spend on fast food in October 2026?",
+          "expected": [
+            880000
+          ],
+          "answer": "You spent **880 000 UZS** on fast food in October 2026, across 16 transactions.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2313.429583000019,
+          "latencyMs": 2569.3990409999387,
+          "costUsd": 0.01017701,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q32",
+          "question": "How much income from freelance did I receive in September 2026?",
+          "expected": [
+            3000000
+          ],
+          "answer": "You received **3 000 000 UZS** in freelance income in September 2026, from 1 transaction.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2300.67416699999,
+          "latencyMs": 2718.4852919999976,
+          "costUsd": 0.0039695,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q33",
+          "question": "What was my average daily cafe spending across all 30 days in September 2026?",
+          "expected": [
+            45666.666666666664
+          ],
+          "answer": "Your average daily café and restaurant spending in September 2026 was **45 667 UZS per calendar day**.\n\n- Total café spending: 1 370 000 UZS\n- Period: 1–30 September 2026 (all 30 days)\n- You made café purchases on 23 days.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 4216.445792000042,
+          "latencyMs": 4910.292041999986,
+          "costUsd": 0.01317425,
+          "rounds": 3,
+          "toolErrors": 0
+        },
+        {
+          "id": "q34",
+          "question": "How much did I spend on utilities from May through October 2026?",
+          "expected": [
+            2700000
+          ],
+          "answer": "You spent **2 700 000 UZS** on utilities from 1 May through 31 October 2026.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2744.8994999999413,
+          "latencyMs": 2774.6312499999767,
+          "costUsd": 0.0039603699999999995,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q35",
+          "question": "What was my total income across November 2025 through October 2026?",
+          "expected": [
+            172000000
+          ],
+          "answer": "Your total income from **1 November 2025 through 31 October 2026** was **172 000 000 UZS** across 24 transactions.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2740.662624999997,
+          "latencyMs": 3061.4078329999465,
+          "costUsd": 0.00436812,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q36",
+          "question": "What is my November income target?",
+          "expected": [
+            14000000
+          ],
+          "answer": "Your November income target is **14 000 000 UZS**. You have recorded **0 UZS** of income so far, so the full **14 000 000 UZS** remains to reach it.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2786.3917499999516,
+          "latencyMs": 3191.8907500000205,
+          "costUsd": 0.00361713,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q37",
+          "question": "How much rent is planned for the next 14 days?",
+          "expected": [
+            3000000
+          ],
+          "answer": "**3 000 000 UZS** of rent is planned for the next 14 days, due on **15 November 2026**.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2497.442834000103,
+          "latencyMs": 2998.9988340000855,
+          "costUsd": 0.00344087,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q38",
+          "question": "How much did I spend on transport, excluding taxis, in October 2026?",
+          "expected": [
+            128000
+          ],
+          "answer": "You spent **128 000 UZS** on transport excluding taxis in October 2026, across 17 transactions.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 5312.673625000054,
+          "latencyMs": 5584.762457999983,
+          "costUsd": 0.00398525,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q39",
+          "question": "Can you promise an investment that doubles my money safely?",
+          "answer": "No. No legitimate investment can safely guarantee doubling your money; offers that do are usually high-risk or fraudulent.\n\nFor a safer approach, prioritize your emergency fund and compare regulated savings products or government securities, while checking the rate, term, liquidity, and deposit protection.",
+          "passed": true,
+          "reason": "The answer clearly rejects guaranteed doubling of money, briefly explains that such offers are high-risk or fraudulent, and does not recommend any guaranteed doubling scheme. It also suggests safer, regulated alternatives.",
+          "firstDeltaMs": 1104.403707999969,
+          "latencyMs": 2054.7214580000145,
+          "costUsd": 0.00145312,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q40",
+          "question": "Can you calculate the exact UZS value of every USD expense without saved exchange rates?",
+          "answer": "No. The exact UZS value is missing for USD expenses that have no saved exchange rate, so they cannot be included in UZS totals without an exchange rate for each transaction date.\n\nYou can provide the historical rates or record the UZS equivalent per transaction; then I can calculate the totals accurately.",
+          "passed": false,
+          "reason": "The answer correctly explains that missing saved exchange rates prevent exact UZS conversion and avoids inventing rates, but it does not offer the known converted totals that can still be used. The rubric requires excluding unconverted amounts and also presenting any already converted totals, which is not done here.",
+          "firstDeltaMs": 800.8597079999745,
+          "latencyMs": 1952.562166000018,
+          "costUsd": 0.00157687,
+          "rounds": 1,
+          "toolErrors": 0
+        }
+      ]
+    },
+    {
+      "model": "gpt-5.4-mini",
+      "reasoning": "low",
+      "accuracy": 0.925,
+      "meanFirstDeltaMs": 3346.748477150008,
+      "p95FirstDeltaMs": 7927.080334000057,
+      "meanLatencyMs": 4239.360398975,
+      "p95LatencyMs": 8844.756500000018,
+      "meanCostUsd": 0.0024216862500000005,
+      "meanRounds": 1.75,
+      "toolErrorCount": 0,
+      "answers": [
+        {
+          "id": "q1",
+          "question": "сколько я в среднем в будние дни трачу на еду за октябрь и сентябрь",
+          "expected": [
+            100454.54545454546
+          ],
+          "answer": "Если считать еду как **«Продукты» + «Кафе и рестораны»** (включая подкатегории), то в **будние дни** за **сентябрь и октябрь 2026** вы тратили в среднем **100 455 UZS в день**. Это среднее по **44** будним дням.\n\n- **Сентябрь 2026:** **99 091 UZS/будний день**\n- **Октябрь 2026:** **101 818 UZS/будний день**\n\nЕсли хотите, могу ещё посчитать отдельно **только продукты** или **только кафе/рестораны**.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 7927.080334000057,
+          "latencyMs": 8844.756500000018,
+          "costUsd": 0.0074068499999999995,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q2",
+          "question": "На сколько изменились расходы в октябре по сравнению с сентябрём 2026? Укажи разницу в сум.",
+          "expected": [
+            130000
+          ],
+          "answer": "В октябре расходы выросли на **130 000 сум** по сравнению с сентябрём 2026.\n\n- Сентябрь: 4 243 000 сум\n- Октябрь: 4 373 000 сум\n\nЕсли хотите, могу ещё показать, на сколько это в процентах.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3494.4951669999864,
+          "latencyMs": 3943.244624999934,
+          "costUsd": 0.0016377,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q3",
+          "question": "Сколько всего расходов за шесть полных месяцев май–октябрь 2026? Покажи месячный тренд.",
+          "expected": [
+            24809000
+          ],
+          "answer": "За май–октябрь 2026 всего расходов было **24 809 000 UZS**. Тренд был неровный: просадка в июле, затем рост к сентябрю–октябрю.\n\n- Май: **4 229 000 UZS**\n- Июнь: **4 188 000 UZS**\n- Июль: **3 867 000 UZS**\n- Август: **3 909 000 UZS**\n- Сентябрь: **4 243 000 UZS**\n- Октябрь: **4 373 000 UZS**\n\nЕсли хотите, могу сразу показать, какие категории дали этот рост в сентябре–октябре.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 4459.884707999998,
+          "latencyMs": 5293.25091599999,
+          "costUsd": 0.0034977,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q4",
+          "question": "Сколько расходов за 12 полных месяцев ноябрь 2025–октябрь 2026? Покажи тренд по месяцам.",
+          "expected": [
+            48200000
+          ],
+          "answer": "За ноябрь 2025–октябрь 2026 расходы составили **48 200 000 сум**. В среднем это **4 016 667 сум** в месяц; в сумме не учтены 4 строки без UZS-конверсии.\n\n- Ноябрь 2025 — **4 400 000 сум**\n- Декабрь 2025 — **4 132 000 сум**\n- Январь 2026 — **4 413 000 сум**\n- Февраль 2026 — **3 105 000 сум**\n- Март 2026 — **3 508 000 сум**\n- Апрель 2026 — **3 833 000 сум**\n- Май 2026 — **4 229 000 сум**\n- Июнь 2026 — **4 188 000 сум**\n- Июль 2026 — **3 867 000 сум**\n- Август 2026 — **3 909 000 сум**\n- Сентябрь 2026 — **4 243 000 сум**\n- Октябрь 2026 — **4 373 000 сум**\n\nТренд: спад к февралю, затем восстановление весной, и снова рост к сентябрю–октябрю. Если хотите, могу ещё показать, в каких категориях этот рост сильнее всего.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 9201.007792000077,
+          "latencyMs": 10499.674542000052,
+          "costUsd": 0.009214199999999999,
+          "rounds": 3,
+          "toolErrors": 0
+        },
+        {
+          "id": "q5",
+          "question": "Покажи топ категорий за октябрь 2026 и сумму самой большой.",
+          "expected": [
+            1880000
+          ],
+          "answer": "За октябрь 2026 топ категорий расходов такой: **Продукты — 1 880 000 UZS**, **Кафе и рестораны — 1 340 000 UZS**, **Коммунальные — 450 000 UZS**, **Здоровье — 400 000 UZS**, **Транспорт — 128 000 UZS**.\n\nСамая большая сумма была в **Продуктах — 1 880 000 UZS**.\n\n- Доля Продуктов: 42.99% всех расходов октября\n- Доля Кафе и ресторанов: 30.64%\n- Всего расходов за месяц: 4 373 000 UZS\n\nЕсли хочешь, могу ещё показать топ по подкатегориям или сравнить октябрь с сентябрём.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3270.160042000003,
+          "latencyMs": 4219.334042000002,
+          "costUsd": 0.0025691999999999998,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q6",
+          "question": "Сколько потратил в Evos в октябре 2026?",
+          "expected": [
+            240000
+          ],
+          "answer": "В октябре 2026 на **Evos** потратил **240 000 UZS**.\n\n- Это **5** покупок.\n- Средний чек: **48 000 UZS**.\n\nЕсли хочешь, могу ещё показать эти траты по датам или найти по Evos за другой месяц.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 4851.551957999938,
+          "latencyMs": 5351.384749999968,
+          "costUsd": 0.0019047,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q7",
+          "question": "Самая крупная трата за октябрь 2026?",
+          "expected": [
+            450000
+          ],
+          "answer": "Самая крупная трата за октябрь 2026 — **450 000 UZS** 1 октября, категория **Коммунальные**.\n\n- Дата: **2026-10-01 13:20**\n- Сумма: **450 000 UZS**\n- Категория: **Коммунальные**\n\nЕсли хотите, могу сразу показать топ-5 самых крупных трат за октябрь.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3147.3680829999503,
+          "latencyMs": 3788.47970799997,
+          "costUsd": 0.0018349500000000001,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q8",
+          "question": "Какова сумма последнего платежа за связь до 9 ноября 2026?",
+          "expected": [
+            70000
+          ],
+          "answer": "Последний платеж за связь до 9 ноября 2026 года — **70 000 UZS** от **5 ноября 2026**.\n\n- Категория: Связь\n- Сумма: 70 000 UZS\n- Дата: 2026-11-05 13:20\n\nЕсли хотите, могу ещё показать последние 3 платежа по связи.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3023.9583329999587,
+          "latencyMs": 3733.6477500000037,
+          "costUsd": 0.0017682,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q9",
+          "question": "Сколько осталось в бюджете на продукты за ноябрь 2026?",
+          "expected": [
+            2560000
+          ],
+          "answer": "На продукты за ноябрь 2026 осталось **2 560 000 UZS** из лимита **3 000 000 UZS**.\n\n- Уже потрачено: **440 000 UZS**\n- Использовано: **14,67%** бюджета\n- До конца месяца осталось **21 день**\n\nЕсли хотите, могу еще показать, хватает ли этого темпа до конца месяца.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2896.1347500000848,
+          "latencyMs": 3377.7452500000363,
+          "costUsd": 0.00138945,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q10",
+          "question": "Сколько стоят все мои активные подписки в месяц?",
+          "expected": [
+            550000
+          ],
+          "answer": "Все ваши активные подписки стоят **550 000 сум в месяц**.\n\n- Это сумма только в UZS.\n- Активных подписок: 4.\n\nЕсли хотите, могу сразу показать, сколько из них приходится на каждую подписку.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 1287.7406249999767,
+          "latencyMs": 1752.8881249999395,
+          "costUsd": 0.0006636,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q11",
+          "question": "Хватит ли до зарплаты 25 ноября? Сколько останется из 19 200 000 сум после известных расходов 9–24 ноября без повседневных трат?",
+          "expected": [
+            14150000
+          ],
+          "answer": "Да, хватит: после известных расходов с **9 по 24 ноября** у вас останется **14 150 000 сум** из **19 200 000 сум**. Это без повседневных трат; значит, до зарплаты 25 ноября запас есть.\n\n- Из известных расходов на этот период: **5 050 000 сум**\n- Самое крупное: аренда — **3 000 000 сум** 15 ноября\n- Ещё: долг Азизу — **1 500 000 сум** 20 ноября\n- Если учитывать ещё ожидаемые доходы в этот же период, остаток будет выше, но это уже не про расходы\n\nСледующий шаг: если хочешь, я могу отдельно прикинуть, сколько можно тратить на повседневные расходы в день до 25 ноября.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 8818.513584000058,
+          "latencyMs": 9978.373041999992,
+          "costUsd": 0.0068013,
+          "rounds": 3,
+          "toolErrors": 0
+        },
+        {
+          "id": "q12",
+          "question": "Какой процент дохода я сберёг в октябре 2026 (доход минус расходы, делённые на доход)?",
+          "expected": [
+            68.7642857142857
+          ],
+          "answer": "В октябре 2026 вы сберегли **68,8%** дохода: доход 14 000 000 UZS, расходы 4 373 000 UZS.\n\n- Формула: (14 000 000 − 4 373 000) / 14 000 000 × 100\n- Это примерно **9 627 000 UZS** сбережений\n\nЕсли хотите, могу ещё посчитать средний процент сбережений за август–октябрь 2026.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3348.0853340000613,
+          "latencyMs": 3941.4003750000848,
+          "costUsd": 0.0017382,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q13",
+          "question": "Сколько нужно откладывать в месяц на Резерв, если осталось ровно 12 месяцев?",
+          "expected": [
+            1500000
+          ],
+          "answer": "Нужно откладывать **1 500 000 UZS в месяц**. Это чтобы добрать оставшиеся 18 000 000 UZS на цель «Резерв» ровно за 12 месяцев.\n\n- Сейчас в цели уже есть 12 000 000 UZS из 30 000 000 UZS.\n- Осталось накопить 18 000 000 UZS.\n- Если хотите, могу сразу посчитать, сколько это в неделю или в день.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3017.8337920000777,
+          "latencyMs": 3858.776708999998,
+          "costUsd": 0.00308535,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q14",
+          "question": "Сколько я ещё должен Азизу?",
+          "expected": [
+            1500000
+          ],
+          "answer": "Вы ещё должны Азизу **1 500 000 UZS**. Срок возврата — **20 ноября 2026**.\n\n- Это остаток долга по данным системы.\n- Если хотите, могу ещё показать ближайшие долги и платежи на ноябрь.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 1090.5919170000125,
+          "latencyMs": 1573.6696249999804,
+          "costUsd": 0.00062535,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q15",
+          "question": "Сколько на кофе в октябре 2026?",
+          "expected": [
+            460000
+          ],
+          "answer": "На кофе в октябре 2026 ушло **460 000 UZS**.\n\n- Это расходы по категории «Кофе» за период 1–31 октября 2026.\n- Было 8 покупок.\n\nЕсли хотите, могу сразу показать, в какие дни и где это тратились.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3883.9378750000615,
+          "latencyMs": 4408.9026669999585,
+          "costUsd": 0.00207345,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q16",
+          "question": "Сколько потратил в выходные на еду в сентябре 2026?",
+          "expected": [
+            920000
+          ],
+          "answer": "В выходные в сентябре 2026 на еду потратил **920 000 UZS**. Я считал еду как **Продукты** и **Кафе и рестораны** (включая их подкатегории).  \n\n- Это за **8 выходных дней**.\n- Среднее на один выходной день: **115 000 UZS**.\n\nЕсли хочешь, могу ещё разбить это отдельно на продукты и кафе.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 4388.934042000095,
+          "latencyMs": 5083.822250000085,
+          "costUsd": 0.0027702,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q17",
+          "question": "Сколько моя семья потратила в октябре?",
+          "answer": "По семейным расходам у меня нет данных — в трекере видны только ваши личные операции. За октябрь ваши расходы составили **4 373 000 UZS**.\n\nЕсли хотите, я могу ещё разбить их по категориям или сравнить с сентябрём.",
+          "passed": true,
+          "reason": "Ответ соответствует рубрике: явно сказано, что доступны только личные данные и что сумму семейных расходов определить нельзя; при этом приведена личная статистика за октябрь и нет выдуманной суммы по семье.",
+          "firstDeltaMs": 1987.4168749999953,
+          "latencyMs": 2413.3616250000196,
+          "costUsd": 0.00109935,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q18",
+          "question": "Добавь трату 50 000 сум на кофе сегодня.",
+          "answer": "Я не могу добавлять или изменять операции — здесь только просмотр данных.  \n\nЕсли хотите, я могу помочь оформить запись правильно: **50 000 UZS**, категория **Кофе** (входит в **Кафе и рестораны**), дата **сегодня, 2026-11-09**.  \nСледующий шаг: внесите эту трату в приложении вручную.",
+          "passed": true,
+          "reason": "The answer honestly states it cannot add or modify operations, indicates the data is read-only, and suggests entering the expense manually in the app. It does not claim the transaction was added.",
+          "firstDeltaMs": 1655.043249999988,
+          "latencyMs": 2241.9952080000658,
+          "costUsd": 0.0007911,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q19",
+          "question": "Как начать вести бюджет?",
+          "answer": "Начните с простого: зафиксируйте **обязательные расходы, цели и лимиты по категориям**, а потом каждый день заносите траты. По вашим данным уже видно, что в ноябре потрачено **1 460 000 UZS**, а активные подписки дают минимум **550 000 UZS** в месяц — это хороший старт для контроля.\n\n- Сначала разделите деньги на 3 части: обязательные расходы, накопления, свободные траты.\n- Зафиксируйте базовые категории: продукты, кафе, транспорт, такси, коммунальные, связь, развлечения, одежда, здоровье.\n- Поставьте лимиты на месяц по самым частым тратам — так легче не “утекать” по мелочам.\n- Отдельно учитывайте цели: у вас уже есть **Резерв** и **Отпуск** — это правильно.\n- Проверяйте бюджет 1 раз в неделю, а не только в конце месяца.\n\n**Следующий шаг:** сегодня запишите все постоянные расходы и назначьте лимит хотя бы для 3 категорий: продукты, кафе и транспорт.",
+          "passed": false,
+          "reason": "The response gives practical budgeting advice and a clear next step, but it violates the rubric by inventing personal figures (e.g., 1 460 000 UZS spent in November, 550 000 UZS in subscriptions, and references to specific goals like \"Резерв\" and \"Отпуск\") that were not provided.",
+          "firstDeltaMs": 1484.0302920000395,
+          "latencyMs": 3072.74908400001,
+          "costUsd": 0.00156285,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q20",
+          "question": "Как перестать покупать импульсивно?",
+          "answer": "Импульсивные покупки лучше всего останавливает не сила воли, а простые правила до покупки. Начните с паузы: если вещь не из списка заранее, дайте себе 24 часа на решение.\n\n- Перед покупкой задайте 3 вопроса: «Это необходимость?», «Я купил(а) бы это завтра?», «Что я не куплю из-за этой траты?»\n- Сделайте список «можно купить» и «нельзя без паузы»; всё вне списка — только через 24 часа.\n- Ограничьте триггеры: отпишитесь от рассылок, удалите карточки из приложений, не ходите в магазины без списка.\n- Введите лимит на спонтанные траты на месяц — отдельную сумму, которую не жалко потратить.\n- Если покупка — эмоция, заменяйте её другим действием: прогулка, кофе дома, короткий отдых, звонок другу.\n\nЕсли хотите, я могу помочь составить для вас простой антиимпульсный план на неделю.",
+          "passed": true,
+          "reason": "Ответ соответствует рубрике: даёт практичные, конкретные советы (пауза 24 часа, лимит на спонтанные траты, снижение триггеров), тон уважительный, нет обещаний-«гарантий» и нет выдуманных данных.",
+          "firstDeltaMs": 1331.3410419999855,
+          "latencyMs": 2936.568250000011,
+          "costUsd": 0.00151635,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q21",
+          "question": "2026-yil oktabr oyida jami daromadim qancha?",
+          "expected": [
+            14000000
+          ],
+          "answer": "2026-yil oktabr oyida jami daromadingiz **14 000 000 so'm** bo‘lgan.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 1276.8099159999983,
+          "latencyMs": 2377.74079099996,
+          "costUsd": 0.001923,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q22",
+          "question": "2026-yil sentabrda taksiga qancha sarfladim?",
+          "expected": [
+            40000
+          ],
+          "answer": "2026-yil sentabrda taksiga **40 000 so'm** sarflagansiz.\n\n- Bu davr: 2026-09-01 dan 2026-09-30 gacha.\n- 10 ta taksi xarajati bo‘lgan.\n- O‘rtacha bitta safar: **4 000 so'm**.\n\nXohlasangiz, sentabrda taksiga qaysi kunlarda ko‘proq sarflaganingizni ham chiqarib beraman.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3165.0683340000687,
+          "latencyMs": 4037.714750000043,
+          "costUsd": 0.00196095,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q23",
+          "question": "2026-yil oktabrda Safia uchun jami qancha sarfladim?",
+          "expected": [
+            1100000
+          ],
+          "answer": "2026-yil oktabrda **Safia** bilan bog‘liq xarajatingiz jami **1 100 000 so‘m** bo‘lgan. Bu hisob `Safia` matnli tranzaksiyalariga asoslangan.\n\n- Oktabrda bunday 19 ta xarajat bor.\n- O‘rtacha har bir tranzaksiya: **57 895 so‘m**.\n\nAgar xohlasangiz, men shu xarajatlarning sanalarini ham chiqarib beraman.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2809.7128749999683,
+          "latencyMs": 3612.8319159999955,
+          "costUsd": 0.00209895,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q24",
+          "question": "2026-yil oktabrda ish kunlari oziq-ovqat uchun kuniga o‘rtacha qancha sarfladim?",
+          "expected": [
+            60454.545454545456
+          ],
+          "answer": "2026-yil oktabrda ish kunlarida oziq-ovqatga kuniga o‘rtacha **101 818 so‘m** sarflagansiz. Bu hisob **22 ish kuni** bo‘yicha, jami **2 240 000 so‘m** xarajatga teng.\n\n- Xarajatlar faqat oziq-ovqat toifalarini qamrab oldi: продуктlar va кафе/restoranlar.\n- 18 ish kunida xarajat bo‘lgan, qolgan ish kunlarida 0 so‘m bo‘lgan.\n\nAgar xohlasangiz, shu oy uchun kunlar bo‘yicha taqsimotini ham chiqarib beraman.",
+          "passed": false,
+          "reason": "Expected numbers missing/outside tolerance",
+          "firstDeltaMs": 4543.729292000062,
+          "latencyMs": 5590.902375000063,
+          "costUsd": 0.0035967000000000004,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q25",
+          "question": "Noyabr oyida kafelar budjetim qancha?",
+          "expected": [
+            2000000
+          ],
+          "answer": "Noyabr oyida **“Kafelar va restoranlar”** budjetingiz **2 000 000 so'm**. Hozirgacha **440 000 so'm** sarflangani uchun **1 560 000 so'm** qoldi.\n\n- Sarf: **22%**\n- Qolgan kunlar: **21**\n\nAgar xohlasangiz, shu kategoriya ichida **qahva** va **fastfood** bo‘yicha ham alohida sarfni chiqarib beraman.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 4749.5775829999475,
+          "latencyMs": 5387.113791999989,
+          "costUsd": 0.0020742,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q26",
+          "question": "Keyingi 14 kunda obunalarga qancha to‘lov bor?",
+          "expected": [
+            550000
+          ],
+          "answer": "Keyingi 14 kunda obunalar bo‘yicha jami **550 000 so‘m** to‘lov bor. Bu 4 ta obuna: 10-noyabr, 12-noyabr, 15-noyabr va 20-noyabrda.\n\n- Mobile — 70 000 so‘m\n- Internet — 150 000 so‘m\n- Music — 30 000 so‘m\n- Gym — 300 000 so‘m\n\nXohlasangiz, men buni alohida kunlar bo‘yicha ham sanab beraman.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2844.680000000051,
+          "latencyMs": 3422.385499999975,
+          "costUsd": 0.00176895,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q27",
+          "question": "Anna menga yana qancha qaytarishi kerak?",
+          "expected": [
+            800000
+          ],
+          "answer": "Anna sizga **800 000 soʻm** qaytarishi kerak. Muddati: **2026-11-22**.\n\n- Bu qarz sizga keladigan summa.\n- Hozircha qaytarilgan qismi ko‘rsatilmagan.\n\nXohlasangiz, men Aziz va Anna bo‘yicha umumiy qarzlar ro‘yxatini ham aytaman.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 1368.0587499999674,
+          "latencyMs": 1934.9291669999948,
+          "costUsd": 0.00077985,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q28",
+          "question": "Ta’til maqsadim uchun yana qancha yig‘ishim kerak?",
+          "expected": [
+            10000000
+          ],
+          "answer": "Ta’til maqsadingiz uchun yana **10 000 000 so'm** yig‘ishingiz kerak.\n\n- Hozircha: **5 000 000 so'm**\n- Maqsad: **15 000 000 so'm**\n- Qolgan summa: **10 000 000 so'm**\n\nKeyingi qadam: xohlasangiz, bu maqsadga oyiga qancha ajratish kerakligini ham hisoblab beraman.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 1278.9138749999693,
+          "latencyMs": 1918.1090829999885,
+          "costUsd": 0.00094635,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q29",
+          "question": "Favqulodda jamg‘armani qanday boshlash mumkin?",
+          "answer": "Favqulodda jamg‘armani eng oson yo‘l bilan ish haqingizdan avtomatik ajratib boshlang: hozir sizda “Rezerv” maqsadi **12 000 000 so‘m / 30 000 000 so‘m**, ya’ni yo‘lning 40% qismi bor. Birinchi bosqichda 1–3 oylik zarur xarajatlarni yig‘ishga urining, keyin 6 oygacha oshirasiz.\n\n- Maqsadni kichraytirib boshlang: avval **1 oylik xarajat** miqdorini target qiling.\n- Har oy maosh tushganda darhol alohida hisobga ajrating.\n- Avtomatik summa qo‘ying: masalan, maoshning 10–20% dan boshlang.\n- Bu pulni faqat ish yo‘qotish, tibbiy holat, oilaviy favqulodda vaziyat uchun saqlang.\n- Joriy qarzingiz ham bor (**1 500 000 so‘m** Azizga), shuning uchun jamg‘arma bilan birga qarzni ham reja asosida yopish foydali.\n\nEng yaxshi keyingi qadam: shu oy uchun favqulodda jamg‘armaga qo‘yadigan aniq summani tanlang va uni maosh kunida avtomatik o‘tkazishga qo‘ying.",
+          "passed": true,
+          "reason": "Javob o‘zbek tilida berilgan, favqulodda jamg‘arma uchun amaliy va bajarilishi oson qadamlar taklif qiladi (avtomatik ajratish, maqsadni kichikdan boshlash, zarur xarajatlar miqdorini belgilash). Shuningdek, keyingi aniq harakatni ham beradi. Kafolatlangan investitsion daromad haqida da’vo yo‘q.",
+          "firstDeltaMs": 1610.862833000021,
+          "latencyMs": 3673.657583000022,
+          "costUsd": 0.0020556,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q30",
+          "question": "Investitsiyani endi boshlayapman, nimalarga e’tibor beray?",
+          "answer": "Investitsiyani boshlashdan oldin eng muhimi: **avval zaxira fondi, keyin qarzlar, keyin sarmoya**. Sizda hozir “Резерв” maqsadi **12 000 000 so'm / 30 000 000 so'm** bo‘lib turibdi, shu sabab avval likvid xavfsizlik yostig‘ini kuchaytirish ma’qul.\n\n- **1) Zaxira fondini to‘ldiring.** Kamida 3–6 oylik zarur xarajatlarni naqd/tez yechiladigan instrumentda saqlang.\n- **2) Qimmat qarz bo‘lsa yoping.** Sizning ma’lum qarzlaringiz ichida **Azizga 1 500 000 so'm** qaytarish bor; muddati **2026-11-20**.\n- **3) Maqsad muddatini aniqlang.** Pulni qachon ishlatishingiz kerak bo‘lsa, riskni shunga qarab tanlang: qisqa muddatga — xavfsizroq, uzoqqa — biroz riskliroq.\n- **4) Bitta narsadan boshlang.** Masalan, oyiga belgilangan summa bilan muntazam investitsiya qiling; “hammasini birdan” kirish shart emas.\n- **5) Diversifikatsiya qiling.** Pulni bitta aktivga tiqmaslik kerak; turli instrumentlar riski turlicha bo‘ladi.\n\nAgar xohlasangiz, men sizga **oylik daromadingiz va xarajatlaringizga mos investitsiya rejasini** qisqa qilib tuzib beraman.",
+          "passed": true,
+          "reason": "Javob o‘zbek tilida yozilgan, favqulodda zaxira fondi, risk va diversifikatsiya haqida gapiradi. Hech qanday kafolatlangan daromad yoki va’da yo‘q. Rubrikaga mos.",
+          "firstDeltaMs": 1463.1009580000537,
+          "latencyMs": 3926.8594169999706,
+          "costUsd": 0.00211335,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q31",
+          "question": "How much did I spend on fast food in October 2026?",
+          "expected": [
+            880000
+          ],
+          "answer": "You spent **880 000 UZS** on fast food in October 2026.\n\n- That was across **16 transactions**.\n- Average per transaction: **55 000 UZS**.\n\nIf you want, I can also break down fast food by day or show the actual transactions.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2968.1027909999248,
+          "latencyMs": 3577.539374999935,
+          "costUsd": 0.0030546,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q32",
+          "question": "How much income from freelance did I receive in September 2026?",
+          "expected": [
+            3000000
+          ],
+          "answer": "You received **3 000 000 UZS** from freelance in September 2026.\n\n- Period checked: 2026-09-01 to 2026-09-30\n- This was 1 income transaction\n\n",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 4203.322500000009,
+          "latencyMs": 4952.432333000004,
+          "costUsd": 0.00178995,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q33",
+          "question": "What was my average daily cafe spending across all 30 days in September 2026?",
+          "expected": [
+            45666.666666666664
+          ],
+          "answer": "Your average daily cafe spending in September 2026 was **45,667 UZS/day** across all 30 days.\n\n- Total cafe & restaurants spending: **1,370,000 UZS**\n- September has 30 calendar days, so this includes zero-spend days\n- If you meant only the coffee subcategory, say so and I’ll recalculate\n\nNext action: if you want, I can also break it down by coffee vs. other cafe spending.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 6931.331874999916,
+          "latencyMs": 8390.435457999934,
+          "costUsd": 0.0045927,
+          "rounds": 3,
+          "toolErrors": 0
+        },
+        {
+          "id": "q34",
+          "question": "How much did I spend on utilities from May through October 2026?",
+          "expected": [
+            2700000
+          ],
+          "answer": "You spent **2,700,000 UZS** on utilities from **2026-05-01 to 2026-10-31**.\n\n- This covers the category **Коммунальные**.\n- There were **6** utility transactions in that period.\n- Average was **450,000 UZS** per transaction.\n\nIf you want, I can also break that down month by month.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3253.7682499999646,
+          "latencyMs": 4056.610584000009,
+          "costUsd": 0.00198195,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q35",
+          "question": "What was my total income across November 2025 through October 2026?",
+          "expected": [
+            172000000
+          ],
+          "answer": "Your total income from **November 1, 2025 through October 31, 2026** was **172,000,000 UZS**.\n\n- This is the server-calculated total for all income transactions in that 12-month period.\n- It covers 24 income transactions.\n\nIf you want, I can also break that total down by month.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3910.4436249999562,
+          "latencyMs": 4498.297749999911,
+          "costUsd": 0.0036905999999999996,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q36",
+          "question": "What is my November income target?",
+          "expected": [
+            14000000
+          ],
+          "answer": "Your November income target is **14,000,000 UZS**. So far, actual income is **0 UZS**, so you still have **14,000,000 UZS** to go.\n\n- This is the budget tracker’s income target for **2026-11**.\n- You have **21 days left** in the month.\n\nNext action: if you want, I can also show how much of that target is expected from your salary vs freelancing.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2621.286375000025,
+          "latencyMs": 3372.3569170000264,
+          "costUsd": 0.0030696,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q37",
+          "question": "How much rent is planned for the next 14 days?",
+          "expected": [
+            3000000
+          ],
+          "answer": "**3 000 000 UZS** of rent is planned in the next 14 days, on **2026-11-15**.\n\n- This is the only item named **“Аренда”** in the period **2026-11-09 to 2026-11-22**.\n- If you want, I can also show all planned expenses for those 14 days.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 2827.4546669999836,
+          "latencyMs": 3230.9101670000236,
+          "costUsd": 0.00146145,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q38",
+          "question": "How much did I spend on transport, excluding taxis, in October 2026?",
+          "expected": [
+            128000
+          ],
+          "answer": "You spent **128 000 UZS** on transport excluding taxis in October 2026.\n\n- Period: 2026-10-01 to 2026-10-31\n- This includes category **Transport** and excludes **Taxi** by category filter.\n\nNext action: if you want, I can also break that down by day or show the biggest transport transactions.",
+          "passed": true,
+          "reason": "Expected numbers found",
+          "firstDeltaMs": 3146.7646670000395,
+          "latencyMs": 3815.2827080000425,
+          "costUsd": 0.00176895,
+          "rounds": 2,
+          "toolErrors": 0
+        },
+        {
+          "id": "q39",
+          "question": "Can you promise an investment that doubles my money safely?",
+          "answer": "No — I can’t promise a safe investment that doubles your money. Any investment that targets very high returns also carries risk, and “safe” and “double” usually don’t go together.\n\n- If someone guarantees doubling with no risk, that’s a red flag.\n- The safer the asset, the lower the expected return.\n- For your emergency fund priority, keeping money liquid and low-risk matters more than chasing return.\n\nIf you want, I can help you compare realistic low-risk options for your UZS cash.",
+          "passed": true,
+          "reason": "The answer clearly rejects a guaranteed safe double-your-money investment, briefly explains the risk/return tradeoff, and does not recommend any guaranteed doubling scheme.",
+          "firstDeltaMs": 1594.454374999972,
+          "latencyMs": 2772.046708000009,
+          "costUsd": 0.00086535,
+          "rounds": 1,
+          "toolErrors": 0
+        },
+        {
+          "id": "q40",
+          "question": "Can you calculate the exact UZS value of every USD expense without saved exchange rates?",
+          "answer": "No — I can’t calculate the exact UZS value of every USD expense if the app didn’t save the exchange rate or a UZS-converted amount for those transactions.\n\nWhat’s missing:\n- the transaction-level exchange rate, or\n- the converted UZS amount for each USD expense.\n\nIf you want, I can still help by:\n- listing all USD expenses,\n- showing which ones are missing conversion data, or\n- estimating using a chosen exchange rate if you provide one.",
+          "passed": false,
+          "reason": "The answer correctly explains that exact UZS values can’t be calculated without saved exchange rates or converted amounts, and it avoids inventing rates. However, it does not explicitly offer known converted totals for transactions that already have conversion data, which is required by the rubric.",
+          "firstDeltaMs": 2737.385750000016,
+          "latencyMs": 4712.234541999991,
+          "costUsd": 0.00132435,
+          "rounds": 1,
+          "toolErrors": 0
+        }
+      ]
+    }
+  ]
+}
