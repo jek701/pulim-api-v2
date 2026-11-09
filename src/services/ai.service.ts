@@ -1,3 +1,9 @@
+import { openai } from '../ai/agent/client';
+export { openai } from '../ai/agent/client';
+import { normalizeUsage, estimateCostUsd, stableUserHash, type AiTokenUsage } from '../ai/agent/usage';
+export { normalizeUsage, estimateCostUsd, stableUserHash, MODEL_PRICING_PER_MILLION, type AiTokenUsage } from '../ai/agent/usage';
+import { runAgent, type AgentOptions } from '../ai/agent/loop';
+import { createDbDataSource } from '../ai/agent/dataSource';
 import {
   addDocument,
   countQuery,
@@ -11,8 +17,7 @@ import {
   saveDocument,
 } from '../db/documents';
 import { createHash } from 'node:crypto';
-import OpenAI from 'openai';
-import type { ResponseInput, ResponseUsage } from 'openai/resources/responses/responses';
+import type { ResponseInput } from 'openai/resources/responses/responses';
 import { env } from '../config/env';
 import { AppError } from '../utils/AppError';
 import { logger } from '../utils/logger';
@@ -25,14 +30,6 @@ import type { Transaction, AiChatMessage, AiForecast } from '../domain/types';
 const ONE_YEAR_MS = 365 * 86400000;
 const FORECAST_CACHE_MS = 15 * 60000;
 export const aiConfigured = (): boolean => Boolean(env.OPENAI_API_KEY);
-let client: OpenAI | null = null;
-export function openai(): OpenAI {
-  if (!env.OPENAI_API_KEY) {
-    throw new AppError(503, 'AI_UNAVAILABLE', 'AI is not configured on this server.');
-  }
-  if (!client) client = new OpenAI({ apiKey: env.OPENAI_API_KEY });
-  return client;
-}
 async function listOwned(collection: string, uid: string): Promise<any[]> {
   const snap = await readDocument(filterQuery(queryTable(collection), 'userId', '==', uid));
   return snap.rows.map((doc) => ({ id: doc.id, ...doc.data }));
@@ -63,14 +60,6 @@ export type ChatTurn = {
   role: 'user' | 'assistant';
   content: string;
 };
-export interface AiTokenUsage {
-  inputTokens: number;
-  cachedInputTokens: number;
-  cacheWriteTokens: number;
-  outputTokens: number;
-  reasoningTokens: number;
-  totalTokens: number;
-}
 type UsageFeature =
   | 'chat'
   | 'forecast'
@@ -83,49 +72,6 @@ type UsageFeature =
   | 'capture_category'
   | 'weekly_report'
   | 'monthly_report';
-const MODEL_PRICING_PER_MILLION: Record<
-  string,
-  {
-    input: number;
-    cachedInput: number;
-    cacheWrite: number;
-    output: number;
-  }
-> = {
-  'gpt-5.4-mini': { input: 0.75, cachedInput: 0.075, cacheWrite: 0.75, output: 4.5 },
-  'gpt-5.4-nano': { input: 0.2, cachedInput: 0.02, cacheWrite: 0.2, output: 1.25 },
-  'gpt-5.6-terra': { input: 2.5, cachedInput: 0.25, cacheWrite: 3.125, output: 15 },
-  'gpt-5.6-luna': { input: 1, cachedInput: 0.1, cacheWrite: 1.25, output: 6 },
-  'gpt-5.6-sol': { input: 5, cachedInput: 0.5, cacheWrite: 6.25, output: 30 },
-  'gpt-5.6': { input: 5, cachedInput: 0.5, cacheWrite: 6.25, output: 30 },
-  // Audio input tokens dominate transcription cost; text prompt tokens are priced the same here.
-  'gpt-4o-mini-transcribe': { input: 3, cachedInput: 3, cacheWrite: 3, output: 5 },
-};
-export function normalizeUsage(usage?: ResponseUsage | null): AiTokenUsage | null {
-  if (!usage) return null;
-  return {
-    inputTokens: usage.input_tokens,
-    cachedInputTokens: usage.input_tokens_details?.cached_tokens ?? 0,
-    cacheWriteTokens: usage.input_tokens_details?.cache_write_tokens ?? 0,
-    outputTokens: usage.output_tokens,
-    reasoningTokens: usage.output_tokens_details?.reasoning_tokens ?? 0,
-    totalTokens: usage.total_tokens,
-  };
-}
-function estimateCostUsd(model: string, usage: AiTokenUsage): number | null {
-  const pricing = MODEL_PRICING_PER_MILLION[model];
-  if (!pricing) return null;
-  const regularInput = Math.max(
-    0,
-    usage.inputTokens - usage.cachedInputTokens - usage.cacheWriteTokens,
-  );
-  const total =
-    regularInput * pricing.input +
-    usage.cachedInputTokens * pricing.cachedInput +
-    usage.cacheWriteTokens * pricing.cacheWrite +
-    usage.outputTokens * pricing.output;
-  return Number((total / 1000000).toFixed(8));
-}
 export async function recordAiUsage(opts: {
   uid: string;
   feature: UsageFeature;
@@ -134,6 +80,8 @@ export async function recordAiUsage(opts: {
   latencyMs: number;
   success: boolean;
   incompleteReason?: string | null;
+  round?: number; toolNames?: string[]; reasoning?: string | null;
+  rounds?: number; toolCallCount?: number; toolErrorCount?: number; hitRoundLimit?: boolean;
 }): Promise<void> {
   const estimatedCostUsd = opts.usage ? estimateCostUsd(opts.model, opts.usage) : null;
   const row = {
@@ -145,6 +93,8 @@ export async function recordAiUsage(opts: {
     latencyMs: opts.latencyMs,
     success: opts.success,
     incompleteReason: opts.incompleteReason ?? null,
+    ...(opts.round !== undefined ? { round: opts.round, toolNames: opts.toolNames, reasoning: opts.reasoning } : {}),
+    ...(opts.rounds !== undefined ? { rounds: opts.rounds, toolCallCount: opts.toolCallCount, toolErrorCount: opts.toolErrorCount, hitRoundLimit: opts.hitRoundLimit } : {}),
     createdAt: Date.now(),
   };
   logger.info(row, 'AI usage');
@@ -267,8 +217,6 @@ export async function refundAiMessage(uid: string, isPremium: boolean): Promise<
     logger.warn({ err, uid, counter }, 'Failed to refund AI message quota');
   }
 }
-export const stableUserHash = (uid: string): string =>
-  createHash('sha256').update(uid).digest('hex').slice(0, 32);
 /** Open a stateless OpenAI Responses API stream. */
 export async function streamChat(opts: {
   uid: string;
@@ -308,6 +256,13 @@ export async function streamChat(opts: {
     { signal: opts.signal },
   );
 }
+/** Run with one scoped data source and persist exactly one metric per provider call. */
+export function runChatAgent(opts: Omit<AgentOptions, 'dataSource' | 'onCall'>) {
+  return runAgent({ ...opts, dataSource: createDbDataSource(opts.uid), onCall: metric => recordAiUsage({
+    uid: opts.uid, feature: 'chat', model: opts.model, ...metric,
+  }) });
+}
+export const agentEnabled = (): boolean => env.AI_AGENT_ENABLED;
 /** Stream a stateless answer for Telegram; it deliberately does not write aiChats. */
 export async function answerStatelessChat(opts: {
   uid: string;
@@ -318,6 +273,15 @@ export async function answerStatelessChat(opts: {
   signal: AbortSignal;
   onDelta?: (delta: string, fullText: string) => void | Promise<void>;
 }): Promise<string> {
+  if (agentEnabled()) {
+    let full = '';
+    const result = await runChatAgent({ uid: opts.uid, model: opts.model, language: opts.language,
+      userMessage: opts.userMessage, history: [], signal: opts.signal,
+      additionalInstructions: buildTelegramChatInstructions(opts.language),
+      onDelta: async delta => { full += delta; await opts.onDelta?.(delta, full); },
+    });
+    return result.text;
+  }
   const startedAt = Date.now();
   let fullText = '';
   let usage: AiTokenUsage | null = null;

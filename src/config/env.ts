@@ -1,3 +1,4 @@
+import { aiSettingsShape } from '../ai/agent/settings';
 import 'dotenv/config';
 import { z } from 'zod';
 import { setPushWriteEventsEnabled } from '../db/pushWriteConfig';
@@ -104,16 +105,7 @@ const EnvSchema = z
     SOLIQ_OFD_SIGNING_KEY: z.string().default(''),
     /** 1 if Soliq money fields are in sum, 100 if in tiyin. Verify with one real receipt before launch. */
     SOLIQ_AMOUNT_DIVISOR: z.coerce.number().positive().max(10_000).default(1),
-    AI_MODEL_FREE: z.string().default('gpt-5.4-mini'),
-    AI_MODEL_PREMIUM: z.string().default('gpt-5.6-terra'),
-    AI_MODEL_FORECAST: z.string().default('gpt-5.4-mini'),
-
-    AI_RATE_LIMIT_PER_MIN: z.coerce.number().int().positive().default(20),
-    AI_MAX_HISTORY_MESSAGES: z.coerce.number().int().positive().max(40).default(12),
-    AI_MAX_OUTPUT_TOKENS_FREE: z.coerce.number().int().positive().max(25_000).default(1_600),
-    AI_MAX_OUTPUT_TOKENS_PREMIUM: z.coerce.number().int().positive().max(25_000).default(6_000),
-    AI_MAX_OUTPUT_TOKENS_FORECAST: z.coerce.number().int().positive().max(25_000).default(3_000),
-    AI_PREMIUM_MESSAGES_PER_PERIOD: z.coerce.number().int().positive().default(500),
+    ...aiSettingsShape,
 
     /** Comma-separated Firebase uids allowed to file dev notes (owner-only feedback tool). */
     DEV_NOTES_UIDS: z.string().default(''),

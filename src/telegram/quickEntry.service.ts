@@ -9,6 +9,7 @@ import { calcDebtTotal } from '../domain/debt';
 import {
   answerStatelessChat,
   assembleSnapshot,
+  agentEnabled,
   consumeAiMessage,
   refundAiMessage,
   selectChatModel,
@@ -842,7 +843,7 @@ async function answerNonTransaction(
   await consumeAiMessage(uid, isPremium);
   const draftId = Math.abs(updateId % 2147483647) || 1;
   try {
-    const snapshot = await assembleSnapshot(uid, language);
+    const snapshot = agentEnabled() ? '' : await assembleSnapshot(uid, language);
     let lastDraftAt = 0;
     let loadingStopped = false;
     const answer = await answerStatelessChat({

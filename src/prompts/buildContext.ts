@@ -24,7 +24,7 @@ export interface ChatContext {
   language: string;
 }
 
-const safeText = (value: unknown, maxLength = 120): string =>
+export const safeText = (value: unknown, maxLength = 120): string =>
   Array.from(String(value ?? ''))
     .map((character) => {
       const code = character.charCodeAt(0);
