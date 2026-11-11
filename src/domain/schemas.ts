@@ -283,7 +283,7 @@ export const plannedExpenseCreateSchema = z.object({
     .union([z.string().min(1), z.literal(''), z.null()])
     .transform((v) => v ?? '')
     .optional(),
-  /** Skipped occurrence days (local calendar). `paid` is server-managed (settle) and never accepted. */
+  /** Skipped occurrence days (local calendar). `paid` and `linkedDays` are server-managed (settle / link) and never accepted (zod strips them). */
   skipped: z.array(dayKeySchema).max(MAX_SKIPPED_DAYS).optional(),
   ...clientId,
 });
@@ -295,6 +295,16 @@ export const plannedExpenseSettleSchema = z.object({
   categoryId: z.string().min(1).optional(),
   amount: z.number().finite().positive().optional(),
   ...opTransactionId,
+});
+
+export const plannedExpenseLinkSchema = z.object({
+  day: dayKeySchema,
+  transactionId: z.string().min(1).max(128),
+});
+
+export const plannedExpenseUnlinkSchema = z.object({
+  day: dayKeySchema,
+  transactionId: z.string().min(1).max(128),
 });
 
 // --- Transactions (atomic) ---

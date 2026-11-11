@@ -172,6 +172,8 @@ export interface PlannedExpense {
   skipped?: string[];
   /** Day key -> id of the transaction created by settle (server managed). */
   paid?: Record<string, string>;
+  /** Days whose `paid` entry was created by link (not settle); server managed, missing = empty. */
+  linkedDays?: string[];
   createdAt: number;
 }
 

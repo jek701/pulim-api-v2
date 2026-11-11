@@ -81,6 +81,19 @@ Operation endpoints that create a transaction of their own accept an optional cl
 
 Semantics: if an own transaction with that id and the same kind (`source`) already exists, the operation counts as already applied: **no writes, no second balance effect**, and a best-effort response of the usual shape is returned (`Idempotency-Key` replays are exact). An id owned by someone else or created by a different kind of operation → `409 ID_CONFLICT`. Server-made transactions without `transactionId` keep a server id (old clients).
 
+Existing-operation links (the transaction id refers to an already recorded operation, rather than a new client id):
+
+| Endpoint | Body field | Notes |
+|---|---|---|
+| `POST /v1/planned-expenses/:id/link` | — | body `{ day: 'YYYY-MM-DD', transactionId: string }` (id length 1..128); links an existing own transaction of the plan's kind (`expense` by default), setting only `paid[day]` and adding `day` to the plan's server-managed `linkedDays`. Same link again is an idempotent 200 (no change, `linkedDays` untouched); another id on that day → `409 ALREADY_SETTLED`; transaction linked to another day/own plan → `409 TRANSACTION_LINKED`; wrong type → `400 TRANSACTION_MISMATCH`; missing/foreign/deleted transaction → `404 TRANSACTION_NOT_FOUND`; missing/foreign plan → `404 NOT_FOUND`. No transaction or balance changes. |
+| `POST /v1/planned-expenses/:id/unlink` | — | body `{ day: 'YYYY-MM-DD', transactionId: string }` (both required, id length 1..128). `paid[day]` absent → idempotent 200, no change; `paid[day]` holds another id → `409 LINK_MISMATCH`; same id but `day` not in `linkedDays` (entry made by settle) → `409 NOT_LINKED`; otherwise removes `paid[day]` and the day from `linkedDays`; the transaction is untouched. Missing/foreign plan → `404 NOT_FOUND`. |
+
+`linkedDays` (`string[]`, missing = empty) is returned in every plan snapshot and never accepted in create/update bodies. Link and unlink use the same day-key validation and authentication as settle, with no Premium gate, and return the full planned-expense object, like `PATCH /v1/planned-expenses/:id`.
+
+`LINK_MISMATCH` and `NOT_LINKED` are terminal for an unlink operation: the app restores its previous local `paid[day]` / `linkedDays` and offers no retry.
+
+`DELETE /v1/transactions/:id` also clears links: in the same SQL transaction, every plan of the user with `paid[day] === <deleted id>` and `day ∈ linkedDays` loses that `paid[day]` and the day (the occurrence is due again). Entries created by settle are untouched. The server does this itself, so the client queues no extra operation; the plan changes arrive through the normal delta pull.
+
 ### 1c. Operation time: `date`
 
 Optional `date` (epoch ms, the moment the user acted) is accepted on `POST /transactions/transfer`, `/cards/refill`, `/subscriptions/:id/pay`, `/planned-expenses/:id/settle`, `/debts` (initial cash tx), `/debts/:id/pay`, `/savings-goals/:id/contribute`, `/deposits/:id/(collect-interest|close|replenish|withdraw)`; `POST /transactions/:id/return` already had `date`, and `POST /transactions` has always taken it. It becomes the transaction `date` and `createdAt` (for deposits also the `now` of the interest/principal computation, `closedAt`, tranche date). The server accepts it only within **[serverNow − 90 days, serverNow + 5 minutes]**; outside that window, or when absent, it silently uses its own now (today's behaviour).

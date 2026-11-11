@@ -22,6 +22,7 @@ import {
   writeCreated,
   type OwnedDoc,
 } from '../repositories/sql.helpers';
+import { readLinkCleanup } from './plannedExpense.service';
 import { scheduleBudgetCheck } from '../notifications/queue.repository';
 import { logger } from '../utils/logger';
 type Row = Record<string, any>;
@@ -476,6 +477,8 @@ export async function deleteTransaction(uid: string, id: string): Promise<void> 
         ? documentKey(txnsCol(), data.linkedTransactionId)
         : null;
     const original = originalRef ? await tryReadOwned(tx, originalRef, uid) : null;
+    // Plans whose `link` points at this transaction (locks only the plans that need a change).
+    const linkCleanup = await readLinkCleanup(tx, uid, id);
     // ---- then writes ----
     // Net the balance changes per card so one card gets a single increment.
     const balanceChanges = new Map<string, number>();
@@ -513,6 +516,7 @@ export async function deleteTransaction(uid: string, id: string): Promise<void> 
       const card = cards.get(cardId);
       if (card) tx.patch(card.ref, { balance: patchValue.increment(delta) });
     }
+    for (const { ref: planRef, patch } of linkCleanup) tx.patch(planRef, patch);
     tx.remove(ref);
   });
   queueBudgetCheck(uid);
