@@ -1,0 +1,229 @@
+{
+  "cases": 14,
+  "roleAccuracy": 1,
+  "mergeAccuracy": 1,
+  "meanCostUsd": 0.000606,
+  "answers": [
+    {
+      "id": "rent-spellings",
+      "items": [
+        {
+          "groupIds": [
+            "a",
+            "b",
+            "c"
+          ],
+          "role": "payment",
+          "label": "Аренда квартиры",
+          "confidence": "high"
+        }
+      ],
+      "merges": true,
+      "costUsd": 0.0007035
+    },
+    {
+      "id": "salary",
+      "items": [
+        {
+          "groupIds": [
+            "a"
+          ],
+          "role": "income",
+          "label": "Oylik",
+          "confidence": "high"
+        }
+      ],
+      "merges": true,
+      "costUsd": 0.0005625
+    },
+    {
+      "id": "weekly-taxi",
+      "items": [
+        {
+          "groupIds": [
+            "a"
+          ],
+          "role": "everyday",
+          "label": "Taxi",
+          "confidence": "high"
+        }
+      ],
+      "merges": true,
+      "costUsd": 0.00053025
+    },
+    {
+      "id": "utilities",
+      "items": [
+        {
+          "groupIds": [
+            "a"
+          ],
+          "role": "payment",
+          "label": "Коммунальные услуги",
+          "confidence": "high"
+        }
+      ],
+      "merges": true,
+      "costUsd": 0.000528
+    },
+    {
+      "id": "one-off",
+      "items": [
+        {
+          "groupIds": [
+            "a"
+          ],
+          "role": "ignore",
+          "label": "Холодильник",
+          "confidence": "high"
+        }
+      ],
+      "merges": true,
+      "costUsd": 0.00052875
+    },
+    {
+      "id": "existing-loan",
+      "items": [
+        {
+          "groupIds": [
+            "a"
+          ],
+          "role": "ignore",
+          "label": "Kredit",
+          "confidence": "high"
+        }
+      ],
+      "merges": true,
+      "costUsd": 0.00078525
+    },
+    {
+      "id": "mixed-language",
+      "items": [
+        {
+          "groupIds": [
+            "a",
+            "b"
+          ],
+          "role": "payment",
+          "label": "Детский сад",
+          "confidence": "high"
+        }
+      ],
+      "merges": true,
+      "costUsd": 0.0007305
+    },
+    {
+      "id": "injection",
+      "items": [
+        {
+          "groupIds": [
+            "a"
+          ],
+          "role": "everyday",
+          "label": "Taxi",
+          "confidence": "high"
+        }
+      ],
+      "merges": true,
+      "costUsd": 0.00059775
+    },
+    {
+      "id": "pension",
+      "items": [
+        {
+          "groupIds": [
+            "a"
+          ],
+          "role": "income",
+          "label": "Пенсия",
+          "confidence": "high"
+        }
+      ],
+      "merges": true,
+      "costUsd": 0.00053175
+    },
+    {
+      "id": "internet",
+      "items": [
+        {
+          "groupIds": [
+            "a"
+          ],
+          "role": "payment",
+          "label": "Sarkor интернет",
+          "confidence": "high"
+        }
+      ],
+      "merges": true,
+      "costUsd": 0.000555
+    },
+    {
+      "id": "groceries",
+      "items": [
+        {
+          "groupIds": [
+            "a"
+          ],
+          "role": "everyday",
+          "label": "Korzinka продукты",
+          "confidence": "high"
+        }
+      ],
+      "merges": true,
+      "costUsd": 0.0005325
+    },
+    {
+      "id": "own-transfer",
+      "items": [
+        {
+          "groupIds": [
+            "a"
+          ],
+          "role": "ignore",
+          "label": "Перевод между своими картами",
+          "confidence": "high"
+        }
+      ],
+      "merges": true,
+      "costUsd": 0.00061575
+    },
+    {
+      "id": "currency-boundary",
+      "items": [
+        {
+          "groupIds": [
+            "a"
+          ],
+          "role": "payment",
+          "label": "Аренда",
+          "confidence": "high"
+        },
+        {
+          "groupIds": [
+            "b"
+          ],
+          "role": "payment",
+          "label": "Аренда",
+          "confidence": "high"
+        }
+      ],
+      "merges": true,
+      "costUsd": 0.000735
+    },
+    {
+      "id": "rent-received",
+      "items": [
+        {
+          "groupIds": [
+            "a"
+          ],
+          "role": "income",
+          "label": "Доход от сдачи квартиры",
+          "confidence": "high"
+        }
+      ],
+      "merges": true,
+      "costUsd": 0.0005475
+    }
+  ]
+}
