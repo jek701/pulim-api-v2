@@ -181,3 +181,26 @@ describe('SSE controller without network or database', () => {
     vi.useRealTimers();
   });
 });
+
+it('passes planContext to the agent only, without persisting or echoing it', async () => {
+  const r = request();
+  r.req.body.planContext = { today: '2026-11-11', balance: 123456789 };
+  r.start();
+  await r.done();
+  expect(mocks.runChatAgent).toHaveBeenCalledWith(
+    expect.objectContaining({ planContext: r.req.body.planContext }),
+  );
+  expect(mocks.createChat).toHaveBeenCalledWith('u', 'Сколько?');
+  expect(r.chunks.join('')).not.toContain('123456789');
+  mocks.agentEnabled.mockReturnValue(false);
+  mocks.streamChat.mockImplementation(async () =>
+    (async function* () {
+      yield { type: 'response.output_text.delta', delta: 'Legacy' };
+    })(),
+  );
+  const legacy = request();
+  legacy.req.body.planContext = r.req.body.planContext;
+  legacy.start();
+  await legacy.done();
+  expect(mocks.streamChat.mock.calls[0][0]).not.toHaveProperty('planContext');
+});

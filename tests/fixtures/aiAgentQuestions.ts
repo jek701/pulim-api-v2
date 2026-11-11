@@ -1,3 +1,4 @@
+import type { PlanContext } from '../../src/plans/schemas';
 import { aiAgentUser } from './aiAgentUser';
 import type { Transaction } from '../../src/domain/types';
 // Independent reference ledger: deliberately no imports from agent/stats.ts.
@@ -12,6 +13,8 @@ const income = (t: Transaction) => personal(t) && t.type === 'income' && t.sourc
 const net = (t: Transaction) => (t.source === 'return' ? -uzs(t) : uzs(t));
 const between = (t: Transaction, from: string, to: string) => date(t) >= from && date(t) <= to;
 export interface EvalQuestion {
+  planContext?: PlanContext;
+  requiredTools?: string[];
   id: string;
   language: 'ru' | 'uz' | 'en';
   question: string;
@@ -303,3 +306,50 @@ export const aiAgentQuestions: EvalQuestion[] = [
     'Must explain missing saved conversions, exclude unconverted amounts, offer known converted totals without inventing rates.',
   ),
 ];
+
+// Synthetic app-computed forecast, deliberately independent of the ledger fixture.
+const planContext: PlanContext = {
+  today: '2026-11-11',
+  currency: 'UZS',
+  balance: 1000000,
+  everydayPerDay: 100000,
+  headline: { mode: 'date', day: '2026-11-30', value: 500000 },
+  days: Array.from({ length: 20 }, (_, i) => ({
+    d: `2026-11-${11 + i}`,
+    close: i < 9 ? 1000000 - i * 100000 : 1500000 - (i - 9) * 100000,
+  })),
+  items: [{ d: '2026-11-20', name: 'Зарплата', amount: 1400000 }],
+  nextIncome: { d: '2026-11-20', name: 'Зарплата', amount: 1400000 },
+  pendingIncomes: 0,
+};
+aiAgentQuestions.push(
+  ...[
+    [
+      'plan-afford',
+      'Могу сегодня купить телефон за 300 000 сум? Проверь покупку, назови минимум и дату, если нельзя — когда можно и вариант рассрочки.',
+    ],
+    [
+      'plan-installments',
+      'Проверь покупку за 900 000 сум сегодня в рассрочку на 3 месяца. Какой минимум и что с платежами за окном прогноза?',
+    ],
+    [
+      'plan-before-payday',
+      'Если сегодня потрачу 250 000 сум, хватит до зарплаты? Проверь, назови дефицит, ближайшую подходящую дату и проверенную рассрочку.',
+    ],
+    [
+      'plan-later-date',
+      'Если 20 ноября куплю вещь за 400 000 сум, сколько останется 30 ноября и какой будет минимум? Проверь симулятором.',
+    ],
+  ].map(
+    ([id, question]): EvalQuestion => ({
+      id,
+      question,
+      language: 'ru',
+      tolerance: 0.01,
+      planContext,
+      requiredTools: ['simulate_purchase'],
+      rubric:
+        'Must use simulate_purchase, use only supplied app forecast numbers, state low and date. If unaffordable, offer earliest affordable day and tool-checked installments. Disclose window end for later months.',
+    }),
+  ),
+);

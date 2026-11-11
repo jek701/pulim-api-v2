@@ -30,7 +30,8 @@
     "data:verify-source-frozen": "node --import tsx scripts/migration/cli.ts verify-source-frozen",
     "merchants": "tsx src/cli/merchants.ts",
     "capture:eval": "tsx src/cli/captureEval.ts",
-    "eval:chat": "tsx src/cli/chatEval.ts"
+    "eval:chat": "tsx src/cli/chatEval.ts",
+    "eval:plan-setup": "tsx src/cli/planSetupEval.ts"
   },
   "keywords": [
     "budget",

@@ -78,13 +78,14 @@ export const argumentSchemas = {
 export type ToolName = keyof typeof argumentSchemas;
 // Keep JSON schema and runtime validation derived from one source; refinements
 // (real calendar dates, finite numbers and cross-field ranges) are checked below.
-function jsonSchema(schema: z.ZodTypeAny): Record<string, unknown> {
+export function jsonSchema(schema: z.ZodTypeAny): Record<string, unknown> {
+  if (schema instanceof z.ZodOptional) return jsonSchema(schema.unwrap().nullable());
   if (schema instanceof z.ZodEffects) return jsonSchema(schema.innerType());
   if (schema instanceof z.ZodNullable) {
     const inner = jsonSchema(schema.unwrap());
     return {
       ...inner,
-      type: [inner.type, 'null'],
+      type: [...new Set([...(Array.isArray(inner.type) ? inner.type : [inner.type]), 'null'])],
       ...(inner.enum ? { enum: [...(inner.enum as string[]), null] } : {}),
     };
   }

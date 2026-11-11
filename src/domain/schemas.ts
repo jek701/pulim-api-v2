@@ -1,3 +1,4 @@
+import { planSettingsSchema, planContextSchema } from '../plans/schemas';
 import { languageSchema, timezoneSchema, pushSettingsPatchSchema } from '../push/schemas';
 import { z } from 'zod';
 import { CURRENCIES } from './types';
@@ -149,6 +150,7 @@ export const bootstrapSchema = z.preprocess(
 // --- Settings ---
 export const settingsPatchSchema = z
   .object({
+    planSettings: planSettingsSchema.optional(),
     cardOrder: z.array(z.string()).optional(),
     plannedExpenseVisibility: z.enum(['hidden', '7d', '14d', 'this_month', 'next_month']).optional(),
   })
@@ -436,6 +438,7 @@ export const contributeSchema = z.object({ amount: positive, accountId: z.string
 const aiLanguageSchema = z.enum(['en', 'ru', 'uz']).default('en');
 export const forecastSchema = z.object({ language: aiLanguageSchema.optional() }).strict();
 export const chatSchema = z.object({
+  planContext: planContextSchema.optional(),
   chatId: z.string().min(1).max(128).optional(),
   message: z.string().trim().min(1).max(4000),
   language: aiLanguageSchema.optional(),

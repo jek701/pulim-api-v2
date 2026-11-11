@@ -275,3 +275,39 @@ describe('stateless streaming tool loop', () => {
     }
   });
 });
+
+it('registers and executes plan tools only for requests carrying a forecast', async () => {
+  const p = {
+    today: '2026-11-11',
+    currency: 'UZS',
+    balance: 100,
+    everydayPerDay: 10,
+    headline: { mode: 'date' as const, day: '2026-11-12', value: 80 },
+    days: [
+      { d: '2026-11-11', close: 100 },
+      { d: '2026-11-12', close: 80 },
+    ],
+    items: [],
+    nextIncome: null,
+    pendingIncomes: 1,
+  };
+  const f = fake([
+    [terminal([fn('p', 'simulate_purchase', { amount: 90, day: p.today, installments: null })])],
+    [delta('Checked'), terminal()],
+  ]);
+  const result = await runAgent(opts(f.client, { planContext: p }));
+  expect(f.params[0].tools?.map((t) => ('name' in t ? t.name : ''))).toEqual(
+    expect.arrayContaining(['simulate_purchase', 'get_plan_forecast']),
+  );
+  expect(f.params[0].instructions).toContain('never re-estimate');
+  expect(JSON.stringify(f.params[0].input)).toContain('Plan forecast (computed by the app)');
+  expect(JSON.stringify(f.params[1].input)).toContain('shortBy');
+  expect(result.toolCalls).toEqual([{ name: 'simulate_purchase', ok: true }]);
+  const without = fake([[delta('Normal'), terminal()]]);
+  await runAgent(opts(without.client));
+  expect(without.params[0].tools?.map((t) => ('name' in t ? t.name : ''))).not.toContain(
+    'simulate_purchase',
+  );
+  expect(JSON.stringify(without.params[0].input)).not.toContain('Plan forecast');
+  expect(without.params[0].instructions).not.toContain('never re-estimate');
+});

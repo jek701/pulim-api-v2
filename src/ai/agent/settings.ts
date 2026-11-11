@@ -12,6 +12,7 @@ export const aiSettingsShape = {
   AI_REASONING_ESCALATED: z.enum(['none', 'minimal', 'low', 'medium', 'high']).default('medium'),
   AI_MODEL_FREE: z.string().default('gpt-5.4-mini'),
   AI_MODEL_PREMIUM: z.string().default('gpt-5.6-terra'),
+  AI_MODEL_PLAN_SETUP: z.string().default('gpt-5.4-mini'),
   AI_MODEL_FORECAST: z.string().default('gpt-5.4-mini'),
 
   AI_RATE_LIMIT_PER_MIN: z.coerce.number().int().positive().default(20),

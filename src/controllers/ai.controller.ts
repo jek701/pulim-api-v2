@@ -1,3 +1,4 @@
+import { getPlanSetup } from '../services/planSetup.service';
 import type { Request, Response } from 'express';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../utils/AppError';
@@ -107,6 +108,7 @@ export const postChat = asyncHandler(async (req: Request, res: Response) => {
         language,
         languageCode: req.body.language,
         history,
+        planContext: req.body.planContext,
         userMessage: message,
         signal: aborter.signal,
         onStatus: (status) => {
@@ -229,4 +231,13 @@ export const postChat = asyncHandler(async (req: Request, res: Response) => {
   } finally {
     clearHeartbeat();
   }
+});
+
+export const postPlanSetup = asyncHandler(async (req, res) => {
+  const result = await getPlanSetup(req.uid, req.body);
+  if (result === null) {
+    res.status(429).json({ error: 'plan_setup_limit' });
+    return;
+  }
+  res.json(result);
 });

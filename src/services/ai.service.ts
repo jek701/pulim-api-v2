@@ -63,6 +63,7 @@ export type ChatTurn = {
 type UsageFeature =
   | 'chat'
   | 'forecast'
+  | 'plan_setup'
   | 'telegram_parse'
   | 'telegram_voice'
   | 'telegram_receipt'

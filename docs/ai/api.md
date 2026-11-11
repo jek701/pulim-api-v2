@@ -179,3 +179,26 @@ User-facing bot/notification/SMS texts localized uz/ru/en, default `uz`.
 - Firestore leftovers: `firebase.json`, `firestore.indexes.json`, firestore dep, `uid` duplicate in telegram_users, stale comments/docs.
 - README omits many endpoints and points to a non-existent CLI header comment.
 - **Secrets:** local secret files (`.env*`, `serviceAccountKey.json`, `oldServiceAccountKey.json`, `.migration-artifacts/` with real data snapshots) are gitignored and must never be printed or committed.
+
+## Plans v4 — API wave A (2026-11-11)
+
+- `POST /v1/ai/plan-setup`: authenticated, AI rate-limited and Premium-gated with
+  `planned_expenses`; independent of chat quota. Strict bounded group input, one low-reasoning
+  structured call with a 10-second timeout, repaired group coverage and deterministic fallback.
+  `AI_MODEL_PLAN_SETUP` defaults to `gpt-5.4-mini` (the forecast model default).
+  Successful results use 24-hour content-addressed document entries in `ai_forecast_cache`;
+  a separate per-user document in the same table atomically reserves at most five uncached
+  attempts over a rolling 24 hours, including failed attempts. Only successful model results
+  record `ai_usage.feature = plan_setup`. No migration or profile counter is needed.
+- Existing user settings endpoints accept optional `planSettings`. The whole nested object
+  is replaced only if its client `updatedAt` is at least the stored value. Comparison and
+  replacement are transactional; the PATCH response contains the stored winning copy.
+- Native chat accepts bounded optional `planContext`. Only the enabled agent receives its
+  request-local forecast summary and two read-only tools (`get_plan_forecast`,
+  `simulate_purchase`); it is never saved or echoed. Legacy and Telegram paths stay unchanged.
+  The pure simulator never changes account balances or transaction data. Forecast thinning
+  retains endpoints, minimum and event dates; if these alone exceed 40 points the tool asks
+  for a narrower range, since both requirements cannot otherwise be satisfied.
+- Opt-in `npm run eval:plan-setup` covers 14 synthetic cases and reports role accuracy,
+  exact merge partition accuracy and mean model cost. Chat eval includes four request-local
+  forecast questions requiring successful simulator use. Neither eval is part of `npm test`.

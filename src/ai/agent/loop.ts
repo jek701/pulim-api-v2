@@ -1,3 +1,10 @@
+import {
+  executePlanTool,
+  planToolDefinitions,
+  planSummary,
+  PLAN_INSTRUCTIONS,
+} from '../../plans/tools';
+import type { PlanContext } from '../../plans/schemas';
 import type {
   Response,
   ResponseCreateParamsStreaming,
@@ -43,6 +50,7 @@ export interface CallMetric {
 }
 export interface AgentOptions {
   uid: string;
+  planContext?: PlanContext;
   dataSource: AgentDataSource;
   model: string;
   language: string;
@@ -84,7 +92,10 @@ export async function runAgent(opts: AgentOptions) {
   opts.signal.throwIfAborted();
   const context = await bounded(buildAgentContext(opts.dataSource, opts.now), opts.signal);
   const input: ResponseInput = [
-    { role: 'developer', content: context },
+    {
+      role: 'developer',
+      content: context + (opts.planContext ? '\n\n' + planSummary(opts.planContext) : ''),
+    },
     ...opts.history.map((m) => ({ role: m.role, content: m.content })),
     { role: 'user', content: opts.userMessage },
   ];
@@ -134,12 +145,14 @@ export async function runAgent(opts: AgentOptions) {
         client.responses.create(
           {
             model: opts.model,
-            instructions: `${AGENT_INSTRUCTIONS}\n\nReply in ${opts.language}.${opts.additionalInstructions ? `\n\n${opts.additionalInstructions}` : ''}`,
+            instructions: `${AGENT_INSTRUCTIONS}${opts.planContext ? `\n\n${PLAN_INSTRUCTIONS}` : ''}\n\nReply in ${opts.language}.${opts.additionalInstructions ? `\n\n${opts.additionalInstructions}` : ''}`,
             input: [...input],
             stream: true,
             store: false,
             include: ['reasoning.encrypted_content'],
-            tools: toolDefinitions,
+            tools: opts.planContext
+              ? [...toolDefinitions, ...planToolDefinitions]
+              : toolDefinitions,
             tool_choice: forceFinal ? 'none' : 'auto',
             parallel_tool_calls: true,
             prompt_cache_key: `pulim-chat-${stableUserHash(opts.uid)}`,
@@ -208,7 +221,9 @@ export async function runAgent(opts: AgentOptions) {
             let result: any;
             try {
               result = await bounded(
-                executeTool(call.name, call.arguments, opts.dataSource, opts.now),
+                opts.planContext && planToolDefinitions.some((t) => t.name === call.name)
+                  ? Promise.resolve(executePlanTool(call.name, call.arguments, opts.planContext))
+                  : executeTool(call.name, call.arguments, opts.dataSource, opts.now),
                 opts.signal,
                 5000,
               );

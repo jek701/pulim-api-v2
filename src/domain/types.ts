@@ -41,6 +41,7 @@ export interface HomeWidgetSetting {
 export type PlannedExpenseVisibility = 'hidden' | '7d' | '14d' | 'this_month' | 'next_month';
 
 export interface UserSettings {
+  planSettings?: import('../plans/schemas').PlanSettings;
   cardOrder?: string[];
   plannedExpenseVisibility?: PlannedExpenseVisibility;
 }

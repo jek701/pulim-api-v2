@@ -6,13 +6,19 @@ import { buildAgentContext } from '../../src/ai/agent/context';
 import { createFixtureDataSource } from '../../src/ai/agent/fixtureDataSource';
 import { fixtureNow } from '../fixtures/aiAgentUser';
 describe('offline evaluation fixtures and numeric grader', () => {
-  it('has 40 questions, 20/10/10 languages, 32 numeric and 8 qualitative', () => {
-    expect(aiAgentQuestions).toHaveLength(40);
+  it('has 44 questions, 24/10/10 languages, 32 numeric and 12 qualitative', () => {
+    expect(aiAgentQuestions).toHaveLength(44);
     expect(
       ['ru', 'uz', 'en'].map((l) => aiAgentQuestions.filter((q) => q.language === l).length),
-    ).toEqual([20, 10, 10]);
+    ).toEqual([24, 10, 10]);
     expect(aiAgentQuestions.filter((q) => q.expected)).toHaveLength(32);
-    expect(aiAgentQuestions.filter((q) => q.rubric)).toHaveLength(8);
+    expect(aiAgentQuestions.filter((q) => q.planContext)).toHaveLength(4);
+    expect(
+      aiAgentQuestions
+        .filter((q) => q.planContext)
+        .every((q) => q.requiredTools?.includes('simulate_purchase')),
+    ).toBe(true);
+    expect(aiAgentQuestions.filter((q) => q.rubric)).toHaveLength(12);
     expect(aiAgentQuestions[0].question).toBe(
       'сколько я в среднем в будние дни трачу на еду за октябрь и сентябрь',
     );
