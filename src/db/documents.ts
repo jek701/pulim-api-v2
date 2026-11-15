@@ -4,6 +4,7 @@ import { randomInt } from 'node:crypto';
 import { sql, type Kysely, type Transaction } from 'kysely';
 import { database } from './database';
 import { tables, entity, type Entity } from './tables';
+import { AppError } from '../utils/AppError';
 import {
   IdempotencyConflict,
   idempotencyStorage,
@@ -467,6 +468,10 @@ export class SqlTransaction {
         continue;
       }
       const old = (await readUsing(write.key, executor, true)) as StoredDocument;
+      if (write.key.table === 'profiles') {
+        if (old.data?.deletionRequestedAt)
+          throw AppError.conflict('ACCOUNT_DELETION_IN_PROGRESS', 'Account deletion is in progress.');
+      }
       if (write.kind === 'insert' && old.exists)
         throw Object.assign(new Error('Record already exists'), {
           code: 'already-exists',

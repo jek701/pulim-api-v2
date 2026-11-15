@@ -4,6 +4,7 @@ import {
   limitQuery,
   queryTable,
   readDocument,
+  patchDocument,
   runSqlTransaction,
   saveDocument,
   writeBatch,
@@ -74,9 +75,14 @@ export async function seedDefaultCategories(
   await batch.commit();
 }
 /** Persist auth metadata derived from the verified ID token claims. */
-export async function syncAuthMetadata(uid: string, claims: DecodedToken): Promise<void> {
+export async function syncAuthMetadata(uid: string, claims: DecodedToken, creating = false): Promise<void> {
   const meta = deriveAuthMetadata(claims);
-  await saveDocument(profileRef(uid), { ...meta, updatedAt: Date.now() }, { merge: true });
+  if (creating) {
+    await saveDocument(profileRef(uid), { ...meta, createdAt: Date.now(), updatedAt: Date.now() }, { merge: true });
+  } else {
+    // A bootstrap already in flight when deletion started may only update its existing row.
+    await patchDocument(profileRef(uid), { ...meta, updatedAt: Date.now() });
+  }
 }
 /**
  * Idempotent post-login bootstrap: seed categories (optionally the onboarding selection, the
@@ -88,8 +94,11 @@ export async function bootstrap(
   claims: DecodedToken,
   selection?: OnboardingCategorySelection,
 ) {
+  const current = await getProfile(uid);
+  if (current?.deletionRequestedAt)
+    throw AppError.conflict('ACCOUNT_DELETION_IN_PROGRESS', 'Account deletion is in progress.');
+  await syncAuthMetadata(uid, claims, !current);
   await seedDefaultCategories(uid, selection);
-  await syncAuthMetadata(uid, claims);
   await ensureNotificationDefaults(uid);
   return getProfile(uid);
 }

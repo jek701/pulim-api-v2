@@ -71,7 +71,7 @@ export async function planPushUser(
   if (!knownActive && !(await enabledDevices(uid)).length) return 0;
   let queued = 0;
   const profile = await getProfile(uid);
-  if (!profile?.notifications?.enabled) return 0;
+  if (!profile?.notifications?.enabled || profile.deletionRequestedAt) return 0;
   const settings = normalizePushSettings(profile.notifications, profile.timezone);
   const snapshot = await pushSnapshot(uid, profile, now);
   for (const candidate of collectScheduledPushes(snapshot)) {

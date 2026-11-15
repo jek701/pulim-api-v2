@@ -107,6 +107,8 @@ export interface NotificationSettings {
 }
 
 export interface UserProfile {
+  /** Present while a resumable account deletion is in progress. */
+  deletionRequestedAt?: number;
   name?: string;
   salarySources: SalarySource[];
   birthday?: string;

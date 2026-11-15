@@ -1,4 +1,4 @@
-import { patchValue, saveDocument } from '../db/documents';
+import { patchDocument, patchValue, saveDocument } from '../db/documents';
 import { auth } from '../config/firebaseAuth';
 import { env } from '../config/env';
 import { verifyTelegramInitData } from './telegramVerify.service';
@@ -116,7 +116,7 @@ async function attachTelegramChat(input: {
     telegramUser: input.tgUser,
     profileUid: input.uid,
   });
-  await saveDocument(
+  await patchDocument(
     profileRef(input.uid),
     {
       telegramChatIds: patchValue.arrayUnion(Number(telegramId)),
@@ -124,7 +124,6 @@ async function attachTelegramChat(input: {
       ...(input.linkedExistingAccount ? {} : { isTelegramUser: true }),
       updatedAt: Date.now(),
     },
-    { merge: true },
   );
   await ensureNotificationDefaults(input.uid);
   await markTelegramReachable(input.uid, input.chatId);

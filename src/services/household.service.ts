@@ -32,6 +32,9 @@ import { getIsPremium } from './entitlement.service';
 import { verifyTelegramInitData } from './telegramVerify.service';
 import { compareTransactions } from '../domain/transactionOrder';
 import { AppError } from '../utils/AppError';
+import { sql } from 'kysely';
+import { database } from '../db/database';
+import { cleanHouseholdReferences, deleteBatches, deleteByField } from '../db/accountDeletion';
 type Row = Record<string, any>;
 const households = () => queryTable('households');
 const invites = () => queryTable('householdInvites');
@@ -55,6 +58,48 @@ export async function currentHousehold(uid: string): Promise<Row | null> {
   if (snap.empty) return null;
   const doc = snap.rows[0];
   return { id: doc.id, ...doc.data };
+}
+
+/** No leave/remove rule existed. Dissolve on owner deletion; otherwise remove the member.
+ * Raw writes intentionally suppress notifications to the deleting account. Household row is
+ * removed LAST, so its membership remains the retry anchor until all shared data is gone.
+ */
+export async function removeAccountFromHouseholds(uid: string): Promise<Record<string, number>> {
+  const counts: Record<string, number> = {};
+  const snapshot = await readDocument(filterQuery(households(), 'memberIds', 'array-contains', uid));
+  for (const document of snapshot.rows) {
+    const household = document.data;
+    const id = document.id;
+    if (household.ownerUserId === uid) {
+      for (const entity of ['categories', 'subcategories', 'budgets', 'savingsGoals', 'householdInvites', 'householdInvitePicks'] as const) {
+        counts[`household.${entity}`] = (counts[`household.${entity}`] ?? 0) + await deleteByField(entity, 'householdId', id);
+      }
+      for (const table of ['cards', 'transactions']) {
+        // Personal-card operations belong to their personal owner; never reverse their balances.
+        counts[`household.${table}`] = (counts[`household.${table}`] ?? 0) + await deleteBatches(table,
+          sql<boolean>`household_id = ${Buffer.from(id)} AND (user_id = ${Buffer.from(`household:${id}`)} OR user_id IS NULL)`);
+      }
+      await cleanHouseholdReferences(uid, id, true);
+      // Keep the membership retry anchor until both deletions commit together.
+      await database().transaction().execute(async (tx) => {
+        await sql`DELETE FROM household_members WHERE household_id = ${Buffer.from(id)}`.execute(tx);
+        const result = await sql`DELETE FROM households WHERE id = ${Buffer.from(id)}`.execute(tx);
+        counts.households = (counts.households ?? 0) + Number(result.numAffectedRows ?? 0);
+      });
+    } else {
+      await cleanHouseholdReferences(uid, id, false);
+      const members = (household.members ?? []).filter((member: Row) => member.userId !== uid);
+      const memberIds = (household.memberIds ?? []).filter((member: string) => member !== uid);
+      // Update mirror and document atomically; no reads after writes.
+      await database().transaction().execute(async (tx) => {
+        await sql`UPDATE households SET data_json = JSON_SET(data_json,
+          '$.members', CAST(${JSON.stringify(members)} AS JSON), '$.memberIds', CAST(${JSON.stringify(memberIds)} AS JSON))
+          WHERE id = ${Buffer.from(id)}`.execute(tx);
+        await sql`DELETE FROM household_members WHERE household_id = ${Buffer.from(id)} AND user_id = ${Buffer.from(uid)}`.execute(tx);
+      });
+    }
+  }
+  return counts;
 }
 export async function requireHousehold(uid: string): Promise<Row> {
   const household = await currentHousehold(uid);

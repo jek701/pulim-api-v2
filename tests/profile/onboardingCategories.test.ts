@@ -31,6 +31,7 @@ vi.mock('../../src/db/documents', async (importActual) => {
       },
     }),
     saveDocument: vi.fn(async () => undefined),
+    patchDocument: vi.fn(async () => undefined),
   };
 });
 vi.mock('../../src/repositories/profile.repository', () => ({

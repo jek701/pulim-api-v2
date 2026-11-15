@@ -77,7 +77,8 @@ router.post(
         transaction.read(profileRef),
       ]);
       if (existingEvent.exists) return false;
-      if (!profile.exists) throw AppError.notFound('Billing user profile not found.');
+      // Account deletion is final. A late payment outbox retry is acknowledged without writes.
+      if (!profile.exists || profile.data.deletionRequestedAt) return false;
       const profileData = profile.data as {
         subscription?: {
           billingVersion?: unknown;

@@ -1,4 +1,4 @@
-import { documentKey, queryTable, readDocument, saveDocument } from '../db/documents';
+import { documentKey, queryTable, readDocument, patchDocument } from '../db/documents';
 import type { UserProfile } from '../domain/types';
 const COLLECTION = 'profiles';
 export const profileRef = (uid: string) => documentKey(queryTable(COLLECTION), uid);
@@ -17,5 +17,5 @@ export async function profileExists(uid: string): Promise<boolean> {
 }
 /** Shallow merge into the profile, always stamping `updatedAt`. */
 export async function mergeProfile(uid: string, patch: Record<string, unknown>): Promise<void> {
-  await saveDocument(profileRef(uid), { ...patch, updatedAt: Date.now() }, { merge: true });
+  await patchDocument(profileRef(uid), { ...patch, updatedAt: Date.now() });
 }

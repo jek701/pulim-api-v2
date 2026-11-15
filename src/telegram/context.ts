@@ -19,7 +19,7 @@ export async function resolveUserContext(
   const uid = record?.data.profileUid ?? record?.data.uid;
   if (typeof uid !== 'string' || !uid) return null;
   const profile = await getProfile(uid);
-  if (!profile) return null;
+  if (!profile || profile.deletionRequestedAt) return null;
   await markTelegramReachable(uid, chatId);
   return {
     uid,

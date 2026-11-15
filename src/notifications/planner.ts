@@ -80,6 +80,7 @@ async function processProfile(
   now: number,
 ): Promise<'queued' | 'skipped'> {
   const uid = document.id;
+  if (!document.exists || document.data?.deletionRequestedAt) return 'skipped';
   if (!notificationRecipientAllowed(uid)) return 'skipped';
   const dueAt = Number(document.data.notifications?.nextDailyAt ?? now);
   const next = nextDailySlot(now, env.NOTIFY_DIGEST_HOUR, env.NOTIFY_TIMEZONE);
@@ -118,7 +119,7 @@ async function processBudgetTask(task: BudgetTask, now: number): Promise<number>
       profile?.notifications?.enabled &&
       apnsConfigured() &&
       (await enabledDevices(task.userId)).length > 0;
-    if (!profile || (!profileCanReceive(profile) && !canPush)) {
+    if (!profile || profile.deletionRequestedAt || (!profileCanReceive(profile) && !canPush)) {
       await finishBudgetTask(task);
       return 0;
     }

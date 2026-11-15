@@ -6,6 +6,17 @@ const json429 = (message: string) => (_req: Request, res: Response) => {
   res.status(429).json({ error: { code: 'RATE_LIMITED', message } });
 };
 
+export const accountDeletionLimiter = rateLimit({
+  windowMs: 60 * 60_000,
+  limit: 3,
+  skipFailedRequests: true,
+  requestWasSuccessful: (_req, res) => res.statusCode < 500,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  keyGenerator: (req) => req.uid,
+  handler: json429('Too many account deletion attempts. Please try again later.'),
+});
+
 /** Per-user limit on AI inference (applied after `authenticate`, so req.uid is set). */
 export const aiLimiter = rateLimit({
   windowMs: 60_000,

@@ -243,6 +243,7 @@ async function fanOut(campaign: CommunicationCampaign): Promise<void> {
     if (snapshot.empty) break;
     for (const document of snapshot.rows) {
       const profile = document.data as UserProfile;
+      if (profile.deletionRequestedAt) continue;
       if (!matchesAudience(profile, campaign, now)) continue;
       counters.audience += 1;
       const language = normalizeLanguage(profile.language);

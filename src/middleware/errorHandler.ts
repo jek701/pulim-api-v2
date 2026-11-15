@@ -34,6 +34,15 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, next) => {
     return;
   }
 
+  if (
+    req.method === 'POST' &&
+    /^\/v1\/account\/delete\/?(?:\?.*)?$/.test(req.originalUrl) &&
+    (err as { type?: string })?.type === 'entity.parse.failed'
+  ) {
+    res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Invalid JSON request.' } });
+    return;
+  }
+
   // Firebase Admin auth errors (verifyIdToken, etc.)
   const code = (err as { code?: string })?.code;
   if (typeof code === 'string' && code.startsWith('auth/')) {

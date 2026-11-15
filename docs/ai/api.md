@@ -58,6 +58,16 @@ Errors `{error:{code,message,details?}}`; zod → 400 `VALIDATION_ERROR`; free-p
 Public: `GET /health`, `/health/live`, `/health/ready`; `POST /auth/telegram`; `POST /auth/telegram/login-request`, `POST /auth/telegram/login-request/:requestId/exchange`, `GET /auth/telegram/app-return`; `POST /auth/phone/send-code|verify`; `POST /telegram/webhook`; `POST /internal/v1/billing/events`;
 `GET /shortcut/v1/cards`, `GET /shortcut/v1/categories`, `POST /shortcut/v1/expenses` (plain-text replies).
 `/v1` (auth):
+- account: `POST /account/delete {confirm:"DELETE"}` → 204. Non-anonymous Firebase accounts only;
+  three validated non-5xx attempts/hour/uid. Resumable batched SQL purge, household cleanup and Firebase deletion;
+  intentionally ignores Idempotency-Key. A partial failure returns retryable 503
+  `ACCOUNT_DELETION_FAILED`. Deletion marks block profile writes and background planners;
+  ordinary token verification stays non-revoking; only bootstrap checks revocation (outages → 503).
+  Missing profiles remain valid for pre-bootstrap capabilities. A second owner sweep precedes
+  profile deletion; partner household edits write sync upserts without notification hooks.
+  Revoked tokens may resume deletion but cannot bootstrap. Billing acknowledges missing/deleting
+  profiles without writes; old event-id dedupe markers retain no uid/order data.
+  See [account deletion report](../next/api1-account-deletion-report.md) for the complete retention inventory.
 - profile: `POST /profile/bootstrap`, `POST /profile/trial/start`, `GET|PATCH /profile`, `PATCH /profile/home-widgets`, `POST /profile/telegram-link-dismissed`, `PATCH /profile/notifications` (partial `enabled`, `groups`, `alsoTelegram`, `quietHours`, `timezone`; old `{enabled}` remains supported); `GET|PATCH /settings`
 - `categories`, `subcategories` (GET/POST/DELETE; custom = Premium). Exception: `POST /profile/bootstrap` takes an optional onboarding selection `{categories:{defaults:[{type,name}],custom:[{type,name,icon,color?}]}}` (zod `bootstrapSchema`; ≥1 expense, names 1..40, ≤10 custom) and, only for a user with no categories yet, seeds just those (defaults via `defaultCategoryId`, custom ids `${uid}__onboarding__<type>_<sha256-16>`, same doc shape). It is the one free path to custom categories and how a guest's onboarding categories reach the account. Capability `onboardingCategories: true` on `GET /sync/capabilities`. Default colors contain no purple (existing rows are not migrated). See [offline sync](../offline-sync.md#1a-bis-onboarding-categories-guest-import-and-first-sign-in).
 - `cards` GET/POST(limit)/PATCH/DELETE, `POST /cards/refill {creditCardId, sourceCardId, amount}`
@@ -173,7 +183,7 @@ User-facing bot/notification/SMS texts localized uz/ru/en, default `uz`.
 ## Gotchas / known issues (2026-10-21)
 - `PATCH /v1/cards/:id` accepts `cardType` and `balance` without free-plan checks (free user can switch debit→credit or overwrite balance); `enforceLimit` counts only personal cards; household budgets/goals not Premium-gated.
 - Telegram initData verification has **no `auth_date` freshness check**.
-- Planner with `NOTIFY_ALLOWED_UIDS` reads `document.data.notifications` before checking `exists` → allowlisted uid without profile aborts the tick.
+- Planner tolerates allowlisted uids without profiles and skips profiles marked for account deletion.
 - No pagination anywhere; `userScopedRepo` sorts in memory.
 - No TTL cleanup for drafts, markers, notifications, phone codes, invites.
 - Firestore leftovers: `firebase.json`, `firestore.indexes.json`, firestore dep, `uid` duplicate in telegram_users, stale comments/docs.

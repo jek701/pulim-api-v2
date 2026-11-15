@@ -81,7 +81,7 @@ async function deliver(
     return;
   }
   const profile = await getProfile(claimed.userId);
-  if (!profile) {
+  if (!profile || profile.deletionRequestedAt) {
     await skip('disabled');
     await outcome(false);
     return;

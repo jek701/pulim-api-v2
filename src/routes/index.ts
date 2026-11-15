@@ -31,6 +31,7 @@ import { householdsRouter } from './households.routes';
 import { syncRouter } from './sync.routes';
 import { pushRouter } from './push';
 import { captureRouter } from './capture.routes';
+import { accountRouter } from './account.routes';
 
 /** Mounts every router. Public routes first, then the authenticated `/v1` tree. */
 export function mountRoutes(app: Express): void {
@@ -45,6 +46,8 @@ export function mountRoutes(app: Express): void {
   const v1 = Router();
   v1.use(authenticate);
   v1.use(idempotency);
+  // Multi-step and naturally resumable: intentionally absent from HONOURED.
+  v1.use('/account', accountRouter);
 
   v1.use('/profile', profileRouter);
   v1.use('/profile/notifications', notificationSettingsRouter);

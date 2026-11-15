@@ -704,6 +704,7 @@ export function profileCanReceive(
   const settings = profile?.notifications;
   return Boolean(
     profile &&
+    !profile.deletionRequestedAt &&
     notificationRecipientAllowed(profile.id) &&
     settings?.enabled &&
     settings.telegram.chatId &&
