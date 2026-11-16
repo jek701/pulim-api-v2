@@ -252,15 +252,18 @@ User-facing bot/notification/SMS texts localized uz/ru/en, default `uz`.
   Existing daily safety cap applies; marketing additionally reserves at most one CRM job per
   local delivery day and checks a serialized daily marketing slot at delivery. Quiet-hour and
   provider deferrals preserve the absolute CRM expiration. APNs stats include crmAttempts/crmSent.
-- After local deletion and before Firebase deletion, a signed POST `{uid}` is sent to the
-  CRM `/internal/v1/users/deleted`, expecting 204 within 5 seconds. A dedicated worker drain
+- After local deletion, a dedicated worker drain sends a signed POST `{uid}` to the
+  CRM `/internal/v1/users/deleted`, expecting 204 within 5 seconds. The drain
   retries operational `notification_tasks` documents under status `crm_delete_pending`, using
   the existing queue_run index. These contain uid but deliberately no userId, survive deletion
   sweeps, and are removed on CRM acknowledgment. Persisted just before final profile removal,
   they close the normal process-crash gap; the worker waits for profile removal. Retries have
-  backoff capped at one hour, 10 jobs per 30-second cycle. This drain runs even with notification
-  delivery disabled; embedded mode also supports it. A failed durable write falls back to three
-  bounded in-process attempts, which can be lost on process termination. No URL means silent skip.
+  backoff capped at one hour, 10 jobs per 30-second cycle. New tombstones expire after 90 days;
+  the drain removes expired jobs even when CRM is disabled (there is no general TTL cleanup).
+  Older tombstones without expiry do not have a creation time from which to calculate it.
+  This drain runs even with notification
+  delivery disabled; embedded mode also supports it. A failed durable write falls back to two
+  in-process attempts with a 2-second timeout each, which can be lost on process termination. No URL means silent skip.
   Recreated profiles cause old pending deletion jobs to be dropped to protect a new account;
   the uid-only peer contract cannot eliminate a concurrent re-registration race during HTTP.
 

@@ -28,10 +28,7 @@ export async function putConsent(
       previous.granted === input.granted &&
       previous.version === input.version &&
       previous.language === input.language &&
-      previous.screen === input.screen &&
-      (input.at === undefined ||
-        previous.at ===
-          Math.max(previous.serverAt - 86400000, Math.min(previous.serverAt + 86400000, input.at)))
+      previous.screen === input.screen
     )
       return;
     const at = Math.max(now - 86400000, Math.min(now + 86400000, input.at ?? now));

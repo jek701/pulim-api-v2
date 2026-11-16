@@ -40,7 +40,8 @@ describe('account deletion fan-out', () => {
     expect(await rememberCrmDeletion('synthetic-uid')).toBe(true);
     const record = [...state.records.values()][0];
     expect(record.userId).toBeUndefined();
-    await notifyCrmDeletion('synthetic-uid', true);
+    expect(record.expiresAt).toBe(record.createdAt + 90 * 86400000);
+    await runCrmDeletionFanouts();
     const [url, options] = fetchMock.mock.calls[0];
     expect(url).toBe('https://crm.example.test/internal/v1/users/deleted');
     expect(options.body).toBe(JSON.stringify({ uid: 'synthetic-uid' }));
@@ -61,7 +62,7 @@ describe('account deletion fan-out', () => {
   it('failure never fails deletion; retains the durable job and worker retries with a fresh request id', async () => {
     fetchMock.mockResolvedValueOnce({ status: 503 });
     await rememberCrmDeletion('synthetic-uid');
-    await expect(notifyCrmDeletion('synthetic-uid', true)).resolves.toBeUndefined();
+    await runCrmDeletionFanouts();
     expect(state.records.size).toBe(1);
     expect(state.warn).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(state.warn.mock.calls)).not.toContain('synthetic-uid');
@@ -86,7 +87,7 @@ describe('account deletion fan-out', () => {
   it('waits for profile removal and drops an old tombstone if a new profile already exists', async () => {
     await rememberCrmDeletion('u');
     state.records.set('profiles/u', { deletionRequestedAt: 1 });
-    await notifyCrmDeletion('u', true);
+    await runCrmDeletionFanouts();
     expect(fetchMock).not.toHaveBeenCalled();
     state.records.set('profiles/u', { updatedAt: Date.now() });
     vi.setSystemTime(Date.now() + 60000);
@@ -94,15 +95,28 @@ describe('account deletion fan-out', () => {
     expect(fetchMock).not.toHaveBeenCalled();
     expect(state.records.size).toBe(1);
   });
-  it('uses three bounded attempts when durable storage is unavailable', async () => {
+  it('uses two bounded attempts when durable storage is unavailable', async () => {
+    const timeout = vi.spyOn(AbortSignal, 'timeout');
     fetchMock.mockRejectedValue(new Error('private transport error'));
     const pending = notifyCrmDeletion('u', false);
     await vi.runAllTimersAsync();
     await pending;
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(timeout).toHaveBeenCalledTimes(2);
+    expect(timeout).toHaveBeenCalledWith(2000);
+    timeout.mockRestore();
     expect(state.warn).toHaveBeenCalledWith(
       expect.objectContaining({ uidHash: expect.any(String) }),
       'crm.deletion.retry_exhausted',
     );
+  });
+  it('deletes an expired tombstone without contacting the CRM', async () => {
+    await rememberCrmDeletion('u');
+    state.env.PULIM_CRM_API_URL = undefined;
+    vi.setSystemTime(Date.now() + 90 * 86400000);
+    await runCrmDeletionFanouts();
+    expect(state.records.size).toBe(0);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(state.warn).toHaveBeenCalledWith({ uidHash: expect.stringMatching(/^[a-f0-9]{64}$/) }, 'crm.deletion.expired');
   });
 });

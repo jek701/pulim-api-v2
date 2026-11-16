@@ -48,8 +48,12 @@ describe('AI consent route', () => {
     vi.setSystemTime(now + 1000);
     await call({ ...body, at: now + 9 * 86400000 });
     expect(consent().serverAt).toBe(now);
-    await call({ ...body, at: 0 });
+    await call({ ...body, version: '2.0', at: 0 });
     expect(consent().at).toBe(Date.now() - 86400000);
+    const saved = { ...consent() };
+    vi.setSystemTime(now + 2000);
+    await call({ ...body, version: '2.0', at: 0 });
+    expect(consent()).toEqual(saved);
   });
   it('anonymous sessions get 403 without a write', async () => {
     expect((await call(body, 'anonymous')).status).toBe(403);

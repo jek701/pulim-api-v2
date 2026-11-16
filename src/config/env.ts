@@ -110,8 +110,14 @@ const EnvSchema = z
     /** Comma-separated Firebase uids allowed to file dev notes (owner-only feedback tool). */
     DEV_NOTES_UIDS: z.string().default(''),
 
-    PULIM_CRM_INTERNAL_SECRET: z.string().min(32).optional(),
-    PULIM_CRM_API_URL: z.string().url().optional(),
+    PULIM_CRM_INTERNAL_SECRET: z.preprocess(
+      (v) => (typeof v === 'string' && !v.trim() ? undefined : v),
+      z.string().min(32).optional(),
+    ),
+    PULIM_CRM_API_URL: z.preprocess(
+      (v) => (typeof v === 'string' && !v.trim() ? undefined : v),
+      z.string().url().optional(),
+    ),
     PULIM_PAYMENT_INTERNAL_SECRET: z.string().min(32).optional(),
 
     // ── Eskiz SMS gateway (phone sign-in) ──────────────────────────────────────

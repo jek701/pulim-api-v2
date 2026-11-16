@@ -104,7 +104,7 @@ async function performDeletion(uid: string): Promise<void> {
   const crmRemembered = await rememberCrmDeletion(uid);
   counts.profiles = await deleteByField('profiles', '__id__', uid);
   // Local data is gone and tokens are revoked. A Firebase outage must not delay CRM erasure.
-  await notifyCrmDeletion(uid, crmRemembered);
+  if (!crmRemembered) await notifyCrmDeletion(uid, false);
   try {
     await auth.deleteUser(uid);
   } catch (error) {

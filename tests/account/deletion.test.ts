@@ -68,7 +68,7 @@ describe('resumable account deletion', () => {
     expect(mocks.purgeRelational.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.deleteByField.mock.invocationCallOrder.at(-1)!,
     );
-    expect(mocks.notifyCrm).toHaveBeenCalledWith('test-user', undefined);
+    expect(mocks.notifyCrm).toHaveBeenCalledWith('test-user', false);
     expect(mocks.notifyCrm.mock.invocationCallOrder[0]).toBeGreaterThan(mocks.deleteByField.mock.invocationCallOrder.at(-1)!);
     expect(mocks.notifyCrm.mock.invocationCallOrder[0]).toBeLessThan(mocks.deleteUser.mock.invocationCallOrder[0]);
     expect(mocks.deleteUser.mock.invocationCallOrder[0]).toBeGreaterThan(
@@ -99,6 +99,14 @@ describe('resumable account deletion', () => {
     await expect(deleteAccount('test-user')).resolves.toBeUndefined();
     expect(mocks.markDeletion).toHaveBeenCalledTimes(2);
     expect(mocks.deleteUser).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not wait for or invoke CRM delivery when the tombstone exists', async () => {
+    mocks.rememberCrm.mockResolvedValue(true);
+    mocks.notifyCrm.mockImplementation(() => new Promise(() => {}));
+    await expect(deleteAccount('test-user')).resolves.toBeUndefined();
+    expect(mocks.notifyCrm).not.toHaveBeenCalled();
+    expect(mocks.deleteUser).toHaveBeenCalled();
   });
 
   it('retries a Firebase-only failure and accepts an already absent Firebase user', async () => {

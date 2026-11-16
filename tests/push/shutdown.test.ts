@@ -15,6 +15,7 @@ vi.mock('../../src/telegram/client', () => ({ setMyCommands: vi.fn(), setWebhook
 vi.mock('../../src/telegram/fxQueue.service', () => ({ startFxQueue: () => ({ stop: async () => {} }) }));
 vi.mock('../../src/routes/telegramWebhook.routes', () => ({ drainTelegramUpdates: async () => {}, recoverTelegramUpdates: async () => {} }));
 vi.mock('../../src/notifications/loops', () => ({ startNotificationLoops: () => ({ stop: async () => {} }) }));
+vi.mock('../../src/crm/deletion', () => ({ startCrmDeletionLoop: () => ({ stop: async () => {} }) }));
 vi.mock('../../src/communications/repository', () => ({ runCommunicationDispatch: async () => {} }));
 vi.mock('../../src/push/apns', () => ({ closeApns: mocks.closeApns }));
 vi.mock('../../src/push/kick', () => ({ drainPushKicks: mocks.drain }));
