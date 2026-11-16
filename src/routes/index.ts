@@ -20,6 +20,7 @@ import { debtsRouter } from './debts.routes';
 import { depositsRouter } from './deposits.routes';
 import { aiRouter } from './ai.routes';
 import { aiChatsRouter } from './aiChats.routes';
+import { crmInternalRouter } from './crmInternal.routes';
 import { billingInternalRouter } from './billingInternal.routes';
 import { telegramWebhookRouter } from './telegramWebhook.routes';
 import { notificationSettingsRouter } from './notificationSettings.routes';
@@ -40,6 +41,7 @@ export function mountRoutes(app: Express): void {
   app.use('/auth/telegram', telegramAuthLimiter, telegramAuthRouter);
   app.use('/auth/phone', phoneAuthLimiter, phoneAuthRouter);
   app.use('/internal/v1/billing/events', billingInternalRouter);
+  app.use('/internal/v1/crm', crmInternalRouter);
   app.use('/telegram/webhook', telegramWebhookLimiter, telegramWebhookRouter);
   app.use('/shortcut/v1', shortcutLimiter, shortcutRouter);
 

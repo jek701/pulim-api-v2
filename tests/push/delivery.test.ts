@@ -31,6 +31,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock('../../src/config/env', () => ({
   env: {
+    PULIM_CRM_INTERNAL_SECRET: 'synthetic-key',
     NOTIFICATIONS_ENABLED: true,
     BACKGROUND_JOBS_ENABLED: true,
     MAINTENANCE_MODE: false,
@@ -611,5 +612,54 @@ describe('delivery diagnostics', () => {
       'notify.failed',
     );
     expect(mocks.job!.status).toBe('failed');
+  });
+});
+
+
+describe('CRM push delivery', () => {
+  function crm(category: 'marketing' | 'transactional' = 'marketing') {
+    mocks.job!.type = 'crm'; mocks.job!.pushOnly = true;
+    mocks.job!.payload = { kind: 'push', type: 'crm', group: 'tips', link: '/premium', values: {}, eventAt: NOW,
+      crm: { mid: 'crm-mid', category, title: 'Literal {title}', body: 'Localised body', collapseKey: 'journey' } };
+    const user = profile(true, true);
+    (user.notifications.groups as any).tips = true;
+    mocks.profile.mockResolvedValue(user);
+    return user;
+  }
+  it('sends the binding CRM payload verbatim with collapse id, expiration and CRM stats', async () => {
+    crm(); await runDelivery();
+    expect(mocks.sendApns).toHaveBeenCalledWith(device('a'), expect.objectContaining({
+      type: 'crm', link: '/premium', crm: { mid: 'crm-mid' }, aps: expect.objectContaining({ alert: { title: 'Literal {title}', body: 'Localised body' } }),
+    }), { expiration: Math.floor(mocks.job!.staleAt / 1000), collapseId: 'journey' });
+    expect(mocks.sendTelegram).not.toHaveBeenCalled();
+    expect(mocks.relevant).not.toHaveBeenCalled();
+    expect(mocks.reserve).toHaveBeenCalledWith('owner', NOW, false, false, true);
+    expect(mocks.stat).toHaveBeenCalledWith(true, false, NOW, 'apns', 'crm');
+  });
+  it('never falls back to Telegram when every device is rejected', async () => {
+    crm(); mocks.sendApns.mockResolvedValue({ status: 410, reason: 'Unregistered' }); await runDelivery();
+    expect(mocks.sendTelegram).not.toHaveBeenCalled(); expect(mocks.job!.status).toBe('skipped');
+  });
+  it('does not send Telegram when APNs is unavailable', async () => {
+    crm(); mocks.configured.mockReturnValue(false); await runDelivery();
+    expect(mocks.sendTelegram).not.toHaveBeenCalled(); expect(mocks.sendApns).not.toHaveBeenCalled();
+  });
+  it('rechecks withdrawn marketing consent while queued', async () => {
+    const user = crm(); (user.notifications.groups as any).tips = false; await runDelivery();
+    expect(mocks.finish).toHaveBeenCalledWith('job', 'skipped', 'opted_out'); expect(mocks.sendApns).not.toHaveBeenCalled();
+  });
+  it('transactional ignores tips and other notification groups', async () => {
+    const user = crm('transactional'); (user.notifications.groups as any).tips = false; user.notifications.groups.money = false; await runDelivery();
+    expect(mocks.sendApns).toHaveBeenCalledOnce(); expect(mocks.sendTelegram).not.toHaveBeenCalled();
+    expect(mocks.reserve).toHaveBeenCalledWith('owner', NOW, false, false);
+  });
+  it('defers CRM quiet hours preserving absolute expiration', async () => {
+    crm(); vi.setSystemTime(Date.parse('2026-11-04T18:00:00Z')); await runDelivery();
+    expect(mocks.defer).toHaveBeenCalledWith('job', Date.parse('2026-11-05T03:00:00Z'), true);
+    expect(mocks.reserve).not.toHaveBeenCalled(); expect(mocks.sendApns).not.toHaveBeenCalled();
+  });
+  it('expires a CRM job without attempting delivery', async () => {
+    crm(); mocks.job!.staleAt = NOW; await runDelivery();
+    expect(mocks.finish).toHaveBeenCalledWith('job', 'skipped', 'expired'); expect(mocks.sendApns).not.toHaveBeenCalled();
   });
 });

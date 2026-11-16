@@ -4,6 +4,7 @@ import { logger } from '../utils/logger';
 
 export const requestLogger = pinoHttp({
   logger,
+  autoLogging: { ignore: req => /^\/internal\/v1\/crm(?:\/|$)/.test(req.url ?? '') },
   // Correlate logs/responses: reuse an incoming X-Request-Id or mint one.
   genReqId: (req, res) => {
     const incoming = req.headers['x-request-id'];
@@ -25,6 +26,7 @@ export const requestLogger = pinoHttp({
     paths: [
       'req.headers.authorization',
       'req.headers.cookie',
+      'req.headers.x-pulim-signature',
       'req.headers.x-telegram-bot-api-secret-token',
       'req.body.firebaseIdToken',
       'req.body.token',

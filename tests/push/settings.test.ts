@@ -45,7 +45,7 @@ describe('push settings contract', () => {
   it('provides additive defaults for old profiles, with family expenses off', () => {
     expect(normalizePushSettings({ enabled: false })).toEqual({
       enabled: false,
-      groups: { money: true, family: true, familyExpenses: false, premium: true, habit: true },
+      groups: { money: true, family: true, familyExpenses: false, premium: true, habit: true, tips: false },
       alsoTelegram: false,
       quietHours: { start: '22:00', end: '08:00' },
       timezone: 'Asia/Tashkent',
@@ -75,6 +75,7 @@ describe('push settings contract', () => {
       familyExpenses: false,
       premium: true,
       habit: true,
+      tips: false,
     });
     expect(next.quietHours).toEqual({ start: '22:00', end: '09:15' });
     expect(next.telegram.status).toBe('reachable');
@@ -95,6 +96,17 @@ describe('push settings contract', () => {
       expect(notificationSettingsPatchSchema.safeParse(value).success).toBe(false);
     expect(profilePatchSchema.safeParse({ language: 'de' }).success).toBe(false);
     expect(profilePatchSchema.safeParse({ timezone: 'Mars/Olympus' }).success).toBe(false);
+  });
+  it('records marketing consent changes and preserves the evidence on repeated patches', async () => {
+    expect(normalizePushSettings().groups.tips).toBe(false);
+    const enabled = await patchNotificationSettings('one', notificationSettingsPatchSchema.parse({ groups: { tips: true }, tipsUpdatedAt: 1 }));
+    expect(enabled.groups?.tips).toBe(true);
+    expect(enabled.tipsUpdatedAt).toBeGreaterThan(1);
+    const repeat = await patchNotificationSettings('one', { groups: { tips: true } });
+    expect(repeat.tipsUpdatedAt).toBe(enabled.tipsUpdatedAt);
+    const withdrawn = await patchNotificationSettings('one', { groups: { tips: false } });
+    expect(withdrawn.groups?.tips).toBe(false);
+    expect(withdrawn.tipsUpdatedAt).toBeGreaterThanOrEqual(enabled.tipsUpdatedAt!);
   });
   it('requires a profile for settings changes', async () => {
     state.profile = null;

@@ -12,8 +12,8 @@ const payload: PushPayload = { kind: 'push', type: 'budget_80', group: 'money', 
 
 describe('push templates', () => {
   it.each(['uz', 'ru', 'en'] as const)('has all 21 templates in %s with bounded plain text', language => {
-    expect(Object.keys(pushTemplates[language]).sort()).toEqual([...PUSH_TYPES].sort());
-    for (const type of PUSH_TYPES) {
+    expect(Object.keys(pushTemplates[language]).sort()).toEqual(PUSH_TYPES.filter(type => type !== 'crm').sort());
+    for (const type of PUSH_TYPES.filter(type => type !== 'crm')) {
       const result = renderPush({ ...payload, type }, language, 'n1');
       expect(result.aps.alert.title).not.toMatch(/\{\w+\}/);
       expect(result.aps.alert.body).not.toMatch(/\{\w+\}/);
@@ -56,7 +56,7 @@ describe('push templates', () => {
   });
 
   it('has time-sensitive interruption only for exceeded budgets and Apple billing failure', () => {
-    for (const type of PUSH_TYPES) {
+    for (const type of PUSH_TYPES.filter(type => type !== 'crm')) {
       expect(renderPush({ ...payload, type }, 'ru', 'n1').aps['interruption-level'])
         .toBe(type === 'budget_100' || type === 'apple_billing_failed' ? 'time-sensitive' : 'active');
     }

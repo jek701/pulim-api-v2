@@ -68,7 +68,7 @@ Public: `GET /health`, `/health/live`, `/health/ready`; `POST /auth/telegram`; `
   Revoked tokens may resume deletion but cannot bootstrap. Billing acknowledges missing/deleting
   profiles without writes; old event-id dedupe markers retain no uid/order data.
   See [account deletion report](../next/api1-account-deletion-report.md) for the complete retention inventory.
-- profile: `POST /profile/bootstrap`, `POST /profile/trial/start`, `GET|PATCH /profile`, `PATCH /profile/home-widgets`, `POST /profile/telegram-link-dismissed`, `PATCH /profile/notifications` (partial `enabled`, `groups`, `alsoTelegram`, `quietHours`, `timezone`; old `{enabled}` remains supported); `GET|PATCH /settings`
+- profile: `PUT /profile/consents/ai` (registered users only; consent evidence, 204), `POST /profile/bootstrap`, `POST /profile/trial/start`, `GET|PATCH /profile`, `PATCH /profile/home-widgets`, `POST /profile/telegram-link-dismissed`, `PATCH /profile/notifications` (partial `enabled`, `groups`, `alsoTelegram`, `quietHours`, `timezone`; old `{enabled}` remains supported); `GET|PATCH /settings`
 - `categories`, `subcategories` (GET/POST/DELETE; custom = Premium). Exception: `POST /profile/bootstrap` takes an optional onboarding selection `{categories:{defaults:[{type,name}],custom:[{type,name,icon,color?}]}}` (zod `bootstrapSchema`; ≥1 expense, names 1..40, ≤10 custom) and, only for a user with no categories yet, seeds just those (defaults via `defaultCategoryId`, custom ids `${uid}__onboarding__<type>_<sha256-16>`, same doc shape). It is the one free path to custom categories and how a guest's onboarding categories reach the account. Capability `onboardingCategories: true` on `GET /sync/capabilities`. Default colors contain no purple (existing rows are not migrated). See [offline sync](../offline-sync.md#1a-bis-onboarding-categories-guest-import-and-first-sign-in).
 - `cards` GET/POST(limit)/PATCH/DELETE, `POST /cards/refill {creditCardId, sourceCardId, amount}`
 - `budgets` GET, `PUT /:categoryId` (Premium), DELETE; special ids `__income__`, `__debts__`, `__subscription__`
@@ -81,7 +81,7 @@ Public: `GET /health`, `/health/live`, `/health/ready`; `POST /auth/telegram`; `
   `/current/categories`, `/current/budgets`, `/current/cards` (+ `/:id/access {enabled, showBalance}`), `/current/goals` (+ contribute), `/current/transactions`. Error messages here are Russian.
 - dev notes: `GET /dev-notes/access`, `GET|POST /dev-notes`, `GET /:id/screenshot`, `POST /:id/replies`, `DELETE /:id`. Create accepts `{comment, context?, screenshot?}`; optional context fields include `platform` (`web|telegram|ios|android`), `route` (max 300 chars), `appVersion` / `osVersion` (32 each), `device` (64), and existing `appBuild` (64). Strings are trimmed. `context.platform: 'ios'` stores/returns `source: 'ios'`; other HTTP creates retain `source: 'app'`, and bot `/idea` retains `source: 'telegram'`. All fields are additive; older notes may have no platform/route. Screenshots remain base64 image data URLs, max 900,000 characters. No migration required.
 - communications: `GET|PATCH /communications/preferences`, `GET /communications/inbox`, `POST /inbox/:id/{read|click|dismiss}`, admin `GET /admin/access`, `GET|POST /admin/campaigns`, `PATCH /:id`, `POST /:id/send|pause`
-- Native push: authenticated `POST /push/devices {token,platform:"ios",environment:"sandbox"|"production",bundleId,appVersion,buildNumber,language:"uz"|"ru"|"en",timezone}` → `{device:{id,environment,enabled}}`; upsert unique hex token, atomically move ownership and update profile language/timezone. `bundleId` must equal `APNS_BUNDLE_ID` (400 otherwise); disabled/unconfigured push or a missing registry returns 503 `PUSH_UNAVAILABLE`. At most 10 enabled devices/uid; registration retires the oldest by lastSeenAt. `DELETE /push/devices/:token` is owned, idempotent, returns 204; anonymous Firebase users are rejected. GET/PATCH `/profile` retain the complete legacy notification defaults (including `telegram`) alongside normalized groups (money/family/premium/habit true, familyExpenses false), alsoTelegram false, quietHours 22:00–08:00, timezone Asia/Tashkent, and read-only pushActive (enabled devices, independent of server switch). Profile language/timezone are validated.
+- Native push: authenticated `POST /push/devices {token,platform:"ios",environment:"sandbox"|"production",bundleId,appVersion,buildNumber,language:"uz"|"ru"|"en",timezone}` → `{device:{id,environment,enabled}}`; upsert unique hex token, atomically move ownership and update profile language/timezone. `bundleId` must equal `APNS_BUNDLE_ID` (400 otherwise); disabled/unconfigured push or a missing registry returns 503 `PUSH_UNAVAILABLE`. At most 10 enabled devices/uid; registration retires the oldest by lastSeenAt. `DELETE /push/devices/:token` is owned, idempotent, returns 204; anonymous Firebase users are rejected. GET/PATCH `/profile` retain the complete legacy notification defaults (including `telegram`) alongside normalized groups (money/family/premium/habit true, familyExpenses/tips false), alsoTelegram false, quietHours 22:00–08:00, timezone Asia/Tashkent, and read-only pushActive (enabled devices, independent of server switch). Profile language/timezone are validated.
 - `GET|POST|DELETE /shortcut-token` (POST Premium, plain key returned once)
 - capture (voice / receipt scan, not for guests, not Premium-gated, monthly quota): `GET /capture/quota`, `GET /capture/soliq-config`, `POST /capture/voice`, `POST /capture/receipt/soliq`, `POST /capture/receipt/photo`; optional `capture` object on `POST /transactions`. See **Capture**.
 
@@ -172,7 +172,7 @@ Deploy health check curls `/` → 404 is normal; real readiness is `/health/read
 Backups: root cron daily 03:17 → `scripts/migration/backup-mysql.sh` for app DB and payment DB, into `/root/pulim-backups/mysql` (retention deletion off unless `PULIM_BACKUP_RETENTION_DAYS ≥ 30`). Cutover snapshots `/root/pulim-backups/firestore-mysql-20261013`.
 Env names (groups): server (NODE_ENV, PORT, BIND_HOST, LOG_LEVEL, CORS_ORIGINS, MAINTENANCE_MODE, BACKGROUND_JOBS_ENABLED), MYSQL_* (read in db/database.ts), FIREBASE_* / GOOGLE_APPLICATION_CREDENTIALS,
 TELEGRAM_* (BOT_TOKEN, WEBHOOK_SECRET, WEBHOOK_URL, BOT_USERNAME, QUICK_ENTRY_ENABLED, PARSE_*, VOICE/RECEIPT/TRANSCRIBE models, FX_RETRY_*), WEB_APP_URL, PREMIUM_CHECKOUT_URL,
-NOTIFICATIONS_ENABLED + NOTIFY_*, CAPTURE_* + SOLIQ_OFD_SIGNING_KEY + SOLIQ_AMOUNT_DIVISOR, PUSH_ENABLED + APNS_KEY_ID/APNS_TEAM_ID/APNS_KEY_PATH/APNS_BUNDLE_ID, OPENAI_API_KEY + AI_*, DEV_NOTES_UIDS, PULIM_PAYMENT_INTERNAL_SECRET, ESKIZ_*, PHONE_CODE_*, PHONE_AUTH_DEBUG_ECHO_CODE (rejected in prod).
+NOTIFICATIONS_ENABLED + NOTIFY_*, CAPTURE_* + SOLIQ_OFD_SIGNING_KEY + SOLIQ_AMOUNT_DIVISOR, PUSH_ENABLED + APNS_KEY_ID/APNS_TEAM_ID/APNS_KEY_PATH/APNS_BUNDLE_ID, OPENAI_API_KEY + AI_*, DEV_NOTES_UIDS, PULIM_PAYMENT_INTERNAL_SECRET, PULIM_CRM_INTERNAL_SECRET, PULIM_CRM_API_URL, ESKIZ_*, PHONE_CODE_*, PHONE_AUTH_DEBUG_ECHO_CODE (rejected in prod).
 `.env.example` misses BIND_HOST, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY, TELEGRAM_TRANSCRIBE_MODEL, TELEGRAM_VOICE_MAX_SECONDS, TELEGRAM_RECEIPT_MODEL.
 
 ## Tests & conventions
@@ -212,3 +212,56 @@ User-facing bot/notification/SMS texts localized uz/ru/en, default `uz`.
 - Opt-in `npm run eval:plan-setup` covers 14 synthetic cases and reports role accuracy,
   exact merge partition accuracy and mean model cost. Chat eval includes four request-local
   forecast questions requiring successful simulator use. Neither eval is part of `npm test`.
+
+
+## API2 — CRM integration and consent (2026-11-16)
+
+- Public `PUT /v1/profile/consents/:type`, currently only `ai`: strict body
+  `{granted:boolean,version:string (1..20),language:"ru"|"uz"|"en",screen:"sheet"|"settings",at?:epochMs}`.
+  Firebase authentication; anonymous sessions get `403 ANONYMOUS_NOT_ALLOWED`. Returns 204.
+  Stores `profile.consents.ai` with a ±1-day-clamped client `at`, server `serverAt`, and
+  `revokedAt` on a true→false transition (null after granting). Identical retries preserve
+  evidence; supports the regular Idempotency-Key for this single-transaction write.
+  **AI routes do not enforce this consent in this release**, to preserve older native/web clients.
+  Whole-profile account deletion removes consent; no separate consent records remain.
+- `PATCH /v1/profile/notifications` accepts `groups.tips`. Default false for old and new
+  profiles; profile reads normalize it. Actual changes stamp server `notifications.tipsUpdatedAt`.
+  No existing notification type uses this group. Only CRM marketing checks it; CRM
+  transactional checks the master `enabled` switch alone. Consent timestamps are not CRM facts.
+- Optional `PULIM_CRM_INTERNAL_SECRET` (minimum 32 characters) enables the CRM boundary.
+  With it unset, `/internal/v1/crm/*` returns 404 before parsing JSON or request logging.
+  Optional `PULIM_CRM_API_URL` is the peer base URL for deletion fan-out. Neither changes
+  the existing notification/APNs/background/recipient rollout switches.
+- Internal routes, outside Firebase auth, end-user rate limiting and Idempotency-Key middleware:
+  `GET /internal/v1/crm/users?cursor&limit&updatedSince` (limit 1..500, default 500),
+  `POST /internal/v1/crm/users/facts {uids:[...]}` (1..200),
+  `POST /internal/v1/crm/messages`, `POST /internal/v1/crm/messages/status {mids:[...]}` (1..500).
+  HMAC headers: X-Pulim-Timestamp (epoch ms ±5 min), X-Pulim-Request-Id (UUID),
+  X-Pulim-Signature (hex SHA256 HMAC of `timestamp.requestId.rawBody`; GET signs empty body).
+  The shared verifier preserves billing's existing `timestamp.rawBody` scheme and event-id dedupe.
+  CRM request-id replay cache is bounded and process-local; message idempotency is durable.
+- Users page by binary profile primary key, base64url cursor of the last inspected key.
+  Anonymous/deleting profiles are omitted; an advancing page can be empty. `updatedSince`
+  is accepted but ignored because updated_at_ms has no index. Only fixed anonymous facts
+  cross this boundary. aiMessages30d/captures30d currently return zero; see the report.
+- CRM jobs are push-only `type:"crm"` queue documents, id `crm:<sha256(mid)>`, storing the
+  original admission outcome. No Telegram fallback, templates or AI rewriting. Status queries
+  use these same primary keys; outcomes have the queue's 90-day expiresAt hint but no current
+  automatic purge, and account deletion removes owned jobs. APNs includes `type`, `link`,
+  `crm:{mid}`, collapseKey (≤64 UTF-8 bytes) and expiration from the original TTL.
+  Existing daily safety cap applies; marketing additionally reserves at most one CRM job per
+  local delivery day and checks a serialized daily marketing slot at delivery. Quiet-hour and
+  provider deferrals preserve the absolute CRM expiration. APNs stats include crmAttempts/crmSent.
+- After local deletion and before Firebase deletion, a signed POST `{uid}` is sent to the
+  CRM `/internal/v1/users/deleted`, expecting 204 within 5 seconds. A dedicated worker drain
+  retries operational `notification_tasks` documents under status `crm_delete_pending`, using
+  the existing queue_run index. These contain uid but deliberately no userId, survive deletion
+  sweeps, and are removed on CRM acknowledgment. Persisted just before final profile removal,
+  they close the normal process-crash gap; the worker waits for profile removal. Retries have
+  backoff capped at one hour, 10 jobs per 30-second cycle. This drain runs even with notification
+  delivery disabled; embedded mode also supports it. A failed durable write falls back to three
+  bounded in-process attempts, which can be lost on process termination. No URL means silent skip.
+  Recreated profiles cause old pending deletion jobs to be dropped to protect a new account;
+  the uid-only peer contract cannot eliminate a concurrent re-registration race during HTTP.
+
+Full field sources, cost estimates, limits and validation: [API2 report](../next/api2-crm-internal-report.md).

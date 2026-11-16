@@ -2,7 +2,7 @@ import type { SupportedLanguage } from '../telegram/types';
 import type { ApnsPayload, PushPayload, PushType } from './types';
 
 type Template = readonly [title: string, body: string];
-export const pushTemplates: Record<SupportedLanguage, Record<PushType, Template>> = {
+export const pushTemplates: Record<SupportedLanguage, Record<Exclude<PushType, 'crm'>, Template>> = {
   ru: {
     budget_80: ['Бюджет «{category}» почти исчерпан', 'Потрачено {percent}% — осталось {amount} до конца месяца'],
     budget_100: ['Бюджет «{category}» превышен', 'Сверх плана на {amount}. Посмотрим, где можно сэкономить?'],
@@ -106,6 +106,12 @@ export function truncatePushText(text: string, limit: number): string {
 }
 
 export function renderPush(payload: PushPayload, language: SupportedLanguage, notificationId: string): ApnsPayload {
+  if (payload.type === 'crm') {
+    if (!payload.crm) throw new Error('CRM payload missing');
+    return { aps: { alert: { title: payload.crm.title, body: payload.crm.body },
+      sound: 'default', 'thread-id': 'tips', 'interruption-level': 'active' },
+      type: 'crm', link: payload.link, crm: { mid: payload.crm.mid }, notificationId };
+  }
   const values = { ...payload.values };
   if (payload.type === 'monthly_summary' && language !== 'ru' && typeof values.month === 'string') {
     values.month = values.month.charAt(0).toLocaleUpperCase(language) + values.month.slice(1);

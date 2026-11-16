@@ -1,3 +1,4 @@
+import { startCrmDeletionLoop } from './crm/deletion';
 import { env } from './config/env';
 import { checkDatabase, closeDatabase, database } from './db/database';
 import { initOfflineSync } from './db/syncIndex';
@@ -22,6 +23,7 @@ async function main(): Promise<void> {
   let timer: NodeJS.Timeout | null = null;
   let communicationRun: Promise<unknown> | undefined;
   let stopping = false;
+  const crmDeletions = startCrmDeletionLoop(false);
   let merchantRun: Promise<void> | undefined;
   const merchantTick = () => {
     if (stopping || merchantRun) return;
@@ -50,7 +52,7 @@ async function main(): Promise<void> {
     if (timer) clearInterval(timer);
     clearInterval(merchantTimer);
     try {
-      await Promise.all([loops?.stop(), communicationRun, merchantRun, drainPushKicks()]);
+      await Promise.all([loops?.stop(), communicationRun, merchantRun, crmDeletions.stop(), drainPushKicks()]);
       await closeDatabase();
     } finally {
       closeApns();

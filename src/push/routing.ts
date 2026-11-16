@@ -16,7 +16,7 @@ export function notificationChannels(input: {
   const active =
     input.activeDevice && input.configured && !input.digest && input.marketing?.inApp !== false;
   const groupEnabled =
-    !input.group || (settings?.groups?.[input.group] ?? input.group !== 'familyExpenses');
+    !input.group || (settings?.groups?.[input.group] ?? !['familyExpenses', 'tips'].includes(input.group));
   const telegramReachable = Boolean(
     settings?.telegram?.chatId &&
     settings?.telegram?.status !== 'blocked' &&

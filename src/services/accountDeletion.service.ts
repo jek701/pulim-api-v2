@@ -1,3 +1,4 @@
+import { rememberCrmDeletion, notifyCrmDeletion } from '../crm/deletion';
 import { createHash } from 'node:crypto';
 import { auth } from '../config/firebaseAuth';
 import { tables, type Entity } from '../db/tables';
@@ -47,6 +48,7 @@ export const accountDeletionPolicy = {
   telegramMessages: 'owner',
   telegramUsage: 'owner',
   notifications: 'owner',
+  // CRM erasure tombstones have uid but no userId; they survive until the peer acknowledges.
   notificationTasks: 'owner',
   notificationState: 'uid',
   notificationStats: 'keep',
@@ -99,7 +101,10 @@ async function performDeletion(uid: string): Promise<void> {
   addCounts(counts, await purgeRelated(uid));
   await sweepOwnedDocuments(uid, counts);
   addCounts(counts, await purgeRelational(uid));
+  const crmRemembered = await rememberCrmDeletion(uid);
   counts.profiles = await deleteByField('profiles', '__id__', uid);
+  // Local data is gone and tokens are revoked. A Firebase outage must not delay CRM erasure.
+  await notifyCrmDeletion(uid, crmRemembered);
   try {
     await auth.deleteUser(uid);
   } catch (error) {

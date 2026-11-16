@@ -1,3 +1,4 @@
+import { startCrmDeletionLoop } from './crm/deletion';
 import { env } from './config/env';
 import { createApp } from './app';
 import { checkDatabase, closeDatabase, database } from './db/database';
@@ -46,6 +47,7 @@ async function main(): Promise<void> {
   const recoveryTimer = jobsEnabled ? setInterval(recover, 30_000) : null;
   recoveryTimer?.unref();
   if (jobsEnabled) recover();
+  const crmDeletions = jobsEnabled && env.NOTIFY_EMBEDDED ? startCrmDeletionLoop(true) : null;
   const notifications =
     jobsEnabled && env.NOTIFICATIONS_ENABLED && env.NOTIFY_EMBEDDED
       ? startNotificationLoops({ unref: true })
@@ -69,6 +71,7 @@ async function main(): Promise<void> {
         ),
         fxQueue?.stop(),
         notifications?.stop(),
+        crmDeletions?.stop(),
         recoveryRun,
         drainPushKicks(),
       ]);

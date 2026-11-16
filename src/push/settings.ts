@@ -7,6 +7,7 @@ export const DEFAULT_NOTIFICATION_GROUPS = {
   familyExpenses: false,
   premium: true,
   habit: true,
+  tips: false,
 } as const;
 
 /** Old profiles remain usable before any settings backfill or device migration. */

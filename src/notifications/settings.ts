@@ -109,6 +109,8 @@ export async function patchNotificationSettings(
       groups: { ...normalized.groups, ...input.groups },
       quietHours: { ...normalized.quietHours, ...input.quietHours },
     };
+    if (input.groups?.tips !== undefined && input.groups.tips !== normalized.groups.tips)
+      next.tipsUpdatedAt = now;
     // Read-only state is derived from the current device registry, never persisted.
     delete next.pushActive;
     if (input.enabled !== undefined) {

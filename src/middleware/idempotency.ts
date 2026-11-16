@@ -49,6 +49,7 @@ const HONOURED: Array<[string, RegExp, number]> = [
   ['PUT', new RegExp(`^/budgets/${SEG}/?$`), 200],
   ['DELETE', new RegExp(`^/budgets/${SEG}/?$`), 204],
   ['PATCH', /^\/settings\/?$/, 200],
+  ['PUT', /^\/profile\/consents\/ai\/?$/, 204],
 ];
 export function honouredStatus(method: string, path: string): number | undefined {
   return HONOURED.find(([m, pattern]) => m === method && pattern.test(path))?.[2];

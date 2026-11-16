@@ -41,6 +41,14 @@ export function createApp() {
   app.set('trust proxy', 1);
   app.use(helmet());
   app.use(cors(buildCorsOptions()));
+  // Disabled CRM must be invisible, even before JSON parsing and request logging.
+  app.use('/internal/v1/crm', (_req, res, next) => {
+    if (!env.PULIM_CRM_INTERNAL_SECRET) {
+      res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Resource not found.' } });
+      return;
+    }
+    next();
+  });
   app.use(requestLogger);
   app.use((req, res, next) => {
     if (!env.MAINTENANCE_MODE || /^\/health(?:\/(?:live|ready))?\/?$/.test(req.path)) {

@@ -12,7 +12,10 @@ const mocks = vi.hoisted(() => ({
   revokeRefreshTokens: vi.fn(),
   getUser: vi.fn(),
   info: vi.fn(),
+  rememberCrm: vi.fn(),
+  notifyCrm: vi.fn(),
 }));
+vi.mock('../../src/crm/deletion', () => ({ rememberCrmDeletion: mocks.rememberCrm, notifyCrmDeletion: mocks.notifyCrm }));
 vi.mock('../../src/db/accountDeletion', () => mocks);
 vi.mock('../../src/config/firebaseAuth', () => ({ auth: mocks }));
 vi.mock('../../src/services/household.service', () => ({
@@ -65,6 +68,9 @@ describe('resumable account deletion', () => {
     expect(mocks.purgeRelational.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.deleteByField.mock.invocationCallOrder.at(-1)!,
     );
+    expect(mocks.notifyCrm).toHaveBeenCalledWith('test-user', undefined);
+    expect(mocks.notifyCrm.mock.invocationCallOrder[0]).toBeGreaterThan(mocks.deleteByField.mock.invocationCallOrder.at(-1)!);
+    expect(mocks.notifyCrm.mock.invocationCallOrder[0]).toBeLessThan(mocks.deleteUser.mock.invocationCallOrder[0]);
     expect(mocks.deleteUser.mock.invocationCallOrder[0]).toBeGreaterThan(
       mocks.deleteByField.mock.invocationCallOrder.at(-1)!,
     );

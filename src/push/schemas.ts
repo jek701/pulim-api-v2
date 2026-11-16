@@ -50,6 +50,7 @@ export const pushSettingsPatchSchema = z
         familyExpenses: z.boolean().optional(),
         premium: z.boolean().optional(),
         habit: z.boolean().optional(),
+        tips: z.boolean().optional(),
       })
       .strip()
       .optional(),

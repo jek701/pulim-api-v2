@@ -393,14 +393,14 @@ export async function claimNotification(
     } as QueuedNotification;
   });
 }
-export async function deferNotification(id: string, until: number): Promise<void> {
+export async function deferNotification(id: string, until: number, preserveExpiry = false): Promise<void> {
   await saveDocument(
     documentKey(notificationCollection(), id),
     {
       status: 'pending',
       deferredUntil: until,
       nextAttemptAt: until,
-      staleAt: until + env.NOTIFY_STALE_AFTER_MS,
+      ...(!preserveExpiry ? { staleAt: until + env.NOTIFY_STALE_AFTER_MS } : {}),
       leaseUntil: null,
       attempts: patchValue.increment(-1),
       updatedAt: Date.now(),
@@ -449,6 +449,7 @@ export async function reserveSafetySlot(
   now: number,
   allowReminderDisabled = false,
   habit = false,
+  crmMarketing = false,
 ): Promise<'ok' | 'disabled' | 'cap'> {
   const ref = profileRef(uid);
   return runSqlTransaction(async (transaction) => {
@@ -467,7 +468,9 @@ export async function reserveSafetySlot(
         snap.data?.notifications.habitReservedDay === today)
     )
       return 'cap';
+    if (crmMarketing && (settings.crmMarketingSentDay === today || settings.crmMarketingReservedDay === today)) return 'cap';
     transaction.patch(ref, {
+      ...(crmMarketing ? { 'notifications.crmMarketingReservedDay': today } : {}),
       'notifications.sentDay': today,
       'notifications.sentCount': sent,
       'notifications.reservedDay': today,
@@ -482,6 +485,7 @@ export async function releaseSafetySlot(
   uid: string,
   now = Date.now(),
   habit = false,
+  crmMarketing = false,
 ): Promise<void> {
   await runSqlTransaction(async (transaction) => {
     const ref = profileRef(uid);
@@ -492,6 +496,7 @@ export async function releaseSafetySlot(
       return;
     transaction.patch(ref, {
       'notifications.reservedCount': Number(settings.reservedCount) - 1,
+      ...(crmMarketing ? { 'notifications.crmMarketingReservedDay': '' } : {}),
       ...(habit ? { 'notifications.habitReservedDay': '' } : {}),
       updatedAt: now,
     });
@@ -521,6 +526,8 @@ export async function recordChannelDelivery(
     if (!job.data.safetyCounted) {
       const habit = notification.payload.kind === 'push' && notification.payload.group === 'habit';
       tx.patch(profile, {
+        ...(notification.type === 'crm' && notification.payload.kind === 'push' && notification.payload.crm?.category === 'marketing'
+          ? { 'notifications.crmMarketingSentDay': today, 'notifications.crmMarketingReservedDay': '' } : {}),
         'notifications.sentDay': today,
         'notifications.sentCount':
           (settings.sentDay === today ? Number(settings.sentCount ?? 0) : 0) + 1,
@@ -656,6 +663,7 @@ export async function recordDeliveryStat(
   forbidden: boolean,
   now = Date.now(),
   channel: 'telegram' | 'apns' = 'telegram',
+  type?: NotificationType,
 ): Promise<void> {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: env.NOTIFY_TIMEZONE,
@@ -675,6 +683,7 @@ export async function recordDeliveryStat(
       sent: patchValue.increment(sent ? 1 : 0),
       forbidden: patchValue.increment(forbidden ? 1 : 0),
       attempts: patchValue.increment(1),
+      ...(type === 'crm' ? { crmAttempts: patchValue.increment(1), crmSent: patchValue.increment(sent ? 1 : 0) } : {}),
       updatedAt: now,
     },
     { merge: true },

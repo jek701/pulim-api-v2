@@ -13,7 +13,7 @@ const EnvSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
     PORT: z.coerce.number().int().positive().default(3000),
-  BIND_HOST: z.string().default('0.0.0.0'),
+    BIND_HOST: z.string().default('0.0.0.0'),
     LOG_LEVEL: z.string().default('info'),
     /** Comma-separated allowlist; empty string => allow all origins (dev). */
     CORS_ORIGINS: z.string().default(''),
@@ -110,6 +110,8 @@ const EnvSchema = z
     /** Comma-separated Firebase uids allowed to file dev notes (owner-only feedback tool). */
     DEV_NOTES_UIDS: z.string().default(''),
 
+    PULIM_CRM_INTERNAL_SECRET: z.string().min(32).optional(),
+    PULIM_CRM_API_URL: z.string().url().optional(),
     PULIM_PAYMENT_INTERNAL_SECRET: z.string().min(32).optional(),
 
     // ── Eskiz SMS gateway (phone sign-in) ──────────────────────────────────────
@@ -281,7 +283,9 @@ export const isProd = env.NODE_ENV === 'production';
 export const eskizConfigured = Boolean(env.ESKIZ_EMAIL && env.ESKIZ_PASSWORD);
 
 export const notificationAllowedUids = new Set(
-  env.NOTIFY_ALLOWED_UIDS.split(',').map((uid) => uid.trim()).filter(Boolean),
+  env.NOTIFY_ALLOWED_UIDS.split(',')
+    .map((uid) => uid.trim())
+    .filter(Boolean),
 );
 export function notificationRecipientAllowed(uid: string): boolean {
   return notificationAllowedUids.size === 0 || notificationAllowedUids.has(uid);

@@ -81,10 +81,15 @@ export interface NotificationGroups {
   familyExpenses: boolean;
   premium: boolean;
   habit: boolean;
+  tips: boolean;
 }
 
 export interface NotificationSettings {
   enabled: boolean;
+  tipsUpdatedAt?: number;
+  crmMarketingQueuedDay?: string;
+  crmMarketingSentDay?: string;
+  crmMarketingReservedDay?: string;
   groups?: NotificationGroups;
   alsoTelegram?: boolean;
   quietHours?: { start: string; end: string };
@@ -106,7 +111,18 @@ export interface NotificationSettings {
   lastSentAt: number | null;
 }
 
+export interface AiConsent {
+  granted: boolean;
+  version: string;
+  language: 'ru' | 'uz' | 'en';
+  screen: 'sheet' | 'settings';
+  at: number;
+  serverAt: number;
+  revokedAt: number | null;
+}
+
 export interface UserProfile {
+  consents?: { ai?: AiConsent };
   /** Present while a resumable account deletion is in progress. */
   deletionRequestedAt?: number;
   name?: string;

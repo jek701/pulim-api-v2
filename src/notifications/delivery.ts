@@ -50,10 +50,15 @@ async function safeStat(
   sent: boolean,
   forbidden: boolean,
   channel: 'telegram' | 'apns',
+  crm = false,
 ): Promise<void> {
-  await recordDeliveryStat(sent, forbidden, Date.now(), channel).catch((error) =>
-    logger.warn({ err: error }, 'notify.stats.failed'),
-  );
+  await recordDeliveryStat(
+    sent,
+    forbidden,
+    Date.now(),
+    channel,
+    ...(crm ? (['crm'] as const) : []),
+  ).catch((error) => logger.warn({ err: error }, 'notify.stats.failed'));
 }
 
 async function deliver(
@@ -65,8 +70,16 @@ async function deliver(
   // Claim before every state change: an API kick and the worker may see the same row.
   const claimed = await claimNotification(notification.id, now);
   if (!claimed) return;
+  const crm =
+    claimed.type === 'crm' && claimed.payload.kind === 'push' ? claimed.payload.crm : undefined;
+  if (claimed.type === 'crm' && !env.PULIM_CRM_INTERNAL_SECRET) {
+    await deferNotification(claimed.id, now + 60000, true);
+    return;
+  }
   const campaignId = claimed.payload.kind === 'campaign' ? claimed.payload.campaignId : null;
-  const logFields = { uid: claimed.userId, type: claimed.type };
+  const logFields = crm
+    ? { uidHash: createHash('sha256').update(claimed.userId).digest('hex'), type: claimed.type }
+    : { uid: claimed.userId, type: claimed.type };
   const skip = async (reason: string) => {
     await finishNotification(claimed.id, 'skipped', reason);
     logger.info({ ...logFields, skipReason: reason }, 'notify.skipped');
@@ -75,8 +88,8 @@ async function deliver(
     if (campaignId)
       await markCampaignTelegramOutcome(campaignId, claimed.userId, sent ? 'sent' : 'failed');
   };
-  if (now > claimed.staleAt) {
-    await skip('stale');
+  if (crm ? now >= claimed.staleAt : now > claimed.staleAt) {
+    await skip(crm ? 'expired' : 'stale');
     await outcome(false);
     return;
   }
@@ -97,21 +110,32 @@ async function deliver(
     : undefined;
   const language = normalizeLanguage(profile.language);
   let push = pushPayload(claimed.payload, language, preferences.timezone, claimed.createdAt);
+  if (
+    crm &&
+    (!preferences.enabled || (crm.category === 'marketing' && preferences.groups.tips !== true))
+  ) {
+    await skip('opted_out');
+    return;
+  }
   const channels = notificationChannels({
     settings,
     activeDevice: devices.length > 0,
     configured: apnsConfigured(),
-    group: campaignId ? undefined : push?.group,
+    group: campaignId || crm ? undefined : push?.group,
     digest: !push,
-    pushOnly: claimed.pushOnly,
+    pushOnly: claimed.type === 'crm' || claimed.pushOnly,
     marketing,
   });
   if (!channels.push && !channels.telegram) {
-    await skip('disabled');
+    await skip(crm ? 'no_device' : 'disabled');
     await outcome(false);
     return;
   }
-  if (claimed.pushOnly && !(await scheduledStillRelevant(claimed, profile, now))) {
+  if (
+    claimed.type !== 'crm' &&
+    claimed.pushOnly &&
+    !(await scheduledStillRelevant(claimed, profile, now))
+  ) {
     await skip('no_longer_relevant');
     return;
   }
@@ -132,15 +156,21 @@ async function deliver(
         return until > now ? until : null;
       })();
   if (quietUntil !== null && (!channels.push || !sensitive)) {
-    await deferNotification(claimed.id, quietUntil);
+    await deferNotification(claimed.id, quietUntil, ...(crm ? ([true] as const) : []));
     return;
   }
   const habit = push?.group === 'habit';
   const reservation = claimed.safetyCounted
     ? 'ok'
-    : await reserveSafetySlot(claimed.userId, now, Boolean(campaignId), habit);
+    : await reserveSafetySlot(
+        claimed.userId,
+        now,
+        Boolean(campaignId),
+        habit,
+        ...(crm?.category === 'marketing' ? ([true] as const) : []),
+      );
   if (reservation !== 'ok') {
-    await skip(reservation === 'cap' ? 'safety_cap' : 'disabled');
+    await skip(reservation === 'cap' ? (crm ? 'daily_cap' : 'safety_cap') : 'disabled');
     if (reservation === 'cap') logger.error(logFields, 'notify.safety_cap');
     await outcome(false);
     return;
@@ -159,12 +189,14 @@ async function deliver(
         const sendAt = Date.now();
         const result = await sendApns(device, renderPush(push, language, claimed.id), {
           expiration: Math.floor(claimed.staleAt / 1000),
-          collapseId: push.type.startsWith('budget_')
-            ? `budget:${createHash('sha256')
-                .update(push.entityId ?? '')
-                .digest('hex')
-                .slice(0, 48)}`
-            : claimed.id,
+          collapseId:
+            crm?.collapseKey ??
+            (push.type.startsWith('budget_')
+              ? `budget:${createHash('sha256')
+                  .update(push.entityId ?? '')
+                  .digest('hex')
+                  .slice(0, 48)}`
+              : claimed.id),
         });
         recordPushLatency({
           type: push.type,
@@ -175,21 +207,33 @@ async function deliver(
           status: result.status,
         });
         const classification = classifyApnsResponse(result);
-        await safeStat(classification === 'success', false, 'apns');
+        await safeStat(classification === 'success', false, 'apns', Boolean(crm));
         attemptStatRecorded = true;
         if (classification === 'disable') {
           await disableDevice(device.id, result.reason ?? 'Unregistered', device.lastSeenAt);
           continue;
         }
         if (result.retryAt && result.retryAt > Date.now()) {
-          if (!claimed.safetyCounted) await releaseSafetySlot(claimed.userId, now, habit);
-          await deferNotification(claimed.id, result.retryAt);
+          if (!claimed.safetyCounted)
+            await releaseSafetySlot(
+              claimed.userId,
+              now,
+              habit,
+              ...(crm?.category === 'marketing' ? ([true] as const) : []),
+            );
+          await deferNotification(claimed.id, result.retryAt, ...(crm ? ([true] as const) : []));
           return;
         }
         if (classification !== 'success') {
           if (classification === 'permanent') {
             await finishNotification(claimed.id, 'failed', result.reason ?? 'APNsRejected');
-            if (!claimed.safetyCounted) await releaseSafetySlot(claimed.userId, now, habit);
+            if (!claimed.safetyCounted)
+              await releaseSafetySlot(
+                claimed.userId,
+                now,
+                habit,
+                ...(crm?.category === 'marketing' ? ([true] as const) : []),
+              );
             await outcome(false);
             logger.error(
               { ...logFields, attempts: claimed.attempts, reason: result.reason },
@@ -207,23 +251,37 @@ async function deliver(
       }
       if (!claimed.deliveredDevices?.length) {
         // A terminal token failure falls back immediately, even on the first affected job.
-        channels.telegram = notificationChannels({
-          settings,
-          activeDevice: false,
-          configured: apnsConfigured(),
-          marketing,
-        }).telegram;
+        channels.telegram =
+          claimed.type !== 'crm' &&
+          notificationChannels({
+            settings,
+            activeDevice: false,
+            configured: apnsConfigured(),
+            marketing,
+          }).telegram;
       }
       if (!claimed.deliveredDevices?.length && !channels.telegram) {
-        if (!claimed.safetyCounted) await releaseSafetySlot(claimed.userId, now, habit);
+        if (!claimed.safetyCounted)
+          await releaseSafetySlot(
+            claimed.userId,
+            now,
+            habit,
+            ...(crm?.category === 'marketing' ? ([true] as const) : []),
+          );
         await skip('no_enabled_devices');
         await outcome(false);
         return;
       }
     }
     if (channels.telegram && !claimed.telegramDelivered && quietUntil !== null) {
-      if (!claimed.safetyCounted) await releaseSafetySlot(claimed.userId, now, habit);
-      await deferNotification(claimed.id, quietUntil);
+      if (!claimed.safetyCounted)
+        await releaseSafetySlot(
+          claimed.userId,
+          now,
+          habit,
+          ...(crm?.category === 'marketing' ? ([true] as const) : []),
+        );
+      await deferNotification(claimed.id, quietUntil, ...(crm ? ([true] as const) : []));
       return;
     }
     if (channels.telegram && !claimed.telegramDelivered) {
@@ -259,7 +317,10 @@ async function deliver(
           completedActions: [],
         },
       }).catch((error) =>
-        logger.error({ err: error, uid: claimed.userId }, 'notify.message_context.failed'),
+        logger.error(
+          { ...(crm ? {} : { err: error }), ...logFields },
+          'notify.message_context.failed',
+        ),
       );
     } else if (claimed.telegramDelivered) messageId = claimed.messageId;
     await markNotificationSent(claimed, messageId, channels.telegram && includeIntro);
@@ -271,13 +332,18 @@ async function deliver(
         () => undefined,
       );
       logger.error(
-        { err: error, uid: claimed.userId, type: claimed.type },
+        { ...(crm ? {} : { err: error }), ...logFields },
         'notify.post_send_state_failed',
       );
       return;
     }
     if (!claimed.safetyCounted)
-      await releaseSafetySlot(claimed.userId, now, habit).catch(() => undefined);
+      await releaseSafetySlot(
+        claimed.userId,
+        now,
+        habit,
+        ...(crm?.category === 'marketing' ? ([true] as const) : []),
+      ).catch(() => undefined);
     if (error instanceof TelegramApiError) {
       const unavailable = telegramUnavailable(error);
       if (unavailable) {
@@ -304,7 +370,7 @@ async function deliver(
         return;
       }
     }
-    if (!attemptStatRecorded) await safeStat(false, false, attemptedChannel);
+    if (!attemptStatRecorded) await safeStat(false, false, attemptedChannel, Boolean(crm));
     if (exhaustedAttempts(claimed.attempts, env.NOTIFY_MAX_ATTEMPTS)) {
       await finishNotification(
         claimed.id,
@@ -312,7 +378,10 @@ async function deliver(
         error instanceof Error ? error.message : String(error),
       );
       await outcome(false);
-      logger.error({ ...logFields, attempts: claimed.attempts, err: error }, 'notify.failed');
+      logger.error(
+        { ...logFields, attempts: claimed.attempts, ...(crm ? {} : { err: error }) },
+        'notify.failed',
+      );
       return;
     }
     await retryNotification(
@@ -335,7 +404,10 @@ export async function runDelivery(now = Date.now()): Promise<number> {
     try {
       await deliver(notification, Date.now(), lastAttemptByChat);
     } catch (error) {
-      logger.error({ err: error, id: notification.id }, 'notify.delivery.job_failed');
+      logger.error(
+        { ...(notification.type === 'crm' ? {} : { err: error }), id: notification.id },
+        'notify.delivery.job_failed',
+      );
     }
     if (globalDelay) await wait(globalDelay);
   }

@@ -59,6 +59,7 @@ import {
   markNotificationSent,
   recordChannelDelivery,
   reserveSafetySlot,
+  releaseSafetySlot,
   upsertScheduledNotification,
 } from '../../src/notifications/queue.repository';
 import type { QueuedNotification } from '../../src/notifications/types';
@@ -148,5 +149,25 @@ describe('scheduled occurrence timezone changes', () => {
     await upsertScheduledNotification({ ...input, runAt: now + 7200000 });
     expect(store.records.get(key).status).toBe('sent');
     expect(store.records.get(key).runAt).toBe(now + 3600000);
+  });
+});
+
+
+describe('CRM marketing delivery cap', () => {
+  it('serializes concurrent reservations and releases a failed attempt', async () => {
+    const results = await Promise.all([reserveSafetySlot('u', now, false, false, true), reserveSafetySlot('u', now, false, false, true)]);
+    expect(results).toEqual(['ok', 'cap']);
+    await releaseSafetySlot('u', now, false, true);
+    expect(await reserveSafetySlot('u', now, false, false, true)).toBe('ok');
+  });
+  it('counts a successful marketing logical push once and blocks another until the next local day', async () => {
+    job().type = 'crm'; job().payload = { kind: 'push', group: 'tips', crm: { category: 'marketing' } };
+    expect(await reserveSafetySlot('u', now, false, false, true)).toBe('ok');
+    const notification = { id: 'n', ...job() } as QueuedNotification;
+    await recordChannelDelivery(notification, 'first'); await recordChannelDelivery(notification, 'second');
+    expect(user().notifications.sentCount).toBe(1);
+    expect(user().notifications.crmMarketingSentDay).toBe('2026-11-04');
+    expect(await reserveSafetySlot('u', now, false, false, true)).toBe('cap');
+    expect(await reserveSafetySlot('u', now + 86400000, false, false, true)).toBe('ok');
   });
 });

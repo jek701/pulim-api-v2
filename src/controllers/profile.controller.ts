@@ -1,3 +1,4 @@
+import { consentTypeSchema, consentBodySchema, putConsent } from '../services/consent.service';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../utils/AppError';
 import * as profileService from '../services/profile.service';
@@ -40,5 +41,13 @@ export const patchHomeWidgets = asyncHandler(async (req, res) => {
 
 export const dismissTelegramLink = asyncHandler(async (req, res) => {
   await mergeProfile(req.uid, { telegramLinkPromptDismissed: true });
+  res.status(204).end();
+});
+
+export const putProfileConsent = asyncHandler(async (req, res) => {
+  if (req.claims.firebase?.sign_in_provider === 'anonymous')
+    throw AppError.forbidden('ANONYMOUS_NOT_ALLOWED', 'Sign in to record consent.');
+  consentTypeSchema.parse(req.params.type);
+  await putConsent(req.uid, consentBodySchema.parse(req.body));
   res.status(204).end();
 });

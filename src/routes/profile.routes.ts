@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { validate } from '../middleware/validate';
 import { bootstrapSchema, profilePatchSchema, homeWidgetsSchema } from '../domain/schemas';
 import {
+  putProfileConsent,
   postBootstrap,
   postStartTrial,
   getProfileHandler,
@@ -12,6 +13,7 @@ import {
 
 const router = Router();
 
+router.put('/consents/:type', putProfileConsent);
 router.post('/bootstrap', validate(bootstrapSchema), postBootstrap);
 router.post('/trial/start', postStartTrial);
 router.get('/', getProfileHandler);

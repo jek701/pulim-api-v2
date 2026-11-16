@@ -47,4 +47,10 @@ describe('independent delivery statistics', () => {
       'notify.telegram_forbidden_rate_high',
     );
   });
+  it('includes CRM attempts in APNs totals and exposes separate CRM counters', async () => {
+    const now = Date.parse('2026-11-04T07:00:00Z');
+    await recordDeliveryStat(true, false, now, 'apns', 'crm');
+    expect(mocks.rows.get('apns:2026-11-04-12')).toMatchObject({ sent: 1, attempts: 1, crmSent: 1, crmAttempts: 1 });
+  });
+
 });
