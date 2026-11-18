@@ -59,13 +59,18 @@ Public: `GET /health`, `/health/live`, `/health/ready`; `POST /auth/telegram`; `
 `GET /shortcut/v1/cards`, `GET /shortcut/v1/categories`, `POST /shortcut/v1/expenses` (plain-text replies).
 `/v1` (auth):
 - account: `POST /account/delete {confirm:"DELETE"}` → 204. Non-anonymous Firebase accounts only;
-  three validated non-5xx attempts/hour/uid. Resumable batched SQL purge, household cleanup and Firebase deletion;
+  three validated non-5xx attempts/hour/uid. Schedules deletion with a 30-day restore window,
+  revokes refresh tokens and disables Firebase without removing data or changing households.
+  `ACCOUNT_DELETION_GRACE_DAYS` (integer ≥ 0, default 30) controls the worker's hourly,
+  sequential purge batches (up to 20); actual purge retains the existing SQL/household/Firebase cleanup.
+  Operator `npm run account -- list|find <email|uid>|restore <uid>|purge <uid>`
+  (prod: `node dist/cli/accountDeletion.js …`); see README for recovery details.
   intentionally ignores Idempotency-Key. A partial failure returns retryable 503
   `ACCOUNT_DELETION_FAILED`. Deletion marks block profile writes and background planners;
   ordinary token verification stays non-revoking; only bootstrap checks revocation (outages → 503).
   Missing profiles remain valid for pre-bootstrap capabilities. A second owner sweep precedes
   profile deletion; partner household edits write sync upserts without notification hooks.
-  Revoked tokens may resume deletion but cannot bootstrap. Billing acknowledges missing/deleting
+  Revoked tokens may retry scheduling but cannot bootstrap. Billing acknowledges missing/deleting
   profiles without writes; old event-id dedupe markers retain no uid/order data.
   See [account deletion report](../next/api1-account-deletion-report.md) for the complete retention inventory.
 - profile: `PUT /profile/consents/ai` (registered users only; consent evidence, 204), `POST /profile/bootstrap`, `POST /profile/trial/start`, `GET|PATCH /profile`, `PATCH /profile/home-widgets`, `POST /profile/telegram-link-dismissed`, `PATCH /profile/notifications` (partial `enabled`, `groups`, `alsoTelegram`, `quietHours`, `timezone`; old `{enabled}` remains supported); `GET|PATCH /settings`

@@ -136,6 +136,37 @@ export async function markDeletion(uid: string): Promise<void> {
     WHERE id = ${Buffer.from(uid)}`.execute(database());
 }
 
+/** Operator restore bypasses the profile write guard without recreating purged profiles. */
+export async function clearDeletion(uid: string): Promise<boolean> {
+  return database().transaction().execute(async (tx) => {
+    const profile = await sql`SELECT id FROM profiles WHERE id = ${Buffer.from(uid)} FOR UPDATE`.execute(tx);
+    if (!profile.rows.length) return false;
+    await sql`UPDATE profiles SET data_json = JSON_REMOVE(data_json, '$.deletionRequestedAt')
+      WHERE id = ${Buffer.from(uid)}`.execute(tx);
+    return true;
+  });
+}
+
+export interface PendingAccountDeletion {
+  uid: string;
+  requestedAt: number;
+}
+
+/** Numeric epoch milliseconds only; a missing or malformed marker is never purgeable. */
+export async function listPendingAccountDeletions(
+  before?: number,
+  limit?: number,
+): Promise<PendingAccountDeletion[]> {
+  const result = await sql<{ id: Buffer; requestedAt: number }>`SELECT id,
+    JSON_EXTRACT(data_json, '$.deletionRequestedAt') AS requestedAt FROM profiles
+    WHERE JSON_TYPE(JSON_EXTRACT(data_json, '$.deletionRequestedAt'))
+      IN ('INTEGER', 'UNSIGNED INTEGER', 'DOUBLE')
+    ${before === undefined ? sql`` : sql`AND JSON_EXTRACT(data_json, '$.deletionRequestedAt') < ${before}`}
+    ORDER BY JSON_EXTRACT(data_json, '$.deletionRequestedAt'), id
+    ${limit === undefined ? sql`` : sql`LIMIT ${limit}`}`.execute(database());
+  return result.rows.map((row) => ({ uid: row.id.toString(), requestedAt: Number(row.requestedAt) }));
+}
+
 /** Must precede deleting mappings/transactions: these supply the indirect ownership keys. */
 export async function purgeRelated(uid: string): Promise<Record<string, number>> {
   const counts: Record<string, number> = {};

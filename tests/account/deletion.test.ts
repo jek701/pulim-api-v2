@@ -3,6 +3,8 @@ import { tables } from '../../src/db/tables';
 
 const mocks = vi.hoisted(() => ({
   markDeletion: vi.fn(),
+  clearDeletion: vi.fn(),
+  updateUser: vi.fn(),
   deleteByOwner: vi.fn(),
   deleteByField: vi.fn(),
   purgeRelated: vi.fn(),
@@ -22,7 +24,7 @@ vi.mock('../../src/services/household.service', () => ({
   removeAccountFromHouseholds: mocks.household,
 }));
 vi.mock('../../src/utils/logger', () => ({ logger: { info: mocks.info } }));
-import { accountDeletionPolicy, deleteAccount } from '../../src/services/accountDeletion.service';
+import { accountDeletionPolicy, deleteAccount, purgeAccount, restoreAccount } from '../../src/services/accountDeletion.service';
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -37,7 +39,7 @@ beforeEach(() => {
 describe('resumable account deletion', () => {
   it('classifies every table and deletes every classified owned document below the write hooks', async () => {
     expect(Object.keys(accountDeletionPolicy).sort()).toEqual(Object.keys(tables).sort());
-    await deleteAccount('test-user');
+    await purgeAccount('test-user');
     for (const [entity, policy] of Object.entries(accountDeletionPolicy)) {
       if (
         ['keep', 'keep-dedupe', 'keep-author-anonymised', 'household', 'profile-last'].includes(
@@ -90,13 +92,10 @@ describe('resumable account deletion', () => {
       }
       return 0;
     });
-    await expect(deleteAccount('test-user')).rejects.toMatchObject({
-      statusCode: 503,
-      code: 'ACCOUNT_DELETION_FAILED',
-    });
+    await expect(purgeAccount('test-user')).rejects.toThrow('synthetic failure');
     expect(mocks.deleteUser).not.toHaveBeenCalled();
     expect(mocks.deleteByField).not.toHaveBeenCalledWith('profiles', '__id__', 'test-user');
-    await expect(deleteAccount('test-user')).resolves.toBeUndefined();
+    await expect(purgeAccount('test-user')).resolves.toBeUndefined();
     expect(mocks.markDeletion).toHaveBeenCalledTimes(2);
     expect(mocks.deleteUser).toHaveBeenCalledTimes(1);
   });
@@ -104,7 +103,7 @@ describe('resumable account deletion', () => {
   it('does not wait for or invoke CRM delivery when the tombstone exists', async () => {
     mocks.rememberCrm.mockResolvedValue(true);
     mocks.notifyCrm.mockImplementation(() => new Promise(() => {}));
-    await expect(deleteAccount('test-user')).resolves.toBeUndefined();
+    await expect(purgeAccount('test-user')).resolves.toBeUndefined();
     expect(mocks.notifyCrm).not.toHaveBeenCalled();
     expect(mocks.deleteUser).toHaveBeenCalled();
   });
@@ -113,9 +112,55 @@ describe('resumable account deletion', () => {
     mocks.deleteUser
       .mockRejectedValueOnce({ code: 'auth/internal-error' })
       .mockRejectedValueOnce({ code: 'auth/user-not-found' });
-    await expect(deleteAccount('test-user')).rejects.toMatchObject({ statusCode: 503 });
+    await expect(purgeAccount('test-user')).rejects.toMatchObject({ code: 'auth/internal-error' });
     mocks.getUser.mockRejectedValue({ code: 'auth/user-not-found' });
     mocks.revokeRefreshTokens.mockRejectedValue({ code: 'auth/user-not-found' });
+    await expect(purgeAccount('test-user')).resolves.toBeUndefined();
+  });
+});
+
+
+describe('scheduled deletion and restore', () => {
+  it('only marks, revokes and disables; preserves all data, households and CRM', async () => {
+    await deleteAccount('test-user');
+    expect(mocks.markDeletion).toHaveBeenCalledWith('test-user');
+    expect(mocks.revokeRefreshTokens).toHaveBeenCalledWith('test-user');
+    expect(mocks.updateUser).toHaveBeenCalledWith('test-user', { disabled: true });
+    expect(mocks.markDeletion.mock.invocationCallOrder[0]).toBeLessThan(mocks.revokeRefreshTokens.mock.invocationCallOrder[0]);
+    for (const mock of [mocks.deleteUser, mocks.deleteByOwner, mocks.deleteByField,
+      mocks.purgeRelated, mocks.purgeRelational, mocks.household, mocks.rememberCrm, mocks.notifyCrm])
+      expect(mock).not.toHaveBeenCalled();
+    expect(mocks.info).toHaveBeenCalledWith({ uidHash: expect.stringMatching(/^[a-f0-9]{64}$/) }, 'account.deletion_scheduled');
+    expect(JSON.stringify(mocks.info.mock.calls)).not.toContain('test-user');
+  });
+
+  it('ignores absent Firebase users for both scheduling operations', async () => {
+    mocks.revokeRefreshTokens.mockRejectedValue({ code: 'auth/user-not-found' });
+    mocks.updateUser.mockRejectedValue({ code: 'auth/user-not-found' });
     await expect(deleteAccount('test-user')).resolves.toBeUndefined();
+    expect(mocks.updateUser).toHaveBeenCalled();
+  });
+
+  it.each(['markDeletion', 'revokeRefreshTokens', 'updateUser'] as const)('wraps %s failures safely and supports retry', async (operation) => {
+    mocks[operation].mockRejectedValueOnce(new Error('sensitive SDK/SQL details'));
+    await expect(deleteAccount('test-user')).rejects.toMatchObject({ statusCode: 503, code: 'ACCOUNT_DELETION_FAILED' });
+    await expect(deleteAccount('test-user')).resolves.toBeUndefined();
+    expect(mocks.deleteByOwner).not.toHaveBeenCalled();
+  });
+
+  it('clears the marker and re-enables Firebase', async () => {
+    mocks.clearDeletion.mockResolvedValue(true);
+    await restoreAccount('test-user');
+    expect(mocks.clearDeletion).toHaveBeenCalledWith('test-user');
+    expect(mocks.updateUser).toHaveBeenCalledWith('test-user', { disabled: false });
+    expect(mocks.clearDeletion.mock.invocationCallOrder[0]).toBeLessThan(mocks.updateUser.mock.invocationCallOrder[0]);
+    expect(mocks.info).toHaveBeenCalledWith({ uidHash: expect.stringMatching(/^[a-f0-9]{64}$/) }, 'account.deletion_restored');
+    expect(JSON.stringify(mocks.info.mock.calls)).not.toContain('test-user');
+  });
+
+  it('refuses restoration after purge without recreating a profile or touching Firebase', async () => {
+    mocks.clearDeletion.mockResolvedValue(false);
+    await expect(restoreAccount('test-user')).rejects.toMatchObject({ statusCode: 404, message: expect.stringContaining('purged account cannot be restored') });
+    expect(mocks.updateUser).not.toHaveBeenCalled();
   });
 });

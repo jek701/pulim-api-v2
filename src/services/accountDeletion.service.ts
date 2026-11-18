@@ -6,6 +6,7 @@ import {
   deleteByOwner,
   deleteByField,
   markDeletion,
+  clearDeletion,
   purgeRelated,
   purgeRelational,
 } from '../db/accountDeletion';
@@ -61,7 +62,18 @@ export const accountDeletionPolicy = {
 
 export async function deleteAccount(uid: string): Promise<void> {
   try {
-    await performDeletion(uid);
+    await markDeletion(uid);
+    for (const operation of [
+      () => auth.revokeRefreshTokens(uid),
+      () => auth.updateUser(uid, { disabled: true }),
+    ]) {
+      try {
+        await operation();
+      } catch (error) {
+        if ((error as { code?: string }).code !== 'auth/user-not-found') throw error;
+      }
+    }
+    logger.info({ uidHash: createHash('sha256').update(uid).digest('hex') }, 'account.deletion_scheduled');
   } catch {
     // SDK/SQL errors may embed uid, phone numbers or bound SQL values. Expose a safe retryable error.
     throw new AppError(
@@ -72,7 +84,14 @@ export async function deleteAccount(uid: string): Promise<void> {
   }
 }
 
-async function performDeletion(uid: string): Promise<void> {
+export async function restoreAccount(uid: string): Promise<void> {
+  if (!(await clearDeletion(uid)))
+    throw AppError.notFound('Account profile no longer exists; a purged account cannot be restored.');
+  await auth.updateUser(uid, { disabled: false });
+  logger.info({ uidHash: createHash('sha256').update(uid).digest('hex') }, 'account.deletion_restored');
+}
+
+export async function purgeAccount(uid: string): Promise<void> {
   const started = Date.now();
   const counts: Record<string, number> = {};
   await markDeletion(uid);

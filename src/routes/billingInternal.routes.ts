@@ -44,7 +44,7 @@ router.post(
         transaction.read(profileRef),
       ]);
       if (existingEvent.exists) return false;
-      // Account deletion is final. A late payment outbox retry is acknowledged without writes.
+      // Missing or scheduled-for-deletion accounts acknowledge payment retries without writes.
       if (!profile.exists || profile.data.deletionRequestedAt) return false;
       const profileData = profile.data as {
         subscription?: {

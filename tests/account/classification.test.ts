@@ -13,7 +13,7 @@ describe('account deletion schema inventory', () => {
       created.add(match[1]);
     // Literal arrays used by createTable(table), such as archived document tables.
     for (const match of migration.matchAll(
-      /for \(const table of \[([^\]]+)\]\) \{([\s\S]*?)\n        \}/g,
+      /for \(const table of \[([^\]]+)\]\) \{([\s\S]*?)\n {8}\}/g,
     )) {
       if (match[2].includes('.createTable(table)'))
         for (const literal of match[1].matchAll(/'([^']+)'/g)) created.add(literal[1]);

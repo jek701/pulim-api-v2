@@ -262,3 +262,51 @@ savings) with the single corresponding endpoint.
   metadata. Trial activation is a separate explicit `POST /v1/profile/trial/start`.
 - After cutover, keep Firestore as a frozen recovery source; inventory and disable
   every old writer separately from Firebase Auth.
+
+
+## Account deletion and operator recovery
+
+`POST /v1/account/delete` still returns 204 (anonymous users receive 403), but now
+schedules deletion: it preserves the first `deletionRequestedAt`, revokes Firebase
+refresh tokens and disables the Firebase user. Data and households remain intact;
+normal API access, Telegram context, notification planning/delivery and CRM facts
+exclude the scheduled account. CRM erasure is sent only after the actual purge.
+
+`ACCOUNT_DELETION_GRACE_DAYS` defaults to **30**, and accepts integers ≥ 0. The
+standalone worker checks immediately on startup and every hour, purging at most
+20 profiles per tick, sequentially, whose numeric deletion marker is strictly
+older than the grace period. Failed purges retry on a later tick. This loop runs
+with notification delivery disabled, but respects maintenance/background-job
+switches and waits for its active purge during shutdown. No migration is needed.
+
+Run these operator commands with the API's existing database/Firebase environment:
+
+```sh
+npm run account -- list
+npm run account -- find user@example.com
+npm run account -- find <uid>
+npm run account -- restore <uid>
+npm run account -- purge <uid>
+```
+
+After `npm run build`, the production equivalents are:
+
+```sh
+node dist/cli/accountDeletion.js list
+node dist/cli/accountDeletion.js find user@example.com
+node dist/cli/accountDeletion.js find <uid>
+node dist/cli/accountDeletion.js restore <uid>
+node dist/cli/accountDeletion.js purge <uid>
+```
+
+`list` prints pending uid, request/purge dates, Firebase providers and email when
+available. `find` accepts a Firebase email (including Apple relay emails) or uid.
+These details go only to the operator's terminal. Commands exit non-zero on
+failure. `restore` removes the marker and re-enables Firebase; the user must sign
+in again. A physically purged profile cannot be restored. `purge` immediately
+runs the exhaustive existing deletion, including household cleanup and CRM
+fan-out; use it only when immediate erasure is requested.
+
+Billing events arriving during the restore window are acknowledged without
+profile writes by the existing deletion guard; restoration does not replay them.
+If Firebase re-enabling fails after the marker is cleared, retry `restore <uid>`.

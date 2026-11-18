@@ -28,6 +28,7 @@
     "test:mysql": "node --env-file=.env.mysql-test node_modules/vitest/vitest.mjs run tests/migration/mysql.integration.test.ts tests/migration/transfer.integration.test.ts tests/migration/offline-sync.integration.test.ts --no-file-parallelism",
     "prebuild": "node scripts/clean-dist.cjs",
     "data:verify-source-frozen": "node --import tsx scripts/migration/cli.ts verify-source-frozen",
+    "account": "tsx src/cli/accountDeletion.ts",
     "merchants": "tsx src/cli/merchants.ts",
     "capture:eval": "tsx src/cli/captureEval.ts",
     "eval:chat": "tsx src/cli/chatEval.ts",

@@ -18,6 +18,7 @@ const EnvSchema = z
     /** Comma-separated allowlist; empty string => allow all origins (dev). */
     CORS_ORIGINS: z.string().default(''),
     MAINTENANCE_MODE: boolish,
+    ACCOUNT_DELETION_GRACE_DAYS: z.coerce.number().int().nonnegative().default(30),
     BACKGROUND_JOBS_ENABLED: z
       .string()
       .default('true')

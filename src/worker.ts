@@ -1,3 +1,4 @@
+import { startAccountPurgeLoop } from './services/accountPurge.loop';
 import { startCrmDeletionLoop } from './crm/deletion';
 import { env } from './config/env';
 import { checkDatabase, closeDatabase, database } from './db/database';
@@ -24,6 +25,7 @@ async function main(): Promise<void> {
   let communicationRun: Promise<unknown> | undefined;
   let stopping = false;
   const crmDeletions = startCrmDeletionLoop(false);
+  const accountPurges = startAccountPurgeLoop();
   let merchantRun: Promise<void> | undefined;
   const merchantTick = () => {
     if (stopping || merchantRun) return;
@@ -52,7 +54,7 @@ async function main(): Promise<void> {
     if (timer) clearInterval(timer);
     clearInterval(merchantTimer);
     try {
-      await Promise.all([loops?.stop(), communicationRun, merchantRun, crmDeletions.stop(), drainPushKicks()]);
+      await Promise.all([loops?.stop(), communicationRun, merchantRun, crmDeletions.stop(), accountPurges.stop(), drainPushKicks()]);
       await closeDatabase();
     } finally {
       closeApns();
