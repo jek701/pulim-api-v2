@@ -50,4 +50,10 @@ describe('Premium trial eligibility', () => {
       },
     }, NOW)).toBe('TRIAL_NOT_ELIGIBLE');
   });
+  it('blocks Apple history after the current source changes', () => {
+    expect(getTrialBlockCode({ subscription: { tier: 'free', source: 'none', hadApplePremium: true } }, NOW))
+      .toBe('TRIAL_NOT_ELIGIBLE');
+    expect(getTrialBlockCode({ subscription: { tier: 'free', source: 'apple' } }, NOW))
+      .toBe('TRIAL_NOT_ELIGIBLE');
+  });
 });

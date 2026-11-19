@@ -73,7 +73,7 @@ describe('sync cursors', () => {
 
 describe('sync capabilities', () => {
   it('advertises onboarding category selection support on profile bootstrap', () => {
-    expect(syncCapabilities()).toMatchObject({ onboardingCategories: true });
+    expect(syncCapabilities()).toMatchObject({ onboardingCategories: true, appleSubscriptions: true });
   });
 
   it('advertises supported historical transaction origins without changing contract version', () => {

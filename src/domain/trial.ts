@@ -29,7 +29,8 @@ export function getTrialBlockCode(
     || subscription?.source === 'trial') {
     return 'TRIAL_ALREADY_USED';
   }
-  if (subscription?.source === 'atmos' || Boolean(subscription?.lastOrderId)) {
+  if (subscription?.source === 'atmos' || subscription?.source === 'apple'
+    || subscription?.hadApplePremium || Boolean(subscription?.lastOrderId)) {
     return 'TRIAL_NOT_ELIGIBLE';
   }
   return null;

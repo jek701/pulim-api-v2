@@ -112,6 +112,7 @@ export function syncCapabilities(pushNotifications = false, capture = { voice: f
   return {
     contract: SYNC_CONTRACT_VERSION,
     offlineSync: isSyncEnabled(),
+    appleSubscriptions: true,
     transactionOrigins: ['subscription'],
     /** `POST /profile/bootstrap` accepts `{ categories: { defaults, custom } }` (free custom categories, once). */
     onboardingCategories: true,

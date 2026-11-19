@@ -54,7 +54,10 @@ export interface SubscriptionState {
   premiumUntil?: number;
   isTrial?: boolean;
   trialGrantedAt?: number;
-  source?: 'trial' | 'atmos' | 'none';
+  source?: 'trial' | 'atmos' | 'apple' | 'none';
+  autoRenew?: boolean;
+  planCode?: string;
+  hadApplePremium?: boolean;
   billingVersion?: number;
   lastOrderId?: string;
 }

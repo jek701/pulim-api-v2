@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { env } from '../config/env';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../utils/AppError';
+import { patchValue } from '../db/values';
 const router = Router();
 const eventSchema = z.object({
   eventId: z.string().uuid(),
@@ -14,8 +15,11 @@ const eventSchema = z.object({
   userId: z.string().min(1).max(128),
   orderId: z.string().uuid(),
   tier: z.enum(['premium', 'free']),
-  source: z.enum(['atmos', 'none']),
-  isTrial: z.literal(false),
+  source: z.enum(['atmos', 'apple', 'none']),
+  isTrial: z.boolean(),
+  autoRenew: z.boolean().optional(),
+  planCode: z.string().optional(),
+  environment: z.enum(['Sandbox', 'Production']).optional(),
   validFrom: z.string().datetime().nullable(),
   validUntil: z.string().datetime().nullable(),
   reason: z.enum(['refund']).optional(),
@@ -49,6 +53,7 @@ router.post(
       const profileData = profile.data as {
         subscription?: {
           billingVersion?: unknown;
+          hadApplePremium?: boolean;
         };
       };
       const currentVersion = profileData.subscription?.billingVersion;
@@ -60,16 +65,26 @@ router.post(
             isPremium,
             subscription: {
               tier: isPremium ? 'premium' : 'free',
-              isTrial: false,
+              isTrial: event.source === 'apple' ? event.isTrial : false,
               source: event.source,
               premiumUntil: validUntil,
               lastOrderId: event.orderId,
               billingVersion: event.version,
+              ...(event.source === 'apple' ? {
+                hadApplePremium: true,
+                autoRenew: event.autoRenew ?? patchValue.delete(),
+                planCode: event.planCode ?? patchValue.delete(),
+              } : profileData.subscription?.hadApplePremium ? {
+                autoRenew: patchValue.delete(),
+                planCode: patchValue.delete(),
+              } : {}),
             },
             updatedAt: Date.now(),
           },
           { merge: true },
         );
+      } else if (event.source === 'apple' && !profileData.subscription?.hadApplePremium) {
+        transaction.save(profileRef, { subscription: { hadApplePremium: true } }, { merge: true });
       }
       transaction.insert(eventRef, {
         version: event.version,
